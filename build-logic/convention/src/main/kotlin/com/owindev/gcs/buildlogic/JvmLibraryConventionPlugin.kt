@@ -32,6 +32,7 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
             }
             configureUnitTests()
             configureModuleGraphCheck()
+            pluginManager.apply("gcs.quality")
         }
     }
 }

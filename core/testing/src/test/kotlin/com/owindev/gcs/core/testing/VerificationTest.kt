@@ -1,14 +1,14 @@
 package com.owindev.gcs.core.testing
 
+import io.mockk.Runs as runs
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import org.amshove.kluent.invoking
 import org.amshove.kluent.shouldNotThrow
 import org.amshove.kluent.shouldThrow
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import io.mockk.Runs as runs
-import io.mockk.just
 
 class VerificationTest {
 

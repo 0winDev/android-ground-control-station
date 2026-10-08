@@ -12,7 +12,6 @@ internal val Project.libs: VersionCatalog
 
 internal fun VersionCatalog.version(alias: String): String = findVersion(alias).get().requiredVersion
 
-internal fun VersionCatalog.library(alias: String): Provider<MinimalExternalModuleDependency> =
-    findLibrary(alias).get()
+internal fun VersionCatalog.library(alias: String): Provider<MinimalExternalModuleDependency> = findLibrary(alias).get()
 
 internal fun Project.intVersion(alias: String): Int = libs.version(alias).toInt()

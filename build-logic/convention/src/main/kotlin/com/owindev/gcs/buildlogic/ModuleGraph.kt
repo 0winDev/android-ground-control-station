@@ -109,13 +109,12 @@ internal fun Project.configureModuleGraphCheck() {
     }
 }
 
-private fun Project.declaredProjectDependencies(testConfigurations: Boolean): Set<String> =
-    configurations
-        .filter { it.name.contains("test", ignoreCase = true) == testConfigurations }
-        .flatMap { configuration -> configuration.dependencies.withType(ProjectDependency::class.java) }
-        .map { it.path }
-        .filterNot { it == path }
-        .toSet()
+private fun Project.declaredProjectDependencies(testConfigurations: Boolean): Set<String> = configurations
+    .filter { it.name.contains("test", ignoreCase = true) == testConfigurations }
+    .flatMap { configuration -> configuration.dependencies.withType(ProjectDependency::class.java) }
+    .map { it.path }
+    .filterNot { it == path }
+    .toSet()
 
 private fun collectExternalModules(root: ResolvedComponentResult): Set<String> {
     val seen = mutableSetOf<ResolvedComponentResult>()

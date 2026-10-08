@@ -55,11 +55,7 @@ internal val GcsTypography = Typography(
 
 /** Monospaced styles for numeric telemetry and coordinates, so digits don't jitter while updating. */
 @Immutable
-data class TelemetryTypography(
-    val valueLarge: TextStyle,
-    val value: TextStyle,
-    val coordinate: TextStyle,
-)
+data class TelemetryTypography(val valueLarge: TextStyle, val value: TextStyle, val coordinate: TextStyle)
 
 internal val GcsTelemetryTypography = TelemetryTypography(
     valueLarge = TextStyle(fontFamily = IbmPlexMono, fontWeight = FontWeight.Medium, fontSize = 28.sp),

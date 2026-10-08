@@ -9,12 +9,7 @@ import androidx.compose.ui.unit.dp
  * Nothing interactive may be smaller than [minTouchTarget].
  */
 @Immutable
-data class GcsSizes(
-    val minTouchTarget: Dp,
-    val button: Dp,
-    val tab: Dp,
-    val gloveButton: Dp,
-)
+data class GcsSizes(val minTouchTarget: Dp, val button: Dp, val tab: Dp, val gloveButton: Dp)
 
 internal val DefaultGcsSizes = GcsSizes(
     minTouchTarget = 48.dp,

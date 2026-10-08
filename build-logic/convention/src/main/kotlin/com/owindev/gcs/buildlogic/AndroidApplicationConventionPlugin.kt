@@ -32,6 +32,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             }
             configureUnitTests()
             configureModuleGraphCheck()
+            pluginManager.apply("gcs.quality")
         }
     }
 }

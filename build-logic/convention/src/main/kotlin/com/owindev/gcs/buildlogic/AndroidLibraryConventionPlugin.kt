@@ -13,6 +13,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
             configureKotlin()
             configureUnitTests()
             configureModuleGraphCheck()
+            pluginManager.apply("gcs.quality")
         }
     }
 }

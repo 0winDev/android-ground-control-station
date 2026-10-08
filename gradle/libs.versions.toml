@@ -72,4 +72,8 @@ gcs-android-library-compose = { id = "gcs.android.library.compose" }
 gcs-android-feature = { id = "gcs.android.feature" }
 gcs-jvm-library = { id = "gcs.jvm.library" }
 gcs-hilt = { id = "gcs.hilt" }
+gcs-quality = { id = "gcs.quality" }
 gcs-kover = { id = "gcs.kover" }
+
+# Third-party plugins applied directly (only build-logic itself; modules use gcs.* plugins)
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintGradle" }
