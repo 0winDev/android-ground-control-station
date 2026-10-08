@@ -29,7 +29,10 @@ Security checklist: `docs/security.md`.
 1. **The MAVLink codec (`:core:mavlink`) is written by the owner, by hand.** Never implement or edit
    framing, CRC, parsing or signing code in `core/mavlink/src/main/` — not even a one-line fix.
    You may create the empty module, write tests (red, from captured SITL packets) and review the
-   owner's code (`mavlink-reviewer` agent).
+   owner's code (`mavlink-reviewer` agent). `.claude/settings.json` enforces this with a deny rule,
+   `Edit(/core/mavlink/src/main/**)`: it blocks Claude's file tools, recognized Bash file commands
+   (`sed`, `tee`…) and redirections there. It cannot block a script that opens files itself, so this
+   written rule still applies in full; never work around the deny rule.
 2. **`:core:mavlink` is pure Kotlin (JVM)**: no Android dependencies, no external MAVLink library.
    `verifyModuleGraph` enforces it.
 3. **Never invent** MAVLink message fields, IDs, enums, CRC_EXTRA values, ArduPilot parameters or
@@ -86,7 +89,8 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
    pitfalls.
 2. Branch `feature/<issue>-<slug>` or `fix/<issue>-<slug>` from an up-to-date `origin/main`
    (`git fetch origin` first).
-3. Read the issue (`gh issue view <n>`), plan non-trivial work, get the plan approved.
+3. Start every issue with `/start-issue <n>` (checks, summary, assignment, branch, required reading,
+   plan); get the plan approved before writing code.
 4. `hand-written` issues: Claude writes red tests from SITL captures → owner implements →
    `mavlink-reviewer` reviews.
 5. Verify: `./gradlew ktlintCheck detekt verifyModuleGraph lintDebug test assembleDebug`; SITL vs
@@ -103,10 +107,11 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 - Agents: `mavlink-reviewer`, `safety-reviewer`, `pr-review-resolver`, `flaky-test-debugger`,
   `module-cleaner`, `crash-investigator`.
-- Commands: `/create-issue`, `/smart-commit`.
+- Commands: `/start-issue`, `/create-issue`, `/smart-commit`.
 - Project skills: `new-phase`, `adr`, `sitl-verify`, `android-feature`, `android-modularization`,
   `android-hilt`, `android-mvi`, `android-tests`, `android-typed-errors`, `compose-ui`,
-  `android-cli`, `navigation-3` (decision pending), plus generic Compose/Kotlin skills.
+  `android-cli`, `navigation-3` (decision pending). Generic third-party skills are not part of the
+  repository.
 
 ## Kotlin and Android standards
 

@@ -1,6 +1,6 @@
 ---
 name: navigation-3
-description: Navigation in GCS (Ground Control Station) — decision pending. GCS has no navigation yet (v0.0); this skill records the open decision and keeps Jetpack Navigation 3 reference docs for when the first multi-screen flow lands. Trigger on: "navigation", "NavHost", "NavDisplay", "add a screen/route", "back stack", "tabs", "navigate between screens".
+description: Navigation in GCS (Ground Control Station) — decision pending. GCS has no navigation yet (v0.0); this skill records the open decision and points to the official Navigation 3 documentation for when the first multi-screen flow lands. Trigger on: "navigation", "NavHost", "NavDisplay", "add a screen/route", "back stack", "tabs", "navigate between screens".
 ---
 
 # Navigation — GCS (decision pending)
@@ -25,27 +25,12 @@ record it with the `adr` skill. Inputs for the decision:
 
 Until then, don't add a navigation dependency.
 
-## Reference material (generic Navigation 3 docs)
+## Reference material
 
-- [Navigation 3 developer documentation](references/android/guide/navigation/navigation-3/index.md)
-- [Navigation 2 → 3 migration guide](references/android/guide/navigation/navigation-3/migration-guide.md)
-- [Type-safe destinations in Compose](references/android/guide/navigation/type-safe-destinations.md)
-- Recipes: [basic](references/android/guide/navigation/navigation-3/recipes/basic.md),
-  [saveable back stack](references/android/guide/navigation/navigation-3/recipes/basicsaveable.md),
-  [entry provider DSL](references/android/guide/navigation/navigation-3/recipes/basicdsl.md),
-  [common UI / multiple back stacks](references/android/guide/navigation/navigation-3/recipes/common-ui.md),
-  [dialog](references/android/guide/navigation/navigation-3/recipes/dialog.md),
-  [bottom sheet](references/android/guide/navigation/navigation-3/recipes/bottomsheet.md),
-  [list-detail](references/android/guide/navigation/navigation-3/recipes/scenes-listdetail.md),
-  [two-pane](references/android/guide/navigation/navigation-3/recipes/scenes-twopane.md),
-  [material list-detail](references/android/guide/navigation/navigation-3/recipes/material-listdetail.md),
-  [material supporting pane](references/android/guide/navigation/navigation-3/recipes/material-supportingpane.md),
-  [animations](references/android/guide/navigation/navigation-3/recipes/animations.md),
-  [multiple back stacks](references/android/guide/navigation/navigation-3/recipes/multiple-backstacks.md),
-  [conditional](references/android/guide/navigation/navigation-3/recipes/conditional.md),
-  [modular (Hilt)](references/android/guide/navigation/navigation-3/recipes/modular-hilt.md),
-  [passing arguments](references/android/guide/navigation/navigation-3/recipes/passingarguments.md),
-  [results as events](references/android/guide/navigation/navigation-3/recipes/results-event.md) /
-  [as state](references/android/guide/navigation/navigation-3/recipes/results-state.md),
-  [deep links basic](references/android/guide/navigation/navigation-3/recipes/deeplinks-basic.md) /
-  [advanced](references/android/guide/navigation/navigation-3/recipes/deeplinks-advanced.md).
+Official documentation (check it at decision time; nothing is vendored in the repo):
+
+- [Navigation 3 guide](https://developer.android.com/guide/navigation/navigation-3)
+- [Navigation 2 → 3 migration guide](https://developer.android.com/guide/navigation/navigation-3/migration-guide)
+- [Type safety in Navigation Compose](https://developer.android.com/guide/navigation/design/type-safety)
+- [Navigation 3 recipes](https://github.com/android/nav3-recipes) (dialogs, bottom sheets, list-detail,
+  multiple back stacks, modular navigation with Hilt, results, deep links)

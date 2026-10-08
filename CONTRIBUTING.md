@@ -54,6 +54,12 @@ git switch -c feature/<issue>-<slug> origin/main   # or fix/<issue>-<slug>
 
 ## 4. Plan
 
+With Claude Code, steps 3 and 4 start with `/start-issue <n>`: it checks the working tree, reads the
+issue (and stops if it is closed, has no milestone or no acceptance criteria), summarizes it, assigns
+it to you, proposes the branch and creates it from `origin/main` after your OK, reads the lessons
+learned, the REQs, the related ADRs and the layer skill, and presents a plan that waits for your
+approval. It never commits or pushes.
+
 - Read the issue first: `gh issue view <n>`.
 - Anything non-trivial is planned before it is implemented, and the plan is approved first.
 - Use the repository skills for the layer you are touching (`android-feature`, `android-tests`,
