@@ -20,7 +20,7 @@ Closes #
 ## 📋 Requirements covered
 <!-- REQ-xxx IDs from docs/requirements.md, and whether the requirement → test matrix was updated. Write "None" if not applicable. -->
 
-- 
+-
 
 ## 🛡️ Safety impact
 <!-- Does this touch link-loss handling, failsafe, commands, missions, message signing or key storage?
