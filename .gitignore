@@ -20,3 +20,7 @@ local.properties
 
 # Private source material (Spanish reference document and UI prototype, kept out of the repo)
 docs/private/
+
+# Python (offline tools)
+__pycache__/
+*.pyc
