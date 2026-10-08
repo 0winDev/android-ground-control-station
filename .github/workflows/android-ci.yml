@@ -1,0 +1,84 @@
+name: Android CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch makes the previous run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # This name is the required status check on main's branch protection: keep them in sync.
+    name: Build and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: gradle/actions/wrapper-validation@v6
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Caches Gradle dependencies and build outputs; only main writes to the cache.
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: ktlint
+        run: ./gradlew ktlintCheck
+
+      - name: detekt
+        run: ./gradlew detekt
+
+      - name: Module dependency rules
+        run: ./gradlew verifyModuleGraph
+
+      - name: Android Lint
+        run: ./gradlew lintDebug
+
+      - name: Unit tests
+        run: ./gradlew test
+
+      - name: Coverage (core:mavlink, core:domain)
+        run: >-
+          ./gradlew
+          :core:mavlink:koverXmlReport :core:mavlink:koverHtmlReport
+          :core:domain:koverXmlReport :core:domain:koverHtmlReport
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            **/build/reports/ktlint/**
+            **/build/reports/detekt/**
+            **/build/reports/lint-results-*.*
+            build/reports/problems/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload coverage
+        if: success() || failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: |
+            core/mavlink/build/reports/kover/**
+            core/domain/build/reports/kover/**
+          retention-days: 14
+          if-no-files-found: ignore

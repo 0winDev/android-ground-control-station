@@ -1,0 +1,12 @@
+# Normalize line endings in the repository; scripts keep the endings their shell needs.
+* text=auto eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+
+# Binary files.
+*.jar binary
+*.ttf binary
+*.webp binary
+*.png binary
+*.bin binary
+*.tlog binary
