@@ -31,6 +31,7 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
                 options.release.set(javaTarget.majorVersion.toInt())
             }
             configureUnitTests()
+            configureModuleGraphCheck()
         }
     }
 }

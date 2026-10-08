@@ -31,6 +31,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 "implementation"(libs.library("androidx-activity-compose"))
             }
             configureUnitTests()
+            configureModuleGraphCheck()
         }
     }
 }

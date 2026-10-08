@@ -12,6 +12,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
             configureAndroidLibrary()
             configureKotlin()
             configureUnitTests()
+            configureModuleGraphCheck()
         }
     }
 }
