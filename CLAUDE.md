@@ -89,7 +89,8 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
    pitfalls.
 2. Branch `feature/<issue>-<slug>` or `fix/<issue>-<slug>` from an up-to-date `origin/main`
    (`git fetch origin` first).
-3. Read the issue (`gh issue view <n>`), plan non-trivial work, get the plan approved.
+3. Start every issue with `/start-issue <n>` (checks, summary, assignment, branch, required reading,
+   plan); get the plan approved before writing code.
 4. `hand-written` issues: Claude writes red tests from SITL captures → owner implements →
    `mavlink-reviewer` reviews.
 5. Verify: `./gradlew ktlintCheck detekt verifyModuleGraph lintDebug test assembleDebug`; SITL vs
@@ -106,7 +107,7 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 - Agents: `mavlink-reviewer`, `safety-reviewer`, `pr-review-resolver`, `flaky-test-debugger`,
   `module-cleaner`, `crash-investigator`.
-- Commands: `/create-issue`, `/smart-commit`.
+- Commands: `/start-issue`, `/create-issue`, `/smart-commit`.
 - Project skills: `new-phase`, `adr`, `sitl-verify`, `android-feature`, `android-modularization`,
   `android-hilt`, `android-mvi`, `android-tests`, `android-typed-errors`, `compose-ui`,
   `android-cli`, `navigation-3` (decision pending). Generic third-party skills are not part of the
