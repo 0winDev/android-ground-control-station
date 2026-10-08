@@ -181,4 +181,8 @@ No Robolectric. Details and examples: `android-tests` skill.
 
 Add one line per closed issue: what surprised us and what to do differently.
 
-- (none yet)
+- #5 SITL: Mission Planner's simulator works on the owner's PC (no WSL/Docker needed). Its MAVLink
+  Mirror binds the port it sends to and only one mirror works at a time, so QGroundControl connects
+  to SITL directly over TCP 5762. Stable ArduCopter wasn't selectable: record the exact version
+  (AUTOPILOT_VERSION) with every capture. HEARTBEAT never truncates; truncation fixtures come from
+  other messages.
