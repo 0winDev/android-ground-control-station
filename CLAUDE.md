@@ -29,7 +29,10 @@ Security checklist: `docs/security.md`.
 1. **The MAVLink codec (`:core:mavlink`) is written by the owner, by hand.** Never implement or edit
    framing, CRC, parsing or signing code in `core/mavlink/src/main/` — not even a one-line fix.
    You may create the empty module, write tests (red, from captured SITL packets) and review the
-   owner's code (`mavlink-reviewer` agent).
+   owner's code (`mavlink-reviewer` agent). `.claude/settings.json` enforces this with a deny rule,
+   `Edit(/core/mavlink/src/main/**)`: it blocks Claude's file tools, recognized Bash file commands
+   (`sed`, `tee`…) and redirections there. It cannot block a script that opens files itself, so this
+   written rule still applies in full; never work around the deny rule.
 2. **`:core:mavlink` is pure Kotlin (JVM)**: no Android dependencies, no external MAVLink library.
    `verifyModuleGraph` enforces it.
 3. **Never invent** MAVLink message fields, IDs, enums, CRC_EXTRA values, ArduPilot parameters or
