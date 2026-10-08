@@ -1,0 +1,37 @@
+# Dependency updates. Gradle covers gradle/libs.versions.toml (also used by build-logic).
+# pre-commit hook revisions are updated with `pre-commit autoupdate` when a phase closes.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+    ignore:
+      # compose-rules 0.5+ only supports detekt 2.0 (alpha). Revisit when detekt 2.0 is stable.
+      - dependency-name: "io.nlopez.compose.rules:detekt"
+        versions: [">=0.5.0"]
+      # The project standardises on JUnit 5 (Jupiter 5.x); moving to JUnit 6 is a deliberate decision.
+      - dependency-name: "org.junit:junit-bom"
+        versions: [">=6.0.0"]
+    groups:
+      androidx:
+        patterns: ["androidx.*"]
+      kotlin-toolchain:
+        patterns: ["org.jetbrains.kotlin*", "com.google.devtools.ksp*"]
+      testing:
+        patterns: ["org.junit*", "io.mockk*", "org.amshove.kluent*", "app.cash.turbine*", "org.jetbrains.kotlinx:kotlinx-coroutines*"]
+      quality:
+        patterns: ["io.gitlab.arturbosch.detekt*", "io.nlopez.compose.rules*", "org.jlleitschuh.gradle*", "org.jetbrains.kotlinx.kover*", "org.jetbrains.kotlinx:kover*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
