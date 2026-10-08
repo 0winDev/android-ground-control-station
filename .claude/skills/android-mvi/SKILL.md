@@ -56,7 +56,7 @@ blocked entirely while the link is lost (enforced in the domain/data layer, mirr
 
 Use a `Channel`-backed `Flow<Effect>` only for things that must happen exactly once and are not
 state (e.g. a transient "command acknowledged" message). Collect it once in the screen with
-`LaunchedEffect` (see `compose-side-effects`). Command **failures** and alerts are state, not effects:
+`LaunchedEffect`. Command **failures** and alerts are state, not effects:
 the operator must be able to see them until acknowledged.
 
 ## Screen

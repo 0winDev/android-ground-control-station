@@ -9,10 +9,8 @@ description: |
 
 # Compose UI — GCS conventions
 
-For general Compose patterns use the focused skills (`compose-state-*`, `compose-side-effects`,
-`compose-modifier-and-layout-style`, `compose-slot-api-pattern`, `compose-recomposition-performance`,
-`compose-ui-testing-patterns`) and `android-mvi` for the ViewModel/UiState shape. This skill only
-covers what is specific to GCS.
+This skill covers only what is specific to GCS. For the ViewModel/UiState shape see `android-mvi`;
+for general Compose practice, follow the official Jetpack Compose documentation.
 
 ## Core principle
 

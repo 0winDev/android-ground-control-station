@@ -11,12 +11,12 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      # Third-party texts (license files, vendored skill) stay byte-for-byte as published.
+      # Third-party texts (license files) stay byte-for-byte as published.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        exclude: ^(LICENSE$|core/designsystem/src/main/assets/licenses/|\.claude/skills/skill-creator/)
+        exclude: ^(LICENSE$|core/designsystem/src/main/assets/licenses/)
       - id: end-of-file-fixer
-        exclude: ^(LICENSE$|core/designsystem/src/main/assets/licenses/|\.claude/skills/skill-creator/)
+        exclude: ^(LICENSE$|core/designsystem/src/main/assets/licenses/)
       - id: check-yaml
       - id: check-merge-conflict
       - id: check-added-large-files

@@ -106,7 +106,8 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Commands: `/create-issue`, `/smart-commit`.
 - Project skills: `new-phase`, `adr`, `sitl-verify`, `android-feature`, `android-modularization`,
   `android-hilt`, `android-mvi`, `android-tests`, `android-typed-errors`, `compose-ui`,
-  `android-cli`, `navigation-3` (decision pending), plus generic Compose/Kotlin skills.
+  `android-cli`, `navigation-3` (decision pending). Generic third-party skills are not part of the
+  repository.
 
 ## Kotlin and Android standards
 
