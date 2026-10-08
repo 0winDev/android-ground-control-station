@@ -1,6 +1,6 @@
 # 0003. Support only ArduPilot until v1.0
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-08
 - Issue: #1
 

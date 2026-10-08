@@ -1,6 +1,6 @@
 # 0002. Use MapLibre instead of Google Maps
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-08
 - Issue: #1
 

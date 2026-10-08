@@ -1,6 +1,6 @@
 # 0004. Add a pure Kotlin domain layer (`:core:domain`) between features and data
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-08
 - Issue: #1
 

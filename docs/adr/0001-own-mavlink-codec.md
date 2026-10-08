@@ -1,6 +1,6 @@
 # 0001. Write our own MAVLink v2 codec instead of using a library
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-08
 - Issue: #1
 
