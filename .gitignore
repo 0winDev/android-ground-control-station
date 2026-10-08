@@ -1,0 +1,22 @@
+# Gradle / Kotlin
+.gradle/
+build/
+.kotlin/
+/captures
+.externalNativeBuild
+.cxx
+
+# IDE
+*.iml
+.idea/
+.DS_Store
+
+# Local configuration and secrets
+local.properties
+*.jks
+*.keystore
+*.mavkey
+.env
+
+# Private source material (Spanish reference document and UI prototype, kept out of the repo)
+docs/Ground Control Station*
