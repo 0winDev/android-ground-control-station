@@ -21,11 +21,29 @@ transmitter and a pilot ready to take over (README disclaimer).
 
 Pick one; the owner's working option is recorded in `CLAUDE.md` → "Lessons learned" once chosen.
 
-**A. Mission Planner simulator (Windows, quickest)**
-1. Mission Planner → *Simulation* tab → *Multirotor*.
-2. Forward its MAVLink stream to the app and QGroundControl with Mission Planner's MAVLink
-   mirror/forwarding (UDP to the target IP and port). Check the Mission Planner docs for the exact
-   menu in the installed version.
+**A. Mission Planner simulator (Windows) — verified setup, issue #5**
+
+Verified with Mission Planner 1.3.83 and ArduCopter V4.7.2-beta1 (the Spanish UI translates the
+labels; mode names stay in English).
+
+1. Mission Planner → *Simulation* → *Multirotor*. It downloads and runs the ArduCopter SITL binary
+   and connects over TCP 5760. Check the version it reports: stable may not be selectable (it loaded
+   V4.8.0-dev first, then V4.7.2-beta1); record the exact version with any capture.
+2. **QGroundControl connects to SITL directly**, not through Mission Planner: *Application Settings →
+   Comm Links → Add*, type **TCP**, server `127.0.0.1`, port **5762** (SITL also listens on 5763).
+3. **Emulator:** `adb emu redir add udp:14550:14550`, then in Mission Planner press **Ctrl+F** →
+   *MAVLink Mirror*: Type **UDP**, Direction **Outbound**, Host `127.0.0.1`, Port `14550`, **Write
+   unchecked** (read-only) → *Go* (shows *Started*). Check reception from the host:
+   `adb shell "timeout 10 nc -u -l -p 14550 > /data/local/tmp/udp.bin; ls -l /data/local/tmp/udp.bin"`.
+4. Mission Planner records every session as a `.tlog` under
+   `Documents\Mission Planner\logs\SITL\QUADROTOR\1\`; the file is locked until you press
+   *Disconnect*.
+
+Mission Planner pitfalls:
+- The mirror's UDP type binds the **same local port** it sends to (`0.0.0.0:<port>`), so QGroundControl
+  cannot listen on that port on the same PC — hence QGC over TCP 5762.
+- Use **one** mirror window: with two, the first one stopped delivering.
+- Closing a mirror window does not stop it; restart Mission Planner to clear mirrors.
 
 **B. `sim_vehicle.py` (WSL2 or Linux)**, from an ArduPilot checkout (see the ArduPilot SITL docs):
 ```bash
@@ -42,8 +60,9 @@ MAVProxy writes the session to `mav.tlog` in the working directory.
 | Physical device (recommended) | Same Wi-Fi as the PC. Send SITL output to `<DEVICE_IP>:14550`. |
 | Emulator | Send SITL output to the host's `127.0.0.1:14550`, then forward it into the emulator: `adb emu redir add udp:14550:14550`. |
 
-The redirect occupies host port 14550, so on the same machine QGroundControl must listen on another
-port (e.g. add a UDP comm link on 14551 in QGroundControl and add `--out=udp:127.0.0.1:14551`).
+The redirect occupies host port 14550, so on the same machine QGroundControl must use something else:
+with Mission Planner, TCP 5762 straight to SITL (see A); with `sim_vehicle.py`, a UDP comm link on
+14551 plus `--out=udp:127.0.0.1:14551`.
 
 ## 3. Compare with QGroundControl
 
@@ -63,9 +82,9 @@ moment (screenshot side by side or MAVLink Inspector in QGC):
 - Keep the `.tlog` of the session (MAVProxy's `mav.tlog`, or a telemetry log from QGC/Mission
   Planner).
 - Extract only the frames a test needs (a few HEARTBEATs, one of each message under test) into
-  small binary fixtures under `core/mavlink/src/test/resources/<message>/`. `pymavlink` can be used
-  as an offline tool to locate and dump raw frames (`msg.get_msgbuf()`), never as a project
-  dependency.
+  small binary fixtures under `core/mavlink/src/test/resources/` with
+  `tools/fixtures/extract_fixtures.py` (pymavlink, offline; never a project dependency). See
+  `core/mavlink/src/test/resources/README.md` for the reference capture and how to regenerate it.
 - Add a `README.md` next to the fixtures: SITL version, vehicle, how it was captured, and the
   decoded expected values from the reference tool.
 - Keep fixtures small (the `check-added-large-files` hook caps files at 2 MB).
