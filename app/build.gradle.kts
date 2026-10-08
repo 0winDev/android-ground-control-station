@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "com.owindev.groundcontrolstation"
+    namespace = "com.owindev.gcs"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.owindev.groundcontrolstation"
+        applicationId = "com.owindev.gcs"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

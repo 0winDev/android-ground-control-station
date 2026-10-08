@@ -1,4 +1,4 @@
-package com.owindev.groundcontrolstation.ui.theme
+package com.owindev.gcs.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -1,4 +1,4 @@
-package com.owindev.groundcontrolstation
+package com.owindev.gcs
 
 import org.junit.Test
 

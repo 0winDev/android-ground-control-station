@@ -1,4 +1,4 @@
-package com.owindev.groundcontrolstation.ui.theme
+package com.owindev.gcs.ui.theme
 
 import android.app.Activity
 import android.os.Build
