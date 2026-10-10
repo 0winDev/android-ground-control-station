@@ -58,7 +58,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-013 | `core/mavlink/.../MavlinkDecoderTest` (real truncated SYS_STATUS, POWER_STATUS, SERVO_OUTPUT_RAW zero-filled to the full length; extra extension byte ignored; whole session); `core/mavlink/.../MavlinkMessagesTest` (full lengths) | Verified |
 | REQ-014 | `core/mavlink/.../MavlinkParserTest` (unsupported incompatibility flag dropped and counted; unknown compatibility flag ignored) | Verified |
 | REQ-015 | `core/mavlink/.../MavlinkDecoderTest` (real SITL HEARTBEATs, armed and disarmed in three modes; largest `custom_mode`; whole session) | Verified |
-| REQ-016 | — | Pending (v0.1) |
+| REQ-016 | `data/vehicle/.../DefaultVehicleRepositoryTest` (real SITL HEARTBEATs from two system IDs kept apart; ground-station HEARTBEAT ignored); `data/vehicle/.../HeartbeatMapperTest` (only the autopilot component describes the vehicle); `data/vehicle/.../LinkSessionTest` | Verified |
 | REQ-017 | — | Pending (v0.1) |
-| REQ-018 | — | Pending (v0.1) |
+| REQ-018 | Data side: `data/vehicle/.../DefaultVehicleRepositoryTest` (mode and armed state from real SITL HEARTBEATs); `data/vehicle/.../ArduCopterFlightModesTest`; `data/vehicle/.../HeartbeatMapperTest`. Display, connection state and SITL check: #12, #13 | Pending (v0.1) |
 | REQ-019 | — | Pending (v0.1) |
