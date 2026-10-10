@@ -18,17 +18,20 @@ object MavlinkCrc {
 
     /**
      * Computes the checksum of [length] bytes of [bytes] starting at [offset], then [crcExtra].
-     * Returns a value in 0..0xFFFF. Only the low 8 bits of [crcExtra] are used.
+     * Returns a value in 0..0xFFFF. [crcExtra] is one byte, 0..255.
      *
      * Allocation-free: it runs once per received frame.
      *
-     * @throws IllegalArgumentException if [offset] or [length] fall outside [bytes]. That is a
-     * caller bug, not bad network input: the parser checks frame bounds before calling this.
+     * @throws IllegalArgumentException if [offset] or [length] fall outside [bytes], or [crcExtra] is
+     * outside 0..255. Both are caller bugs, not bad network input: the parser checks frame bounds
+     * before calling this, and CRC_EXTRA comes from the codec's message table, where masking would
+     * hide a typo.
      */
     fun compute(bytes: ByteArray, offset: Int, length: Int, crcExtra: Int): Int {
         require(offset >= 0 && length >= 0 && offset <= bytes.size - length) {
             "Range offset=$offset length=$length is outside an array of ${bytes.size} bytes"
         }
+        require(crcExtra in 0..BYTE_MASK) { "CRC_EXTRA $crcExtra is outside 0..$BYTE_MASK" }
         var crc = SEED
         for (index in offset until offset + length) {
             crc = accumulate(crc, bytes[index].toInt())
