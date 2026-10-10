@@ -83,15 +83,20 @@ class MavlinkCrcTest {
         result shouldNotBeEqualTo wireChecksum(frame)
     }
 
-    @Tag("REQ-011")
-    @Test
-    fun `GIVEN a CRC_EXTRA above one byte WHEN computing the checksum THEN only its low 8 bits are used`() {
+    @ParameterizedTest(name = "crcExtra {0}")
+    @CsvSource(
+        "-1",
+        "256",
+        "306",
+    )
+    fun `GIVEN a CRC_EXTRA outside one byte WHEN computing the checksum THEN it throws IllegalArgumentException`(
+        crcExtra: Int,
+    ) {
         val frame = readFixture(HEARTBEAT_FIXTURE)
-        val crcExtraWithHighBits = HEARTBEAT_CRC_EXTRA + BYTE_RANGE
 
-        val result = crc.compute(frame, CRC_OFFSET, crcLength(frame), crcExtraWithHighBits)
+        val result = invoking { crc.compute(frame, CRC_OFFSET, crcLength(frame), crcExtra) }
 
-        result shouldBeEqualTo wireChecksum(frame)
+        result shouldThrow IllegalArgumentException::class
     }
 
     @Tag("REQ-011")
@@ -153,7 +158,6 @@ class MavlinkCrcTest {
         const val LOWEST_BIT = 0x01
         const val BYTE_MASK = 0xFF
         const val MAX_BYTE = 0xFF
-        const val BYTE_RANGE = 0x100
         const val MAX_CHECKSUM = 0xFFFF
     }
 }
