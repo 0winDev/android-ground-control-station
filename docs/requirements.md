@@ -48,7 +48,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-002 | `verifyModuleGraph` (allowlist in `build-logic/.../ModuleGraph.kt`); `core/domain/.../ModulePurityTest`; `core/transport/.../ModulePurityTest` | Verified |
 | REQ-003 | `.github/workflows/android-ci.yml` + branch protection on `main` (required check "Build and verify") | Verified |
 | REQ-004 | gitleaks hook in `.pre-commit-config.yaml`; `.gitignore` excludes keystores and `*.mavkey` | Verified (I) |
-| REQ-005 | `core/transport/.../UdpTransportTest`; `data/vehicle/.../DefaultLinkRepositoryTest`; `feature/hud/.../HudViewModelTest`; SITL check (PR of #6) | Pending (until merged to `main`) |
+| REQ-005 | `core/transport/.../UdpTransportTest`; `data/vehicle/.../DefaultLinkRepositoryTest`; `feature/hud/.../HudViewModelTest`; SITL check (PR #18) | Verified |
 | REQ-006 | Android Lint `MissingTranslation` (error by default) on `lintDebug`; `values/` + `values-es/` | Verified |
 | REQ-007 | `core/designsystem/.../GcsSizesTest` | Verified |
 | REQ-010 | — | Pending (v0.1) |
