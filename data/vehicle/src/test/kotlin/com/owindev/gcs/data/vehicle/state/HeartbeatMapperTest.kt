@@ -99,6 +99,16 @@ class HeartbeatMapperTest {
 
     @Tag("REQ-016")
     @Test
+    fun `GIVEN a HEARTBEAT from system ID 0 WHEN mapping it THEN is not a vehicle`() {
+        val received = received(heartbeat(), systemId = BROADCAST_SYSTEM_ID)
+
+        val result = mapper.vehicleStateOf(received)
+
+        result.shouldBeNull()
+    }
+
+    @Tag("REQ-016")
+    @Test
     fun `GIVEN a message that is not a HEARTBEAT WHEN mapping it THEN is not a vehicle state`() {
         val received = received(MavlinkMessage.Undecoded(messageId = SYS_STATUS_ID, payload = ByteArray(0)))
 
@@ -109,6 +119,7 @@ class HeartbeatMapperTest {
 }
 
 private const val SYSTEM_ID = 1
+private const val BROADCAST_SYSTEM_ID = 0
 private const val MAV_COMP_ID_AUTOPILOT1 = 1
 private const val MAV_COMP_ID_GIMBAL = 154
 private const val MAV_TYPE_FIXED_WING = 1
@@ -127,8 +138,8 @@ private const val GUIDED = 4L
 private const val DISARMED_GUIDED_BASE_MODE = 89
 private const val ARMED_GUIDED_BASE_MODE = 217
 
-private fun received(message: MavlinkMessage, componentId: Int = MAV_COMP_ID_AUTOPILOT1) =
-    ReceivedMessage(systemId = SYSTEM_ID, componentId = componentId, message = message)
+private fun received(message: MavlinkMessage, componentId: Int = MAV_COMP_ID_AUTOPILOT1, systemId: Int = SYSTEM_ID) =
+    ReceivedMessage(systemId = systemId, componentId = componentId, message = message)
 
 private fun heartbeat(
     type: Int = MAV_TYPE_QUADROTOR,
