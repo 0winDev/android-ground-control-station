@@ -1,6 +1,3 @@
 <resources>
     <string name="app_name">Ground Control Station</string>
-    <string name="setup_title">Ground Control Station</string>
-    <string name="setup_status">Project setup (v0.0). The connection to the vehicle arrives in v0.1.</string>
-    <string name="setup_disclaimer">Educational project. Not for real operations.</string>
 </resources>
