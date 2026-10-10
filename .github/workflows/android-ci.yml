@@ -51,7 +51,7 @@ jobs:
       - name: Coverage (core:mavlink, core:domain)
         run: >-
           ./gradlew
-          :core:mavlink:koverXmlReport :core:mavlink:koverHtmlReport
+          :core:mavlink:koverXmlReport :core:mavlink:koverHtmlReport :core:mavlink:koverVerify
           :core:domain:koverXmlReport :core:domain:koverHtmlReport
 
       - name: Assemble debug APK
