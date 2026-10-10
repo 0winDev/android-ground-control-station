@@ -20,7 +20,9 @@ First read `CLAUDE.md` (rules, test conventions) and the `android-tests` skill (
 - Never invent message IDs, field names, field order, units or CRC_EXTRA values. Every protocol
   claim cites the official source:
   - Serialization / framing: https://mavlink.io/en/guide/serialization.html
-  - CRC: https://mavlink.io/en/guide/crc.html
+  - Checksum: https://mavlink.io/en/guide/serialization.html#checksum and the reference
+    `crc_accumulate` in https://github.com/mavlink/c_library_v2/blob/master/checksum.h
+    (not https://mavlink.io/en/guide/crc.html, which documents the CRC32 used by FTP)
   - MAVLink 2 (truncation, flags): https://mavlink.io/en/guide/mavlink_2.html
   - Signing: https://mavlink.io/en/guide/message_signing.html
   - Messages: https://mavlink.io/en/messages/common.html and `message_definitions/v1.0/common.xml`
