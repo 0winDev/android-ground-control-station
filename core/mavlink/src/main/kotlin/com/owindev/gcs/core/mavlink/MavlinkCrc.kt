@@ -4,7 +4,8 @@ package com.owindev.gcs.core.mavlink
  * MAVLink checksum: X.25 (CRC-16/MCRF4XX) over the frame bytes after the start marker,
  * followed by the message's CRC_EXTRA.
  *
- * Algorithm: https://mavlink.io/en/guide/crc.html (`crc_accumulate`, seeded with `0xFFFF`).
+ * Spec: https://mavlink.io/en/guide/serialization.html#checksum. Algorithm: `crc_accumulate`, seeded
+ * with `X25_INIT_CRC` (`0xFFFF`), in https://github.com/mavlink/c_library_v2/blob/master/checksum.h.
  */
 object MavlinkCrc {
 
@@ -35,7 +36,7 @@ object MavlinkCrc {
         return accumulate(crc, crcExtra)
     }
 
-    /** One step of `crc_accumulate` from the MAVLink CRC guide. */
+    /** One step of `crc_accumulate` from the reference `checksum.h`. */
     private fun accumulate(crc: Int, byte: Int): Int {
         var tmp = (byte xor crc) and BYTE_MASK
         tmp = tmp xor ((tmp shl NIBBLE_SHIFT) and BYTE_MASK)
