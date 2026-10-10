@@ -124,6 +124,8 @@ py tools/fixtures/derive_fixtures.py
 | `derived/heartbeat-unknown-incompat.bin` | Incompat flags set to `0x02`, checksum recomputed with pymavlink's `x25crc` and CRC_EXTRA | Unsupported incompatibility flag: dropped (REQ-014) |
 | `derived/heartbeat-unknown-compat.bin` | Compat flags set to `0x80`, checksum recomputed the same way; pymavlink still decodes it | Unknown compatibility flag: ignored, the frame is accepted |
 | `derived/heartbeat-empty-payload.bin` | The HEARTBEAT header with LEN 0 and no payload, checksum recomputed with pymavlink's `x25crc` and CRC_EXTRA | Invalid frame: [serialization.html](https://mavlink.io/en/guide/serialization.html) says "The first byte of the payload is never truncated", so LEN 0 is dropped and counted |
+| `derived/heartbeat-extra-byte.bin` | The HEARTBEAT with one unknown extension byte `0x2A` appended (LEN 10), checksum recomputed by pymavlink; pymavlink decodes it with the same field values as the original | A payload longer than the definition: the extra bytes are ignored ([define_xml_element.html](https://mavlink.io/en/guide/define_xml_element.html), Message Extensions: "the fields will not be seen") (#10) |
+| `derived/heartbeat-max-custom-mode.bin` | The HEARTBEAT re-packed by pymavlink with `custom_mode` = `0xFFFFFFFF`; pymavlink decodes 4294967295 | `custom_mode` is a uint32 and must not come out signed (#10) |
 | `unknown/attitude-fd-in-payload.bin` | Real ATTITUDE (id 30, LEN 28, seq 42) from `session.tlog`, the first whose payload contains `0xFD` | A frame with an unknown message ID is skipped whole by its LEN, so the `0xFD` inside it starts no false frame |
 | `derived/attitude-signed.bin` | `unknown/attitude-fd-in-payload.bin` re-packed and signed by pymavlink with the same test key, link ID and timestamp; signature verified by pymavlink | A signed frame with a message ID the tests treat as unknown: skipped whole, signature included |
 | `derived/session-stream.bin` | `session.tlog` without the 8-byte timestamps: every frame (MAVLink 1 and 2) in order, 187,700 bytes, rebuilt from pymavlink's decoded frames (no BAD_DATA) | The whole session as a parser input, cut into datagrams by the tests |
@@ -136,6 +138,8 @@ derived/heartbeat-signed.bin            fd 09 01 00 3b 01 01 00 00 00 00 00 00 0
 derived/heartbeat-unknown-incompat.bin  fd 09 02 00 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 51 4b
 derived/heartbeat-unknown-compat.bin    fd 09 00 80 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 86 f5
 derived/heartbeat-empty-payload.bin     fd 00 00 00 3b 01 01 00 00 00 b1 21
+derived/heartbeat-extra-byte.bin        fd 0a 00 00 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 2a ef 4d
+derived/heartbeat-max-custom-mode.bin   fd 09 00 00 3b 01 01 00 00 00 ff ff ff ff 02 03 51 03 03 85 52
 unknown/attitude-fd-in-payload.bin      fd 1c 00 00 2a 01 01 1e 00 00 3f 0f 06 00 c9 b0 89 ba e6 32 a8 ba
                                         b1 39 3a bc 50 f7 69 b9 00 fd 67 b9 c0 a8 4a ba 42 9f
 derived/attitude-signed.bin             fd 1c 01 00 2a 01 01 1e 00 00 3f 0f 06 00 c9 b0 89 ba e6 32 a8 ba
@@ -146,3 +150,5 @@ derived/attitude-signed.bin             fd 1c 01 00 2a 01 01 1e 00 00 3f 0f 06 0
 `derived/session-stream.bin` as a parser input (counts from pymavlink, printed by `derive_fixtures.py`): 5,524 frames, 5,522 MAVLink 2 frames (all incompat `0x00`, 39 message
 IDs including ArduPilot-dialect ones), 133 of them HEARTBEAT, plus 2 MAVLink 1 frames (`0xFE`, COMMAND_LONG, 41 bytes each, no `0xFD` inside). With a
 lookup that knows only HEARTBEAT, the other 5,389 MAVLink 2 frames are unknown message IDs.
+With the full v0.1 message table (#10): 133 HEARTBEAT, 325 SYS_STATUS, 130 SERVO_OUTPUT_RAW and 325
+POWER_STATUS frames are known, and the other 4,609 MAVLink 2 frames are unknown message IDs.

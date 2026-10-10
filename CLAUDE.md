@@ -194,3 +194,5 @@ Add one line per closed issue: what surprised us and what to do differently.
   frame, so frames at the very end of a test stream only come out once more bytes arrive; tests that
   inject noise must keep the stream going. Derive edge-case frames (signed, odd flags) with pymavlink
   and a regeneration script, never by hand or with our own codec.
+- #10 Decoder: Kluent compares maps in iteration order, so count maps must be sorted on both sides.
+  The truncation tests only make sense through the parser (CRC over the wire bytes, then zero-fill).

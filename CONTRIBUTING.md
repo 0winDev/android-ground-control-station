@@ -87,7 +87,9 @@ Always:
 - Unit tests: JUnit 5, MockK, Kluent, Turbine; backtick `GIVEN … WHEN … THEN …` names and the
   three-block body (see `CLAUDE.md`).
 - Every test that covers a requirement is tagged with it: `@Tag("REQ-012")`.
-- **Update the requirement → test matrix** in `docs/requirements.md` in the same PR.
+- **Update the requirement → test matrix** in `docs/requirements.md` in the same PR. The PR that adds a
+  requirement's tests marks it **Verified** directly: the tests and the status reach `main` together, so
+  there is no intermediate "pending until merged" state.
 
 Additionally, depending on what the change touches:
 

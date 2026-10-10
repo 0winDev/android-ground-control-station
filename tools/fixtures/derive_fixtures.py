@@ -15,6 +15,10 @@ Writes:
                                                 recomputed by pymavlink
   <out>/derived/heartbeat-empty-payload.bin     the same header with LEN 0 and no payload, checksum
                                                 recomputed by pymavlink
+  <out>/derived/heartbeat-extra-byte.bin        the same frame with one unknown extension byte (LEN 10),
+                                                checksum recomputed by pymavlink
+  <out>/derived/heartbeat-max-custom-mode.bin   the HEARTBEAT re-packed by pymavlink with custom_mode
+                                                0xFFFFFFFF
   <out>/unknown/attitude-fd-in-payload.bin      a real ATTITUDE frame (not derived) from
                                                 heartbeat/session.tlog whose payload contains 0xFD
   <out>/derived/attitude-signed.bin             that ATTITUDE re-packed and signed the same way (a signed
@@ -55,6 +59,14 @@ TEST_KEY = bytes(range(32))
 TEST_LINK_ID = 0
 TEST_TIMESTAMP = 0x0000_1234_5678
 MAX_SHOWN = 64
+UNKNOWN_EXTENSION_BYTE = 0x2A
+MAX_UINT32 = 0xFFFF_FFFF
+TABLE_MESSAGES = {
+    common.MAVLINK_MSG_ID_HEARTBEAT: "heartbeat",
+    common.MAVLINK_MSG_ID_SYS_STATUS: "sys_status",
+    common.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW: "servo_output_raw",
+    common.MAVLINK_MSG_ID_POWER_STATUS: "power_status",
+}
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -88,6 +100,29 @@ def empty_payload(frame: bytes) -> bytes:
     crc = x25crc(bytes(header[1:]))
     crc.accumulate(bytes([common.mavlink_map[int.from_bytes(header[7:10], "little")].crc_extra]))
     return bytes(header) + crc.crc.to_bytes(CHECKSUM_LENGTH, "little")
+
+
+def extra_byte(frame: bytes) -> bytes:
+    """The same frame with one unknown extension byte appended to the payload (LEN + 1), checksum
+    recomputed by pymavlink; a receiver without that extension ignores it."""
+    length = frame[1]
+    out = bytearray(frame[:HEADER_LENGTH + length]) + bytes([UNKNOWN_EXTENSION_BYTE])
+    out[1] = length + 1
+    msgid = int.from_bytes(out[7:10], "little")
+    crc = x25crc(bytes(out[1:]))
+    crc.accumulate(bytes([common.mavlink_map[msgid].crc_extra]))
+    return bytes(out) + crc.crc.to_bytes(CHECKSUM_LENGTH, "little")
+
+
+def max_custom_mode(frame: bytes) -> bytes:
+    """The HEARTBEAT re-packed by pymavlink with custom_mode = 0xFFFFFFFF (largest uint32)."""
+    msg = decode(frame)
+    mav = common.MAVLink(io.BytesIO(), srcSystem=msg.get_srcSystem(), srcComponent=msg.get_srcComponent())
+    mav.seq = msg.get_seq()
+    copy = common.MAVLink_heartbeat_message(
+        msg.type, msg.autopilot, msg.base_mode, MAX_UINT32, msg.system_status, msg.mavlink_version
+    )
+    return bytes(copy.pack(mav))
 
 
 def signed(frame: bytes) -> bytes:
@@ -136,12 +171,17 @@ def session_counts(session: Path) -> dict:
         msg = log.recv_match(blocking=False)
         if msg is None:
             counts["unknown_with_heartbeat_only_lookup"] = counts["mavlink2"] - counts["heartbeat"]
+            known = sum(v for k, v in counts.items() if k.startswith("table_"))
+            counts["unknown_with_full_table"] = counts["mavlink2"] - known
             return counts
         frame = bytes(msg.get_msgbuf())
         counts["frames"] += 1
         if frame[0] == START_MARKER:
             counts["mavlink2"] += 1
             counts["heartbeat"] += msg.get_msgId() == common.MAVLINK_MSG_ID_HEARTBEAT
+            if msg.get_msgId() in TABLE_MESSAGES:
+                key = f"table_{TABLE_MESSAGES[msg.get_msgId()]}"
+                counts[key] = counts.get(key, 0) + 1
         else:
             counts["mavlink1_bytes"] += len(frame)
 
@@ -162,6 +202,8 @@ def main() -> None:
         derived_dir / "heartbeat-unknown-incompat.bin": with_flags(source, INCOMPAT_INDEX, UNKNOWN_INCOMPAT),
         derived_dir / "heartbeat-unknown-compat.bin": with_flags(source, COMPAT_INDEX, UNKNOWN_COMPAT),
         derived_dir / "heartbeat-empty-payload.bin": empty_payload(source),
+        derived_dir / "heartbeat-extra-byte.bin": extra_byte(source),
+        derived_dir / "heartbeat-max-custom-mode.bin": max_custom_mode(source),
         unknown_dir / "attitude-fd-in-payload.bin": attitude_with_fd(args.out / SESSION),
         derived_dir / "attitude-signed.bin": signed(attitude_with_fd(args.out / SESSION)),
         derived_dir / "session-stream.bin": session_stream(args.out / SESSION),
@@ -171,6 +213,9 @@ def main() -> None:
         signed_msg = decode(outputs[derived_dir / name], key=TEST_KEY)
         assert signed_msg.get_signed() and signed_msg._link_id == TEST_LINK_ID, f"pymavlink did not verify {name}"
     decode(outputs[derived_dir / "heartbeat-unknown-compat.bin"])
+    assert decode(outputs[derived_dir / "heartbeat-max-custom-mode.bin"]).custom_mode == MAX_UINT32
+    extra = decode(outputs[derived_dir / "heartbeat-extra-byte.bin"]).to_dict()
+    assert extra == decode(source).to_dict(), "pymavlink must decode the extra-byte frame like the original"
 
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
