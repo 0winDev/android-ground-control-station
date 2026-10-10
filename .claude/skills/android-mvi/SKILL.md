@@ -5,8 +5,8 @@ description: State-driven presentation pattern for GCS (Ground Control Station) 
 
 # Presentation pattern — GCS
 
-GCS is at v0.0 with no screens yet; this is the agreed target shape. Replace the illustrative names
-with real references once the first screen lands.
+The reference implementation is the HUD in `:feature:hud` (`HudUiState`, `HudViewModel`, `HudScreen`).
+The dangerous-command examples below stay illustrative until the first command lands (v0.2).
 
 ## Files per screen
 
@@ -72,8 +72,9 @@ fun HudScreen(
 }
 ```
 
-`collectAsStateWithLifecycle` and `hiltViewModel` come in with the first screen (their dependencies
-are added in that issue, not before).
+`collectAsStateWithLifecycle` comes from `androidx.lifecycle:lifecycle-runtime-compose` and
+`hiltViewModel` from `androidx.hilt:hilt-lifecycle-viewmodel-compose`; `:feature:hud` declares them.
+Move them to the `gcs.android.feature` convention plugin when a second feature needs them.
 
 ## Testing
 

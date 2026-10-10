@@ -7,8 +7,8 @@ description: Create or modify a feature in GCS (Ground Control Station) followin
 
 First read `CLAUDE.md` (source of truth) and the `android-modularization` skill.
 
-GCS is at v0.0: the feature modules exist but contain no screens yet. This skill describes the
-agreed target shape; update it with real file references when the first screen lands.
+The first screen is the HUD (`:feature:hud`, issue #6): use it as the reference implementation.
+`:feature:map` and `:feature:mission` have no screens yet.
 
 ## Where code goes
 
@@ -41,6 +41,8 @@ feature/hud/src/main/kotlin/com/owindev/gcs/feature/hud/
 ├── HudUiState.kt      sealed interface / data class, immutable
 ├── HudViewModel.kt    @HiltViewModel, exposes val state: StateFlow<HudUiState>
 └── HudScreen.kt       @Composable HudScreen(...) collecting state + stateless HudContent(...)
+feature/hud/src/main/res/values{,-es}/strings.xml
+feature/hud/src/test/kotlin/com/owindev/gcs/feature/hud/HudViewModelTest.kt
 ```
 
 See `android-mvi` for the ViewModel/UiState shape and `compose-ui` for design-system usage.

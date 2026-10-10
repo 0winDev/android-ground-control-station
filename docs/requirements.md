@@ -21,7 +21,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-002 | Module dependencies shall flow in one direction (features → domain/design system; data → domain/codec/transport); `:core:domain` and `:core:transport` shall not depend on Android. The build shall fail when a rule is broken. | A, T |
 | REQ-003 | Every change to `main` shall pass, in CI, the formatting check, static analysis, module rules, Android Lint, unit tests and the debug build. | A, I |
 | REQ-004 | Secrets (including the MAVLink signing key) shall never be committed; every commit shall be scanned for secrets. | A, I |
-| REQ-005 | The app shall receive UDP datagrams on a configurable port (default 14550) and show how many it has received. | T, S |
+| REQ-005 | The app shall receive UDP datagrams on an injectable port (default 14550) and show how many it has received. | T, S |
 | REQ-006 | All user-facing text shall be available in English and Spanish. | A |
 | REQ-007 | Interactive controls shall be large enough for field use: no touch target smaller than 48 dp. | T, I |
 
@@ -48,7 +48,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-002 | `verifyModuleGraph` (allowlist in `build-logic/.../ModuleGraph.kt`); `core/domain/.../ModulePurityTest`; `core/transport/.../ModulePurityTest` | Verified |
 | REQ-003 | `.github/workflows/android-ci.yml` + branch protection on `main` (required check "Build and verify") | Verified |
 | REQ-004 | gitleaks hook in `.pre-commit-config.yaml`; `.gitignore` excludes keystores and `*.mavkey` | Verified (I) |
-| REQ-005 | — | Pending |
+| REQ-005 | `core/transport/.../UdpTransportTest`; `data/vehicle/.../DefaultLinkRepositoryTest`; `feature/hud/.../HudViewModelTest`; SITL check (PR of #6) | Pending (until merged to `main`) |
 | REQ-006 | Android Lint `MissingTranslation` (error by default) on `lintDebug`; `values/` + `values-es/` | Verified |
 | REQ-007 | `core/designsystem/.../GcsSizesTest` | Verified |
 | REQ-010 | — | Pending (v0.1) |

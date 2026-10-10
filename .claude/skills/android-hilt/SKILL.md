@@ -38,8 +38,8 @@ This keeps the codec and the domain framework-free and trivially testable.
 
 | Module | DI module | Binds |
 |---|---|---|
-| `:data:vehicle` | `di/VehicleDataModule.kt` (when the first binding exists) | `:core:domain` repository interfaces → `Default*` implementations; `@Provides` for transport/codec objects |
-| `:app` | `di/AppModule.kt` (only if needed) | App-wide objects such as an `@ApplicationScope` `CoroutineScope` |
+| `:data:vehicle` | `di/VehicleDataModule.kt` | `:core:domain` repository interfaces → `Default*` implementations; `@Provides` for transport/codec objects and the `@ApplicationScope` `CoroutineScope` (qualifier in `di/ApplicationScope.kt`) |
+| `:app` | `di/AppModule.kt` (only if needed) | App-wide objects that no other module can own |
 
 Shape (one per owning module):
 
@@ -49,18 +49,18 @@ Shape (one per owning module):
 abstract class VehicleDataModule {
 
     @Binds
-    abstract fun bindVehicleRepository(impl: DefaultVehicleRepository): VehicleRepository
+    internal abstract fun bindLinkRepository(impl: DefaultLinkRepository): LinkRepository
 
     companion object {
 
         @Provides
         @Singleton
-        fun provideUdpTransport(): UdpTransport = UdpTransport(/* ... */)
+        fun provideUdpTransport(): UdpTransport = UdpTransport(port = UdpTransport.DEFAULT_PORT)
     }
 }
 ```
 
-(Illustrative — none of these types exist yet in v0.0.)
+(Excerpt of `data/vehicle/.../di/VehicleDataModule.kt`.)
 
 ## Rules of thumb
 
