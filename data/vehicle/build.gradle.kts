@@ -11,4 +11,5 @@ dependencies {
     implementation(projects.core.domain)
     implementation(projects.core.mavlink)
     implementation(projects.core.transport)
+    implementation(libs.kotlinx.coroutines.core)
 }

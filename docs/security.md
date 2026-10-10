@@ -57,7 +57,7 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 | # | Control | Phase | Status | Evidence / notes |
 |---|---|---|---|---|
 | P-1 | Only the launcher activity is exported; no other exported components. | v0.0 | ✅ | `AndroidManifest.xml` |
-| P-2 | Only the permissions needed by the current phase are requested. | v0.0 | ✅ | No permissions in v0.0 |
+| P-2 | Only the permissions needed by the current phase are requested. | v0.0 | ✅ | `INTERNET` only, for the UDP vehicle link (`data/vehicle/src/main/AndroidManifest.xml`) |
 | P-3 | Sensitive screens (key management) are protected from screenshots/recents. | v0.6 | ⏳ | |
 
 ## MASVS-CODE

@@ -1,0 +1,8 @@
+<resources>
+    <string name="hud_title">Vehicle link</string>
+    <string name="hud_datagrams_received">Datagrams received</string>
+    <string name="hud_listening_on_port">Listening on UDP port %1$d</string>
+    <string name="hud_port_unavailable">Cannot listen on UDP port %1$d: another app is using it.</string>
+    <string name="hud_link_error">Link error: the vehicle link stopped unexpectedly.</string>
+    <string name="hud_disclaimer">Educational project. Not for real operations.</string>
+</resources>

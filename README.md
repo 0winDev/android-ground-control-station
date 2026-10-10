@@ -117,7 +117,8 @@ same simulator as the reference.
      `adb emu redir add udp:14550:14550`.
 3. **Reference:** QGroundControl listening on another UDP port (e.g. 14551) to compare values.
 
-The connection itself arrives in v0.1; in v0.0 the app only shows the setup screen. The full
+In v0.0 the app only counts the UDP datagrams it receives on port 14550; MAVLink decoding arrives in
+v0.1. The full
 procedure, including capturing packets for tests, is in the `sitl-verify` skill
 (`.claude/skills/sitl-verify/SKILL.md`).
 

@@ -1,0 +1,8 @@
+<resources>
+    <string name="hud_title">Enlace con el vehículo</string>
+    <string name="hud_datagrams_received">Datagramas recibidos</string>
+    <string name="hud_listening_on_port">Escuchando en el puerto UDP %1$d</string>
+    <string name="hud_port_unavailable">No se puede escuchar en el puerto UDP %1$d: otra app lo está usando.</string>
+    <string name="hud_link_error">Error de enlace: el enlace con el vehículo se ha detenido inesperadamente.</string>
+    <string name="hud_disclaimer">Proyecto educativo. No apto para operaciones reales.</string>
+</resources>

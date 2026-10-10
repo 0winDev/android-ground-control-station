@@ -1,6 +1,3 @@
 <resources>
     <string name="app_name">Estación de control terrestre</string>
-    <string name="setup_title">Estación de control terrestre</string>
-    <string name="setup_status">Configuración del proyecto (v0.0). La conexión con el vehículo llega en la v0.1.</string>
-    <string name="setup_disclaimer">Proyecto educativo. No apto para operaciones reales.</string>
 </resources>
