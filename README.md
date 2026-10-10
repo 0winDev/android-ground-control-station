@@ -2,7 +2,7 @@
 
 An Android ground control station for ArduPilot drones over **MAVLink v2 on UDP**: real-time
 telemetry, a map, and automatic routes — waypoint missions the drone flies on its own — with a
-hand-written MAVLink codec, tested against the official ArduPilot simulator.
+own MAVLink codec (no third-party library), tested against the official ArduPilot simulator.
 
 > [!WARNING]
 > **Educational project. Not for real operations.** GCS is developed and tested only against
@@ -78,7 +78,7 @@ flowchart LR
 - Dependencies flow one way; `./gradlew verifyModuleGraph` fails the build if a module breaks the
   rules (for example, a feature reaching the codec or the network).
 - `:core:mavlink` is pure Kotlin with no dependencies at all — no Android, no MAVLink library. It is
-  written by hand ([ADR 0001](docs/adr/0001-own-mavlink-codec.md)).
+  our own codec, built test-first from real SITL captures ([ADR 0001](docs/adr/0001-own-mavlink-codec.md)).
 - Safety-critical rules (mission validation, pre-flight checks, geo math, data staleness) live in
   `:core:domain`, in pure Kotlin.
 - `:core:testing` holds shared test helpers and is only a test dependency.

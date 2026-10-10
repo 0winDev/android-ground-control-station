@@ -29,7 +29,7 @@ Options on the JVM/Android listed by the [MAVLink guide](https://mavlink.io/en/#
 
 ## Decision
 
-We write our own MAVLink v2 codec in pure Kotlin in `:core:mavlink`, by hand, covering only the
+We write our own MAVLink v2 codec in pure Kotlin in `:core:mavlink`, covering only the
 messages each phase needs. It has no dependencies at all (enforced by `verifyModuleGraph`). It is
 developed test-first from real packets captured from ArduPilot SITL, and reviewed against the
 official specification. Its contract is: invalid input is dropped and counted, never thrown.
@@ -68,4 +68,4 @@ Existing libraries remain useful as references to cross-check our decoding (neve
   SITL captures, fuzz-style tests, review against the spec (`mavlink-reviewer`) and comparison with
   QGroundControl.
 - Follow-ups: every new message needs its CRC_EXTRA and field order verified against the official
-  definitions; revisit if the scope grows beyond what is reasonable to hand-write.
+  definitions; revisit if the scope grows beyond what is reasonable to maintain and review line by line.

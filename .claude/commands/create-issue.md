@@ -35,12 +35,12 @@ If `$ARGUMENTS` is empty, ask for a title and stop.
    - <protocol/ArduPilot/safety traps; only real ones, with spec links when possible>
 
    ## Flags
-   - [ ] Touches the MAVLink codec (`hand-written`, test-first)
+   - [ ] Touches the MAVLink codec (`codec-review`, test-first, line-by-line owner review)
    - [ ] Touches failsafe, commands, missions or signing (needs `safety-reviewer`)
    - [ ] Touches protocol, telemetry or commands (needs SITL + QGroundControl check)
    ```
 5. Propose labels — exactly one `phase:v0.x`, one or more `area:*`, `enhancement` or `bug`,
-   `hand-written` if it touches `:core:mavlink`, `out-of-scope` if it is outside the current phase —
+   `codec-review` if it touches `:core:mavlink`, `out-of-scope` if it is outside the current phase —
    the milestone, and the parent epic (if any).
 6. Show the draft (title, body, labels, milestone, epic) and wait for confirmation.
 7. On confirm:
@@ -60,4 +60,4 @@ If `$ARGUMENTS` is empty, ask for a title and stop.
 - Title in English, ≤ 70 chars, no prefix, no trailing period.
 - No "Generated with" footer.
 - Do not assign anyone unless asked. Do not invent labels.
-- A `hand-written` issue never asks Claude to implement codec code.
+- A `codec-review` issue states the test-first flow and the line-by-line owner review before merge.

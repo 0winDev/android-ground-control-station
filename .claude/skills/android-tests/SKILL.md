@@ -112,9 +112,9 @@ fun `GIVEN no heartbeat for the timeout WHEN observing the link THEN emits Lost`
 If a three-block structure is impossible inside `test { }`, collect the items into a `val` in the
 WHEN block and assert after it.
 
-## Codec tests (`:core:mavlink`, `hand-written` issues)
+## Codec tests (`:core:mavlink`, `codec-review` issues)
 
-Claude writes these tests, **never** the code under test.
+These tests are written **before** the code under test (test-first) and start red.
 
 - Inputs are **real packets captured from ArduPilot SITL**, stored under
   `core/mavlink/src/test/resources/<message>/…` and read with `readFixture`. Document in a sibling

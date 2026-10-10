@@ -38,7 +38,7 @@ sealed interface MissionValidation {
 ## The parser never throws on input
 
 Corrupted, truncated, unknown or malicious bytes are expected input for a radio link. The codec's
-contract (hand-written by the owner — review it, never write it) is: bad input is **dropped and
+contract is: bad input is **dropped and
 counted**, never thrown. Exceptions from the parser are bugs. Tests with random bytes enforce it
 (see `android-tests`).
 

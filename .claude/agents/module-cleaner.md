@@ -39,8 +39,8 @@ First read `CLAUDE.md` and the `android-modularization` skill (module map, depen
 4. **Propose a destination** among existing modules; a new module only if none fits (and that
    needs an agreed issue + ADR).
 5. **Risk-assess each move**: `verifyModuleGraph` allowlist, Hilt bindings still reachable from
-   `:app`, `internal` visibility, `:core:mavlink` purity, codec ownership (moves that touch
-   `core/mavlink/src/main/` are done by the owner).
+   `:app`, `internal` visibility, `:core:mavlink` purity, codec review (moves that touch
+   `core/mavlink/src/main/` need the owner's line-by-line review).
 6. **Order** the moves so each step compiles (leaves first).
 
 ## Output format

@@ -30,7 +30,7 @@ GitHub until the owner approves the full draft.**
    - Title (English, ≤ 70 chars, no prefix, no trailing period).
    - Body following `.github/ISSUE_TEMPLATE/feature.yml`: Context, Acceptance criteria,
      Requirements covered, Roadmap phase, Phase "done when", Known pitfalls, Flags.
-   - Labels: `phase:<phase>`, `area:*`, `enhancement`, and `hand-written` when the issue touches
+   - Labels: `phase:<phase>`, `area:*`, `enhancement`, and `codec-review` when the issue touches
      `:core:mavlink` (framing, CRC, parsing, signing).
    - Milestone: the phase milestone.
 3. **Order by risk**, not by proposal order: protocol and safety → transport/data → domain rules →
@@ -76,6 +76,6 @@ GitHub until the owner approves the full draft.**
 ## Rules
 
 - English, no "Generated with" footer.
-- No issue asks Claude to write codec code: `hand-written` issues say "tests by Claude (red, from
-  SITL captures), implementation by the owner, review by `mavlink-reviewer`".
+- `codec-review` issues say "test-first (red tests from SITL captures), then the implementation,
+  review by `mavlink-reviewer`, line-by-line review by the owner before merge".
 - Don't pull in dependencies of later phases (MapLibre before v0.3, Room before v0.5, …).

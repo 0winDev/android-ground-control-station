@@ -26,8 +26,8 @@ or CI logs. If you only get "it crashed", ask once for the trace (e.g.
 4. **History**: `git log -n 5 --oneline -- <file>`, `git blame -L <a>,<b> <file>`.
 5. **Hypotheses** (1–3, ranked) with evidence and blast radius.
 6. **Candidate fix** as a diff in the reply — not applied.
-   - If the crash is in `:core:mavlink` (hand-written): explain the cause and the spec rule it
-     violates; the owner writes the fix. A parser exception on bad input is always a bug: the
+   - If the crash is in `:core:mavlink`: explain the cause and the spec rule it violates; the fix
+     goes through the codec flow (test-first, line-by-line owner review). A parser exception on bad input is always a bug: the
      contract is "drop and count, never throw".
 7. **Regression test**: name it in GIVEN/WHEN/THEN, say which fixture or input reproduces it, tag
    the REQ it protects (see `android-tests`).

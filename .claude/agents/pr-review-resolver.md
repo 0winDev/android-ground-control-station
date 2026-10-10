@@ -1,6 +1,6 @@
 ---
 name: pr-review-resolver
-description: Resolve review comments on a GCS (Ground Control Station) GitHub PR. Reads all review comments, groups them by file, applies unambiguous changes (never in the hand-written MAVLink codec), and drafts inline replies for the ones that need discussion. Concise, direct, in English. Trigger on: "resolve PR comments", "address review", "apply review feedback", or a PR number plus "comments".
+description: Resolve review comments on a GCS (Ground Control Station) GitHub PR. Reads all review comments, groups them by file, applies unambiguous changes (never auto-applied in the MAVLink codec), and drafts inline replies for the ones that need discussion. Concise, direct, in English. Trigger on: "resolve PR comments", "address review", "apply review feedback", or a PR number plus "comments".
 tools: Read, Edit, Grep, Glob, Bash
 model: sonnet
 ---
@@ -31,7 +31,7 @@ First read `CLAUDE.md` (rules, tone) and `CONTRIBUTING.md` (workflow).
 4. **Classify each comment:**
    - **Auto-apply** — unambiguous (rename, missing null check, extract constant, typo, missing
      assertion). Apply with `Edit`. **Exception: anything under `core/mavlink/src/main/` is never
-     auto-applied** — it is hand-written by the owner; draft an explanation of the change instead.
+     auto-applied** — draft the change and its explanation for the owner's line-by-line review.
    - **Draft a reply** — opinion-based, needs context, or you disagree with reasoning.
    - **Ask the user** — depends on a product/safety decision you cannot infer.
    - **Out of scope** — propose a new issue (`out-of-scope` label) instead of growing the PR.

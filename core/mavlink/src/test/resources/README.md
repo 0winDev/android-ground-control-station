@@ -27,6 +27,24 @@ py tools/fixtures/extract_fixtures.py "<path>/2026-10-08 13-17-19.tlog" --excerp
 Every `.bin` is one complete frame exactly as on the wire: 10-byte header + LEN payload bytes + 2-byte
 checksum, no signature (incompatibility flags `0x00`) and no `.tlog` timestamp.
 
+## CRC_EXTRA
+
+The checksum tests (`MavlinkCrcTest`) need each message's CRC_EXTRA. The values were computed from
+pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and match its generated
+`dialects.v20.common` constants. HEARTBEAT is defined in `minimal.xml` (included by `common.xml`), so
+parsing `common.xml` alone does not find it.
+
+| Message (id) | Definition | CRC_EXTRA |
+|---|---|---|
+| HEARTBEAT (0) | `minimal.xml` | 50 |
+| SYS_STATUS (1) | `common.xml` | 124 |
+| SERVO_OUTPUT_RAW (36) | `common.xml` | 222 |
+| POWER_STATUS (125) | `common.xml` | 203 |
+
+With these values, pymavlink's `x25crc` over bytes 1 to 10 + LEN of each `.bin`, then CRC_EXTRA, equals
+the frame's checksum bytes for all seven fixtures (truncated ones included: the checksum covers the
+bytes on the wire).
+
 ## `heartbeat/`
 
 HEARTBEAT from the autopilot (system 1, component 1). Field order on the wire is by type size:
