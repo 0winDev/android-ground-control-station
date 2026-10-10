@@ -20,8 +20,8 @@ You are creating a git commit in GCS (Ground Control Station). Optional hint: `$
    `git add -A` blindly.
 5. Never stage secrets: `local.properties`, `.env`, `*.jks`, `*.keystore`, `*.mavkey`, signing keys,
    anything that looks like a key or token. gitleaks runs in the hook, but don't rely on it.
-6. **Never commit code in `core/mavlink/src/main/`** — it is hand-written by the owner. If it is
-   staged, stop and tell the user (they commit it themselves).
+6. **Codec code comes with its tests:** a commit touching `core/mavlink/src/main/` needs its tests
+   (test-first) already on the branch. If they are missing, stop and tell the user.
 7. Write the message:
    ```
    <type>: <imperative summary> (#<issue>)

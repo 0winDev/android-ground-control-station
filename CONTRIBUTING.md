@@ -26,19 +26,19 @@ requests and commit messages — is written in **English**.
      If a requirement is missing, add it in the same PR.
    - **Phase "done when"** — copied from the roadmap, so the issue can be judged against it.
    - **Known pitfalls** — protocol traps, ArduPilot quirks, things that bit us before.
-3. Labels: one `phase:v0.x`, one or more `area:*`, plus `hand-written` when it touches the codec.
+3. Labels: one `phase:v0.x`, one or more `area:*`, plus `codec-review` when it touches the codec.
    Anything that comes up but is outside the phase gets its own issue with `out-of-scope`.
 
-### Hand-written issues (`:core:mavlink`)
+### Codec issues (`:core:mavlink`)
 
-The MAVLink codec (framing, CRC, parsing, signing) is written by the project owner, by hand. Issues
-that touch it carry the `hand-written` label and are done **test-first**:
+Issues that touch the MAVLink codec (framing, CRC, parsing, signing) carry the `codec-review` label
+and are done **test-first**:
 
-1. The assistant writes the tests, **red**, from real packets captured from ArduPilot SITL and stored
-   under `core/mavlink/src/test/resources/`. It never writes production code in `:core:mavlink`.
-2. The owner implements until the tests pass.
-3. The `mavlink-reviewer` agent reviews the implementation against the official MAVLink
-   specification.
+1. Tests are written first, **red**, from real packets captured from ArduPilot SITL and stored under
+   `core/mavlink/src/test/resources/`, with expected values from a reference decoder.
+2. The implementation follows until the tests pass.
+3. The `mavlink-reviewer` agent reviews it against the official MAVLink specification.
+4. The owner reviews every line; nothing is merged that the owner cannot explain line by line.
 
 Red tests only live on the feature branch; the PR is opened as a **draft** until CI is green.
 

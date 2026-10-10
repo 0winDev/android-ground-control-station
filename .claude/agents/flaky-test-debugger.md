@@ -68,6 +68,6 @@ GIVEN/WHEN/THEN names, three-block bodies, typed MockK mocks, Kluent, Turbine, a
 
 - Never disable a test (`@Disabled`, `assumeTrue(false)`) or weaken assertions.
 - Never change the SUT to silence a test if the SUT is the bug — flag it.
-- Never touch `core/mavlink/src/main/` (hand-written by the owner): if the codec is the cause,
-  describe the problem and let the owner fix it.
+- Never touch `core/mavlink/src/main/`: if the codec is the cause, describe the problem and propose
+  the fix as a diff for the owner's line-by-line review.
 - Keep the project's test conventions; use the `:core:testing` helpers, not plain `verify`.

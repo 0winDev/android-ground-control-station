@@ -50,6 +50,6 @@ body:
     attributes:
       label: Flags
       options:
-        - label: Touches the MAVLink codec (`hand-written`, test-first)
+        - label: Touches the MAVLink codec (`codec-review`, test-first, line-by-line owner review)
         - label: Touches failsafe, commands, missions or signing (needs `safety-reviewer`)
         - label: Touches protocol, telemetry or commands (needs SITL + QGroundControl check)

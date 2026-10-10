@@ -37,7 +37,7 @@ In Spanish, briefly:
 - **Requirements** — the REQ-xxx it covers.
 - **Done when** — the phase criterion.
 - **Known pitfalls**.
-- **Flags** — is it `hand-written` (label or flag)? Does it touch safety (failsafe, commands, missions,
+- **Flags** — is it `codec-review` (label or flag)? Does it touch safety (failsafe, commands, missions,
   signing, `area:safety`) and so need `safety-reviewer`? Does it touch protocol, telemetry or commands
   and so need SITL + QGroundControl verification (`sitl-verify`)?
 
@@ -75,13 +75,13 @@ Read, and then say explicitly what you read:
   | `area:safety` | `android-typed-errors`, `android-mvi` (dangerous commands) |
   | `area:build` | `android-modularization` |
 
-## 7. Hand-written issues
+## 7. Codec issues
 
-If the issue is `hand-written`, remind the flow before planning:
-- Test-first: Claude only prepares **red** tests from **real** SITL captures (fixtures under
+If the issue is `codec-review`, remind the flow before planning:
+- Test-first: **red** tests from **real** SITL captures (fixtures under
   `core/mavlink/src/test/resources/`), with expected values from a reference decoder.
-- The owner implements; `mavlink-reviewer` reviews.
-- Nothing in `core/mavlink/src/main/` is touched by Claude (also enforced by `.claude/settings.json`).
+- Then the implementation until the tests pass; `mavlink-reviewer` reviews it against the spec.
+- Nothing is merged until the owner has reviewed it line by line and can explain every line.
 
 ## 8. Plan
 

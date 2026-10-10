@@ -3,4 +3,4 @@ plugins {
     alias(libs.plugins.gcs.kover)
 }
 
-// The MAVLink codec is hand-written and must stay pure Kotlin: no dependencies at all.
+// The MAVLink codec is our own and must stay pure Kotlin: no dependencies at all.

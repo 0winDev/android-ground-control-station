@@ -26,13 +26,11 @@ Security checklist: `docs/security.md`.
 
 ## Non-negotiable rules
 
-1. **The MAVLink codec (`:core:mavlink`) is written by the owner, by hand.** Never implement or edit
-   framing, CRC, parsing or signing code in `core/mavlink/src/main/` — not even a one-line fix.
-   You may create the empty module, write tests (red, from captured SITL packets) and review the
-   owner's code (`mavlink-reviewer` agent). `.claude/settings.json` enforces this with a deny rule,
-   `Edit(/core/mavlink/src/main/**)`: it blocks Claude's file tools, recognized Bash file commands
-   (`sed`, `tee`…) and redirections there. It cannot block a script that opens files itself, so this
-   written rule still applies in full; never work around the deny rule.
+1. **The MAVLink codec (`:core:mavlink`) is built test-first.** Every change to framing, CRC,
+   parsing or signing starts with red tests from real packets captured from ArduPilot SITL; the
+   implementation follows until they pass; the `mavlink-reviewer` agent reviews it against the
+   official specification; and nothing is merged until the owner has reviewed it line by line and
+   can explain every line.
 2. **`:core:mavlink` is pure Kotlin (JVM)**: no Android dependencies, no external MAVLink library.
    `verifyModuleGraph` enforces it.
 3. **Never invent** MAVLink message fields, IDs, enums, CRC_EXTRA values, ArduPilot parameters or
@@ -53,7 +51,7 @@ Security checklist: `docs/security.md`.
 | Piece | Who | Why |
 |---|---|---|
 | Gradle, modules, CI, detekt, Compose UI | Claude implements, owner reviews | Already mastered in a previous project |
-| MAVLink codec (framing, CRC, parsing, signing) | **Owner writes**, Claude reviews and writes tests | The core of the interview |
+| MAVLink codec (framing, CRC, parsing, signing) | Test-first from SITL captures, `mavlink-reviewer` review, **owner reviews every line** | The core of the interview |
 | Mission upload state machine | Owner designs the diagram, Claude implements | Must be drawable on a whiteboard |
 | Geo math (distances, bearings, MGRS) | Claude implements, owner explains each formula in the PR | Learn just enough georeferencing |
 | README, ADRs, diagrams | Claude drafts, owner rewrites in their own words | Must sound like the owner |
@@ -91,8 +89,8 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
    (`git fetch origin` first).
 3. Start every issue with `/start-issue <n>` (checks, summary, assignment, branch, required reading,
    plan); get the plan approved before writing code.
-4. `hand-written` issues: Claude writes red tests from SITL captures → owner implements →
-   `mavlink-reviewer` reviews.
+4. `codec-review` issues: red tests from SITL captures → implementation → `mavlink-reviewer`
+   review → line-by-line review by the owner.
 5. Verify: `./gradlew ktlintCheck detekt verifyModuleGraph lintDebug test assembleDebug`; SITL vs
    QGroundControl (`sitl-verify`) for protocol/telemetry/commands; `safety-reviewer` for failsafe,
    commands, missions or signing; always update the REQ → test matrix.

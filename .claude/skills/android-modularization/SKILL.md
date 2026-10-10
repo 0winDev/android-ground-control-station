@@ -26,7 +26,7 @@ the allowlist in the `verifyModuleGraph` task (`build-logic/convention/.../Modul
 :core:domain          Pure Kotlin (JVM). Domain models, repository interfaces, and the
                       safety-critical rules: mission validation, pre-flight checks, geo math,
                       data staleness.
-:core:mavlink         Pure Kotlin (JVM). MAVLink v2 codec — HAND-WRITTEN by the owner.
+:core:mavlink         Pure Kotlin (JVM). MAVLink v2 codec — test-first, owner reviews every line.
 :core:transport       Pure Kotlin (JVM). UDP transport (DatagramSocket on Dispatchers.IO).
 :core:designsystem    Android library + Compose. GcsTheme, colors, typography, sizes, shared components.
 :core:testing         Pure Kotlin (JVM). Test helpers; only ever a testImplementation dependency.

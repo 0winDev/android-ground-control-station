@@ -19,7 +19,7 @@ The first screen is the HUD (`:feature:hud`, issue #6): use it as the reference 
 | Safety-critical rules: mission validation, pre-flight checks, geo math, data staleness | `:core:domain` | Pure Kotlin, fast tests, coverage, fuzzing |
 | Use cases (only when they add logic beyond forwarding a repository call) | `:core:domain` | Same |
 | Repository **implementations**, MAVLink ↔ domain mapping, link watchdog, command retries, mission upload state machine | `:data:vehicle` | Needs protocol + transport |
-| Frame/CRC/parse/sign | `:core:mavlink` | **Hand-written by the owner — never write it** |
+| Frame/CRC/parse/sign | `:core:mavlink` | **Test-first; line-by-line owner review** |
 | UDP socket | `:core:transport` | |
 | Theme, shared components | `:core:designsystem` | |
 | Hilt binding interface → implementation | `:data:vehicle` (`di/`) | Installed in `SingletonComponent`, reached through `:app` |
