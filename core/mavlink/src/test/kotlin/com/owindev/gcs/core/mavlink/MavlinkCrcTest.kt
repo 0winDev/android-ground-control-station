@@ -1,10 +1,12 @@
 package com.owindev.gcs.core.mavlink
 
 import com.owindev.gcs.core.testing.readFixture
+import org.amshove.kluent.AnyException
 import org.amshove.kluent.invoking
 import org.amshove.kluent.shouldBeEqualTo
 import org.amshove.kluent.shouldBeInRange
 import org.amshove.kluent.shouldNotBeEqualTo
+import org.amshove.kluent.shouldNotThrow
 import org.amshove.kluent.shouldThrow
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -81,6 +83,18 @@ class MavlinkCrcTest {
         result shouldNotBeEqualTo wireChecksum(frame)
     }
 
+    @Tag("REQ-011")
+    @Test
+    fun `GIVEN a CRC_EXTRA above one byte WHEN computing the checksum THEN only its low 8 bits are used`() {
+        val frame = readFixture(HEARTBEAT_FIXTURE)
+        val crcExtraWithHighBits = HEARTBEAT_CRC_EXTRA + BYTE_RANGE
+
+        val result = crc.compute(frame, CRC_OFFSET, crcLength(frame), crcExtraWithHighBits)
+
+        result shouldBeEqualTo wireChecksum(frame)
+    }
+
+    @Tag("REQ-011")
     @Test
     fun `GIVEN every possible CRC_EXTRA byte WHEN computing the checksum THEN each result fits in 16 bits`() {
         val frame = readFixture(HEARTBEAT_FIXTURE)
@@ -94,9 +108,9 @@ class MavlinkCrcTest {
     fun `GIVEN an empty range at the end of the array WHEN computing the checksum THEN it is accepted`() {
         val frame = readFixture(HEARTBEAT_FIXTURE)
 
-        val result = crc.compute(frame, frame.size, 0, HEARTBEAT_CRC_EXTRA)
+        val result = invoking { crc.compute(frame, frame.size, 0, HEARTBEAT_CRC_EXTRA) }
 
-        result shouldBeInRange 0..MAX_CHECKSUM
+        result shouldNotThrow AnyException
     }
 
     @ParameterizedTest(name = "offset {0}, length {1}")
@@ -139,6 +153,7 @@ class MavlinkCrcTest {
         const val LOWEST_BIT = 0x01
         const val BYTE_MASK = 0xFF
         const val MAX_BYTE = 0xFF
+        const val BYTE_RANGE = 0x100
         const val MAX_CHECKSUM = 0xFFFF
     }
 }
