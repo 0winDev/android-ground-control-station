@@ -33,7 +33,8 @@ class DefaultLinkRepositoryTest {
 
     @BeforeEach
     fun setUp() {
-        repository = DefaultLinkRepository(transport = transport, scope = testScope.backgroundScope)
+        val session = LinkSession(transport = transport, scope = testScope.backgroundScope)
+        repository = DefaultLinkRepository(session = session, scope = testScope.backgroundScope)
     }
 
     @AfterEach
