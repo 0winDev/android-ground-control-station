@@ -22,6 +22,9 @@ Writes:
   <out>/derived/heartbeat-sysid-2.bin           heartbeat/disarmed-loiter.bin re-packed by pymavlink with
                                                 system ID 2 (same fields, seq and component): a second
                                                 vehicle on the link
+  <out>/derived/heartbeat-gimbal-component.bin  heartbeat/disarmed-stabilize.bin re-packed by pymavlink from
+                                                component 154 (MAV_COMP_ID_GIMBAL), same system, seq and
+                                                fields: another component of the vehicle
   <out>/gcs/heartbeat-mission-planner.bin       a real GCS HEARTBEAT (not derived) from
                                                 heartbeat/session.tlog: Mission Planner, system 255
   <out>/unknown/attitude-fd-in-payload.bin      a real ATTITUDE frame (not derived) from
@@ -52,6 +55,7 @@ from pymavlink.generator.mavcrc import x25crc
 SOURCE = "heartbeat/disarmed-stabilize.bin"
 LOITER = "heartbeat/disarmed-loiter.bin"
 SECOND_SYSTEM_ID = 2
+MAV_COMP_ID_GIMBAL = 154
 SESSION = "heartbeat/session.tlog"
 HEADER_LENGTH = 10
 CHECKSUM_LENGTH = 2
@@ -134,8 +138,18 @@ def max_custom_mode(frame: bytes) -> bytes:
 
 def with_system_id(frame: bytes, system_id: int) -> bytes:
     """The HEARTBEAT re-packed by pymavlink with another system ID; fields, seq and component unchanged."""
+    return repacked(frame, system_id=system_id, component_id=decode(frame).get_srcComponent())
+
+
+def with_component_id(frame: bytes, component_id: int) -> bytes:
+    """The HEARTBEAT re-packed by pymavlink from another component; fields, seq and system unchanged."""
+    return repacked(frame, system_id=decode(frame).get_srcSystem(), component_id=component_id)
+
+
+def repacked(frame: bytes, system_id: int, component_id: int) -> bytes:
+    """The HEARTBEAT re-packed by pymavlink with the given sender; fields and seq unchanged."""
     msg = decode(frame)
-    mav = common.MAVLink(io.BytesIO(), srcSystem=system_id, srcComponent=msg.get_srcComponent())
+    mav = common.MAVLink(io.BytesIO(), srcSystem=system_id, srcComponent=component_id)
     mav.seq = msg.get_seq()
     copy = common.MAVLink_heartbeat_message(
         msg.type, msg.autopilot, msg.base_mode, msg.custom_mode, msg.system_status, msg.mavlink_version
@@ -237,6 +251,7 @@ def main() -> None:
         derived_dir / "heartbeat-extra-byte.bin": extra_byte(source),
         derived_dir / "heartbeat-max-custom-mode.bin": max_custom_mode(source),
         derived_dir / "heartbeat-sysid-2.bin": with_system_id((args.out / LOITER).read_bytes(), SECOND_SYSTEM_ID),
+        derived_dir / "heartbeat-gimbal-component.bin": with_component_id(source, MAV_COMP_ID_GIMBAL),
         gcs_dir / "heartbeat-mission-planner.bin": gcs_heartbeat(args.out / SESSION),
         unknown_dir / "attitude-fd-in-payload.bin": attitude_with_fd(args.out / SESSION),
         derived_dir / "attitude-signed.bin": signed(attitude_with_fd(args.out / SESSION)),
@@ -251,6 +266,8 @@ def main() -> None:
     loiter = decode((args.out / LOITER).read_bytes())
     second = decode(outputs[derived_dir / "heartbeat-sysid-2.bin"])
     assert second.get_srcSystem() == SECOND_SYSTEM_ID and second.to_dict() == loiter.to_dict()
+    gimbal = decode(outputs[derived_dir / "heartbeat-gimbal-component.bin"])
+    assert gimbal.get_srcComponent() == MAV_COMP_ID_GIMBAL and gimbal.to_dict() == decode(source).to_dict()
     assert decode(outputs[gcs_dir / "heartbeat-mission-planner.bin"]).type == mavutil.mavlink.MAV_TYPE_GCS
     extra = decode(outputs[derived_dir / "heartbeat-extra-byte.bin"]).to_dict()
     assert extra == decode(source).to_dict(), "pymavlink must decode the extra-byte frame like the original"

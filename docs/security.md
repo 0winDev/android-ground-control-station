@@ -48,7 +48,7 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 | # | Control | Phase | Status | Evidence / notes |
 |---|---|---|---|---|
 | N-1 | The UDP endpoint (port, expected vehicle) is configurable; traffic from unexpected system IDs is visible and never merged into the current vehicle. | v0.1 | ⏳ | |
-| N-2 | Link loss is detected (HEARTBEAT timeout) and blocks commands. | v0.1 / v0.4 | ⏳ | |
+| N-2 | Link loss is detected (HEARTBEAT timeout) and blocks commands. | v0.1 / v0.4 | 🚧 | HEARTBEAT-timeout detection per system ID done (#12, `DefaultVehicleRepository`, fails safe to LOST if the watchdog stops); operator warning #13; command blocking v0.4. **Known limitation until signing (v0.6):** what counts as "alive" is not authenticated and the source address is not checked, so any host that reaches UDP 14550 can keep a vehicle CONNECTED with a forged unsigned HEARTBEAT (system 1, component 1); see C-1, A-2. |
 | N-3 | Cleartext HTTP is not used (map tiles over HTTPS). | v0.3 | ⏳ | |
 | N-4 | Cursor on Target output can be disabled and only goes to the configured destination. | v0.7 | ⏳ | |
 
@@ -64,7 +64,7 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 
 | # | Control | Phase | Status | Evidence / notes |
 |---|---|---|---|---|
-| K-1 | The MAVLink parser never crashes on malformed input (fuzz-style tests). | v0.1 | ⏳ | |
+| K-1 | The MAVLink parser never crashes on malformed input (fuzz-style tests). | v0.1 | ⏳ | Related (#12): an *unexpected* exception in the link-loss watchdog is not swallowed. It first marks every vehicle LOST and stops the listener, then crashes the process on purpose. |
 | K-2 | Inputs from the network are validated before use (lengths, ranges, enums). | v0.1 | ⏳ | |
 | K-3 | Missions are validated before upload (altitude, distance from home, geofence, waypoint count). | v0.5 | ⏳ | |
 | K-4 | Dependencies are kept up to date (Dependabot) and checked in CI. | v0.0 | ✅ | `.github/dependabot.yml`, `android-ci.yml` |

@@ -14,10 +14,12 @@ import com.owindev.gcs.data.vehicle.link.ReceivedMessage
  * computer) and other ground stations send HEARTBEATs too, and must not overwrite it.
  *
  * Enum values from `minimal.xml`,
- * https://github.com/mavlink/mavlink/blob/master/message_definitions/v1.0/minimal.xml.
+ * https://github.com/mavlink/mavlink/blob/master/message_definitions/v1.0/minimal.xml. System ID 0 is not a
+ * sender: IDs are "values between 1 and 255" and 0 means broadcast (https://mavlink.io/en/guide/routing.html).
  */
 internal object HeartbeatMapper {
 
+    private const val BROADCAST_SYSTEM_ID = 0
     private const val MAV_COMP_ID_AUTOPILOT1 = 1
     private const val MAV_TYPE_GCS = 6
     private const val MAV_AUTOPILOT_ARDUPILOTMEGA = 3
@@ -48,7 +50,7 @@ internal object HeartbeatMapper {
     /** The sender's state, or `null` if [received] is not a HEARTBEAT from a vehicle's autopilot. */
     fun vehicleStateOf(received: ReceivedMessage): VehicleState? {
         val heartbeat = (received.message as? Heartbeat)
-            ?.takeIf { it.isFromAutopilot(received.componentId) }
+            ?.takeIf { received.systemId != BROADCAST_SYSTEM_ID && it.isFromAutopilot(received.componentId) }
             ?: return null
         val isCopter = heartbeat.type in copterTypes
         return VehicleState(

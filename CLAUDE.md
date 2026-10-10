@@ -196,3 +196,7 @@ Add one line per closed issue: what surprised us and what to do differently.
   and a regeneration script, never by hand or with our own codec.
 - #10 Decoder: Kluent compares maps in iteration order, so count maps must be sorted on both sides.
   The truncation tests only make sense through the parser (CRC over the wire bytes, then zero-fill).
+- #11 Vehicle state: a `SharedFlow` with replay hands an old message to a late subscriber as if it were
+  new; keep messages without replay and put what late subscribers need (bind failure, counts) in a
+  separate `StateFlow`. `stateIn` keeps its last value after it stops, so time-based state must not
+  depend on observers to stay current.

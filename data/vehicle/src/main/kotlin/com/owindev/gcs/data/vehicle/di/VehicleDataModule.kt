@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.di
 
 import com.owindev.gcs.core.domain.link.LinkRepository
+import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
@@ -11,6 +12,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,5 +39,13 @@ abstract class VehicleDataModule {
         @Singleton
         @ApplicationScope
         fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+        /** Monotonic and counting through device sleep, never wall-clock time (see [ElapsedRealtimeTimeSource]). */
+        @Provides
+        fun provideTimeSource(): TimeSource.WithComparableMarks = ElapsedRealtimeTimeSource
+
+        /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
+        @Provides
+        fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
     }
 }
