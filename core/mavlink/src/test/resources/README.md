@@ -108,10 +108,11 @@ power_status.bin      fd 02 00 00 16 01 01 7d 00 00 88 13 ad 25
 servo_output_raw.bin  fd 0c 00 00 1d 01 01 24 00 00 89 f9 27 00 e8 03 e8 03 e8 03 e8 03 c4 c3
 ```
 
-## `derived/` and `unknown/`
+## `derived/`, `unknown/` and `gcs/`
 
-Parser fixtures (#9). `derived/` frames are built from `heartbeat/disarmed-stabilize.bin` **by pymavlink
-2.4.50**, never by our codec; `unknown/` holds a real frame extracted from `heartbeat/session.tlog`.
+Parser fixtures (#9) and vehicle-state fixtures (#11). `derived/` frames are built from the real
+`heartbeat/` frames **by pymavlink 2.4.50**, never by our codec; `unknown/` and `gcs/` hold real frames
+extracted from `heartbeat/session.tlog`.
 Regenerate (same bytes):
 
 ```bash
@@ -126,6 +127,8 @@ py tools/fixtures/derive_fixtures.py
 | `derived/heartbeat-empty-payload.bin` | The HEARTBEAT header with LEN 0 and no payload, checksum recomputed with pymavlink's `x25crc` and CRC_EXTRA | Invalid frame: [serialization.html](https://mavlink.io/en/guide/serialization.html) says "The first byte of the payload is never truncated", so LEN 0 is dropped and counted |
 | `derived/heartbeat-extra-byte.bin` | The HEARTBEAT with one unknown extension byte `0x2A` appended (LEN 10), checksum recomputed by pymavlink; pymavlink decodes it with the same field values as the original | A payload longer than the definition: the extra bytes are ignored ([define_xml_element.html](https://mavlink.io/en/guide/define_xml_element.html), Message Extensions: "the fields will not be seen") (#10) |
 | `derived/heartbeat-max-custom-mode.bin` | The HEARTBEAT re-packed by pymavlink with `custom_mode` = `0xFFFFFFFF`; pymavlink decodes 4294967295 | `custom_mode` is a uint32 and must not come out signed (#10) |
+| `derived/heartbeat-sysid-2.bin` | `heartbeat/disarmed-loiter.bin` re-packed by pymavlink with system ID 2; seq, component and every field unchanged (pymavlink decodes the same fields as the original) | A second vehicle on the link: its state is kept apart from system 1 (REQ-016, #11) |
+| `gcs/heartbeat-mission-planner.bin` | Real HEARTBEAT (seq 44) from `session.tlog` sent by Mission Planner: system 255, component 190, `type` 6 = `MAV_TYPE_GCS`, `autopilot` 8 = `MAV_AUTOPILOT_INVALID`, `base_mode` 0, `custom_mode` 0 | A ground station's HEARTBEAT is not a vehicle (#11) |
 | `unknown/attitude-fd-in-payload.bin` | Real ATTITUDE (id 30, LEN 28, seq 42) from `session.tlog`, the first whose payload contains `0xFD` | A frame with an unknown message ID is skipped whole by its LEN, so the `0xFD` inside it starts no false frame |
 | `derived/attitude-signed.bin` | `unknown/attitude-fd-in-payload.bin` re-packed and signed by pymavlink with the same test key, link ID and timestamp; signature verified by pymavlink | A signed frame with a message ID the tests treat as unknown: skipped whole, signature included |
 | `derived/session-stream.bin` | `session.tlog` without the 8-byte timestamps: every frame (MAVLink 1 and 2) in order, 187,700 bytes, rebuilt from pymavlink's decoded frames (no BAD_DATA) | The whole session as a parser input, cut into datagrams by the tests |
@@ -140,6 +143,8 @@ derived/heartbeat-unknown-compat.bin    fd 09 00 80 3b 01 01 00 00 00 00 00 00 0
 derived/heartbeat-empty-payload.bin     fd 00 00 00 3b 01 01 00 00 00 b1 21
 derived/heartbeat-extra-byte.bin        fd 0a 00 00 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 2a ef 4d
 derived/heartbeat-max-custom-mode.bin   fd 09 00 00 3b 01 01 00 00 00 ff ff ff ff 02 03 51 03 03 85 52
+derived/heartbeat-sysid-2.bin           fd 09 00 00 ad 02 01 00 00 00 05 00 00 00 02 03 59 03 03 5d aa
+gcs/heartbeat-mission-planner.bin       fd 09 00 00 2c ff be 00 00 00 00 00 00 00 06 08 00 00 03 fb 18
 unknown/attitude-fd-in-payload.bin      fd 1c 00 00 2a 01 01 1e 00 00 3f 0f 06 00 c9 b0 89 ba e6 32 a8 ba
                                         b1 39 3a bc 50 f7 69 b9 00 fd 67 b9 c0 a8 4a ba 42 9f
 derived/attitude-signed.bin             fd 1c 01 00 2a 01 01 1e 00 00 3f 0f 06 00 c9 b0 89 ba e6 32 a8 ba

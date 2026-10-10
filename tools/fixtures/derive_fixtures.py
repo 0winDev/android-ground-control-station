@@ -19,6 +19,11 @@ Writes:
                                                 checksum recomputed by pymavlink
   <out>/derived/heartbeat-max-custom-mode.bin   the HEARTBEAT re-packed by pymavlink with custom_mode
                                                 0xFFFFFFFF
+  <out>/derived/heartbeat-sysid-2.bin           heartbeat/disarmed-loiter.bin re-packed by pymavlink with
+                                                system ID 2 (same fields, seq and component): a second
+                                                vehicle on the link
+  <out>/gcs/heartbeat-mission-planner.bin       a real GCS HEARTBEAT (not derived) from
+                                                heartbeat/session.tlog: Mission Planner, system 255
   <out>/unknown/attitude-fd-in-payload.bin      a real ATTITUDE frame (not derived) from
                                                 heartbeat/session.tlog whose payload contains 0xFD
   <out>/derived/attitude-signed.bin             that ATTITUDE re-packed and signed the same way (a signed
@@ -45,6 +50,8 @@ from pymavlink.dialects.v20 import common
 from pymavlink.generator.mavcrc import x25crc
 
 SOURCE = "heartbeat/disarmed-stabilize.bin"
+LOITER = "heartbeat/disarmed-loiter.bin"
+SECOND_SYSTEM_ID = 2
 SESSION = "heartbeat/session.tlog"
 HEADER_LENGTH = 10
 CHECKSUM_LENGTH = 2
@@ -125,6 +132,29 @@ def max_custom_mode(frame: bytes) -> bytes:
     return bytes(copy.pack(mav))
 
 
+def with_system_id(frame: bytes, system_id: int) -> bytes:
+    """The HEARTBEAT re-packed by pymavlink with another system ID; fields, seq and component unchanged."""
+    msg = decode(frame)
+    mav = common.MAVLink(io.BytesIO(), srcSystem=system_id, srcComponent=msg.get_srcComponent())
+    mav.seq = msg.get_seq()
+    copy = common.MAVLink_heartbeat_message(
+        msg.type, msg.autopilot, msg.base_mode, msg.custom_mode, msg.system_status, msg.mavlink_version
+    )
+    return bytes(copy.pack(mav))
+
+
+def gcs_heartbeat(session: Path) -> bytes:
+    """First real MAVLink 2 HEARTBEAT of the session sent by a ground station (MAV_TYPE_GCS)."""
+    log = mavutil.mavlink_connection(str(session), dialect="common", robust_parsing=True)
+    while True:
+        msg = log.recv_match(type="HEARTBEAT", blocking=False)
+        if msg is None:
+            raise SystemExit("no GCS HEARTBEAT in the session")
+        frame = bytes(msg.get_msgbuf())
+        if frame[0] == START_MARKER and msg.type == mavutil.mavlink.MAV_TYPE_GCS:
+            return frame
+
+
 def signed(frame: bytes) -> bytes:
     """Re-packs the decoded message with the same header fields and fields, signed by pymavlink."""
     msg = decode(frame)
@@ -194,8 +224,10 @@ def main() -> None:
     source = (args.out / SOURCE).read_bytes()
     derived_dir = args.out / "derived"
     unknown_dir = args.out / "unknown"
+    gcs_dir = args.out / "gcs"
     derived_dir.mkdir(parents=True, exist_ok=True)
     unknown_dir.mkdir(parents=True, exist_ok=True)
+    gcs_dir.mkdir(parents=True, exist_ok=True)
 
     outputs = {
         derived_dir / "heartbeat-signed.bin": signed(source),
@@ -204,6 +236,8 @@ def main() -> None:
         derived_dir / "heartbeat-empty-payload.bin": empty_payload(source),
         derived_dir / "heartbeat-extra-byte.bin": extra_byte(source),
         derived_dir / "heartbeat-max-custom-mode.bin": max_custom_mode(source),
+        derived_dir / "heartbeat-sysid-2.bin": with_system_id((args.out / LOITER).read_bytes(), SECOND_SYSTEM_ID),
+        gcs_dir / "heartbeat-mission-planner.bin": gcs_heartbeat(args.out / SESSION),
         unknown_dir / "attitude-fd-in-payload.bin": attitude_with_fd(args.out / SESSION),
         derived_dir / "attitude-signed.bin": signed(attitude_with_fd(args.out / SESSION)),
         derived_dir / "session-stream.bin": session_stream(args.out / SESSION),
@@ -214,6 +248,10 @@ def main() -> None:
         assert signed_msg.get_signed() and signed_msg._link_id == TEST_LINK_ID, f"pymavlink did not verify {name}"
     decode(outputs[derived_dir / "heartbeat-unknown-compat.bin"])
     assert decode(outputs[derived_dir / "heartbeat-max-custom-mode.bin"]).custom_mode == MAX_UINT32
+    loiter = decode((args.out / LOITER).read_bytes())
+    second = decode(outputs[derived_dir / "heartbeat-sysid-2.bin"])
+    assert second.get_srcSystem() == SECOND_SYSTEM_ID and second.to_dict() == loiter.to_dict()
+    assert decode(outputs[gcs_dir / "heartbeat-mission-planner.bin"]).type == mavutil.mavlink.MAV_TYPE_GCS
     extra = decode(outputs[derived_dir / "heartbeat-extra-byte.bin"]).to_dict()
     assert extra == decode(source).to_dict(), "pymavlink must decode the extra-byte frame like the original"
 

@@ -1,8 +1,10 @@
 package com.owindev.gcs.data.vehicle.di
 
 import com.owindev.gcs.core.domain.link.LinkRepository
+import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
+import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -19,6 +21,9 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindLinkRepository(impl: DefaultLinkRepository): LinkRepository
+
+    @Binds
+    internal abstract fun bindVehicleRepository(impl: DefaultVehicleRepository): VehicleRepository
 
     companion object {
 
