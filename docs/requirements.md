@@ -52,7 +52,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-006 | Android Lint `MissingTranslation` (error by default) on `lintDebug`; `values/` + `values-es/` | Verified |
 | REQ-007 | `core/designsystem/.../GcsSizesTest` | Verified |
 | REQ-010 | — | Pending (v0.1) |
-| REQ-011 | — | Pending (v0.1) |
+| REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA) | Partial (#8; drop-and-count in #9) |
 | REQ-012 | — | Pending (v0.1) |
 | REQ-013 | — | Pending (v0.1) |
 | REQ-014 | — | Pending (v0.1) |

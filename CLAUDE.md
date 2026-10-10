@@ -187,3 +187,6 @@ Add one line per closed issue: what surprised us and what to do differently.
 - #6 UDP count: QGroundControl's UDP AutoConnect holds host port 14550, which silently breaks the
   emulator redirect. Redirect a free host port instead (`adb emu redir add udp:14560:14550`) and
   mirror to it; check who holds a port with `netstat -ano` before blaming the app.
+- #8 Checksum: HEARTBEAT is defined in `minimal.xml`, not `common.xml`, so a parser that skips the
+  includes misses it. Claude Code's auto mode silently denies edits under `.claude/` (permissions,
+  agents, commands); leave auto mode for those instead of retrying.
