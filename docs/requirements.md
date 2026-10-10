@@ -51,11 +51,11 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-005 | `core/transport/.../UdpTransportTest`; `data/vehicle/.../DefaultLinkRepositoryTest`; `feature/hud/.../HudViewModelTest`; SITL check (PR #18) | Verified |
 | REQ-006 | Android Lint `MissingTranslation` (error by default) on `lintDebug`; `values/` + `values-es/` | Verified |
 | REQ-007 | `core/designsystem/.../GcsSizesTest` | Verified |
-| REQ-010 | — | Pending (v0.1) |
-| REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA) | Partial (#8; drop-and-count in #9) |
-| REQ-012 | — | Pending (v0.1) |
+| REQ-010 | `core/mavlink/.../MavlinkParserTest` (real SITL frames: several per datagram, split, byte by byte, whole session in random datagrams, false long starts, signed) | Pending (until merged to `main`) |
+| REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA); `core/mavlink/.../MavlinkParserTest` (bad checksum and unknown message ID dropped and counted) | Pending (until merged to `main`) |
+| REQ-012 | `core/mavlink/.../MavlinkParserTest` (1 MB of fixed-seed random bytes, empty datagram, noise counted as skipped bytes, LEN 0 dropped and counted) | Pending (until merged to `main`) |
 | REQ-013 | — | Pending (v0.1) |
-| REQ-014 | — | Pending (v0.1) |
+| REQ-014 | `core/mavlink/.../MavlinkParserTest` (unsupported incompatibility flag dropped and counted; unknown compatibility flag ignored) | Pending (until merged to `main`) |
 | REQ-015 | — | Pending (v0.1) |
 | REQ-016 | — | Pending (v0.1) |
 | REQ-017 | — | Pending (v0.1) |
