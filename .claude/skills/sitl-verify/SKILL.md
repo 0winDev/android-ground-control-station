@@ -44,6 +44,13 @@ Mission Planner pitfalls:
   cannot listen on that port on the same PC — hence QGC over TCP 5762.
 - Use **one** mirror window: with two, the first one stopped delivering.
 - Closing a mirror window does not stop it; restart Mission Planner to clear mirrors.
+- QGroundControl's UDP AutoConnect binds host port 14550 on start, so `adb emu redir add
+  udp:14550:14550` silently fails (`adb emu redir list` shows nothing). Instead of fighting it,
+  redirect a free host port to the app's port, e.g. `adb emu redir add udp:14560:14550`, and point
+  the mirror at `127.0.0.1:14560`. With two emulators, pick the target with `adb -s <serial>`.
+- Check the result from the host: `netstat -ano` shows who holds 14550, and the HUD count can be
+  read with `adb shell uiautomator dump` (set `MSYS_NO_PATHCONV=1` in Git Bash so device paths are
+  not rewritten).
 
 **B. `sim_vehicle.py` (WSL2 or Linux)**, from an ArduPilot checkout (see the ArduPilot SITL docs):
 ```bash

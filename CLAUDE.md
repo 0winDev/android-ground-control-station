@@ -186,3 +186,6 @@ Add one line per closed issue: what surprised us and what to do differently.
   to SITL directly over TCP 5762. Stable ArduCopter wasn't selectable: record the exact version
   (AUTOPILOT_VERSION) with every capture. HEARTBEAT never truncates; truncation fixtures come from
   other messages.
+- #6 UDP count: QGroundControl's UDP AutoConnect holds host port 14550, which silently breaks the
+  emulator redirect. Redirect a free host port instead (`adb emu redir add udp:14560:14550`) and
+  mirror to it; check who holds a port with `netstat -ano` before blaming the app.
