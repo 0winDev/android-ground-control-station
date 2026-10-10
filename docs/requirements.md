@@ -7,7 +7,8 @@ practice **inspired by** DO-178C-style traceability, not a certification claim.
 Rules:
 
 - New requirements are added in the PR of the first issue that needs them, with the next free ID.
-- A requirement is **Verified** only when its verification exists and passes on `main`.
+- A requirement is **Verified** only when its verification exists and passes on `main`. The PR that adds
+  that verification marks it Verified, since both reach `main` together.
 - Changing a requirement's meaning means a new ID; the old one is marked `Superseded by REQ-yyy`.
 
 Verification methods: **T** = automated test, **A** = automated check in the build/CI,
@@ -51,12 +52,12 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-005 | `core/transport/.../UdpTransportTest`; `data/vehicle/.../DefaultLinkRepositoryTest`; `feature/hud/.../HudViewModelTest`; SITL check (PR #18) | Verified |
 | REQ-006 | Android Lint `MissingTranslation` (error by default) on `lintDebug`; `values/` + `values-es/` | Verified |
 | REQ-007 | `core/designsystem/.../GcsSizesTest` | Verified |
-| REQ-010 | `core/mavlink/.../MavlinkParserTest` (real SITL frames: several per datagram, split, byte by byte, whole session in random datagrams, false long starts, signed) | Pending (until merged to `main`) |
-| REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA); `core/mavlink/.../MavlinkParserTest` (bad checksum and unknown message ID dropped and counted) | Pending (until merged to `main`) |
-| REQ-012 | `core/mavlink/.../MavlinkParserTest` (1 MB of fixed-seed random bytes, empty datagram, noise counted as skipped bytes, LEN 0 dropped and counted) | Pending (until merged to `main`) |
-| REQ-013 | — | Pending (v0.1) |
-| REQ-014 | `core/mavlink/.../MavlinkParserTest` (unsupported incompatibility flag dropped and counted; unknown compatibility flag ignored) | Pending (until merged to `main`) |
-| REQ-015 | — | Pending (v0.1) |
+| REQ-010 | `core/mavlink/.../MavlinkParserTest` (real SITL frames: several per datagram, split, byte by byte, whole session in random datagrams, false long starts, signed) | Verified |
+| REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA); `core/mavlink/.../MavlinkParserTest` (bad checksum and unknown message ID dropped and counted) | Verified |
+| REQ-012 | `core/mavlink/.../MavlinkParserTest` (1 MB of fixed-seed random bytes, empty datagram, noise counted as skipped bytes, LEN 0 dropped and counted) | Verified |
+| REQ-013 | `core/mavlink/.../MavlinkDecoderTest` (real truncated SYS_STATUS, POWER_STATUS, SERVO_OUTPUT_RAW zero-filled to the full length; extra extension byte ignored; whole session); `core/mavlink/.../MavlinkMessagesTest` (full lengths) | Verified |
+| REQ-014 | `core/mavlink/.../MavlinkParserTest` (unsupported incompatibility flag dropped and counted; unknown compatibility flag ignored) | Verified |
+| REQ-015 | `core/mavlink/.../MavlinkDecoderTest` (real SITL HEARTBEATs, armed and disarmed in three modes; largest `custom_mode`; whole session) | Verified |
 | REQ-016 | — | Pending (v0.1) |
 | REQ-017 | — | Pending (v0.1) |
 | REQ-018 | — | Pending (v0.1) |
