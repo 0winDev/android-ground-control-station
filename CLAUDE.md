@@ -190,3 +190,7 @@ Add one line per closed issue: what surprised us and what to do differently.
 - #8 Checksum: HEARTBEAT is defined in `minimal.xml`, not `common.xml`, so a parser that skips the
   includes misses it. Claude Code's auto mode silently denies edits under `.claude/` (permissions,
   agents, commands); leave auto mode for those instead of retrying.
+- #9 Parser: a false start marker with a plausible header keeps the parser waiting for a full claimed
+  frame, so frames at the very end of a test stream only come out once more bytes arrive; tests that
+  inject noise must keep the stream going. Derive edge-case frames (signed, odd flags) with pymavlink
+  and a regeneration script, never by hand or with our own codec.

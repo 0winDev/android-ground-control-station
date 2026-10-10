@@ -31,7 +31,7 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 | Phase | Scope | Done when | Status |
 |---|---|---|---|
 | v0.0 Setup | Repository, modules, Hilt, quality gates, CI, docs, SITL flying | CI passes and the phone counts UDP packets arriving from the simulator | ✅ |
-| v0.1 Connection | MAVLink v2 codec (framing, CRC, CRC_EXTRA), HEARTBEAT, link-loss watchdog, state per system ID | The app shows connected/disconnected, mode and armed state, and warns when the simulator stops; codec tested with real and corrupted packets | ⏳ |
+| v0.1 Connection | MAVLink v2 codec (framing, CRC, CRC_EXTRA), HEARTBEAT, link-loss watchdog, state per system ID | The app shows connected/disconnected, mode and armed state, and warns when the simulator stops; codec tested with real and corrupted packets | 🚧 In progress |
 | v0.2 Telemetry | Position, attitude, battery, speeds in a HUD with data age, MGRS, prioritized alerts, night mode | Values match QGroundControl, MGRS matches a reference converter, low battery triggers the right alert | ⏳ |
 | v0.3 Map and recording | Vehicle, heading, trail and home on MapLibre; flight recording (.tlog) and replay | The drone moves on the map during a simulated flight and the flight can be replayed without the simulator | ⏳ |
 | v0.4 Commands and pre-flight | Arm, takeoff, RTL, land with ACK, timeout, retries and confirmation; pre-flight check that blocks arming | An unanswered command is retried and ends in a clear error; arming is impossible with a red check | ⏳ |
