@@ -35,7 +35,7 @@ If `$ARGUMENTS` is empty, ask for a title and stop.
    - <protocol/ArduPilot/safety traps; only real ones, with spec links when possible>
 
    ## Flags
-   - [ ] Touches the MAVLink codec (`codec-review`, test-first, line-by-line owner review)
+   - [ ] Touches the MAVLink codec (codec-review: test-first with real SITL captures)
    - [ ] Touches failsafe, commands, missions or signing (needs `safety-reviewer`)
    - [ ] Touches protocol, telemetry or commands (needs SITL + QGroundControl check)
    ```
