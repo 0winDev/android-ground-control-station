@@ -8,13 +8,23 @@ import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.core.transport.Datagram
+import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.SocketException
+import kotlin.time.ComparableTimeMark
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -28,8 +38,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -52,11 +64,13 @@ class DefaultVehicleRepositoryTest {
 
     @BeforeEach
     fun setUp() {
+        coEvery { transport.send(any(), any()) } returns SendResult.Sent
         val session = LinkSession(transport = transport, scope = testScope.backgroundScope)
         repository = DefaultVehicleRepository(
             session = session,
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
+            heartbeatSender = GcsHeartbeatSender(transport),
             scope = testScope.backgroundScope,
         )
     }
@@ -349,6 +363,7 @@ class DefaultVehicleRepositoryTest {
             session = LinkSession(transport = transport, scope = backgroundScope),
             timeSource = testScheduler.timeSource,
             rule = LinkLossRule(timeout = CUSTOM_TIMEOUT),
+            heartbeatSender = GcsHeartbeatSender(transport),
             scope = backgroundScope,
         )
 
@@ -427,6 +442,127 @@ class DefaultVehicleRepositoryTest {
             repository.activeSystemId.value shouldBeEqualTo SYSTEM_1
         }
 
+    @Tag("REQ-021")
+    @Test
+    fun `GIVEN the active vehicle is heard WHEN observing THEN this GCS announces itself to it once per second`() =
+        testScope.runTest {
+            val sent = recordSends()
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                afterwards = { emitAll(heartbeatEverySecond(DISARMED_STABILIZE)) },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(FOUR_AND_A_HALF_SECONDS)
+
+            sent shouldBeEqualTo listOf(1_000L, 2_000L, 3_000L, 4_000L).map { it to SYSTEM_1_ADDRESS }
+        }
+
+    @Tag("REQ-021")
+    @Test
+    fun `GIVEN the active vehicle goes silent WHEN it is LOST THEN this GCS stops announcing itself`() =
+        testScope.runTest {
+            val sent = recordSends()
+            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(SESSION_STOPPED)
+
+            sent shouldBeEqualTo SENT_WHILE_CONNECTED.map { it to SYSTEM_1_ADDRESS }
+        }
+
+    @Tag("REQ-021")
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN another vehicle still heard WHEN the active one is LOST THEN nothing is sent to the other one`() =
+        testScope.runTest {
+            val sent = recordSends()
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_LOITER,
+                afterwards = { emitAll(heartbeatEverySecond(SYSTEM_2_LOITER)) },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(SESSION_STOPPED)
+
+            sent shouldBeEqualTo SENT_WHILE_CONNECTED.map { it to SYSTEM_1_ADDRESS }
+        }
+
+    @Tag("REQ-021")
+    @Test
+    fun `GIVEN nobody observes the link any more WHEN the session closes THEN this GCS stops announcing itself`() =
+        testScope.runTest {
+            var socketOpen = true
+            val sent = recordSends(isOpen = { socketOpen })
+            every { transport.datagrams() } returnsMany listOf(
+                heartbeatEverySecond(DISARMED_STABILIZE).onCompletion { socketOpen = false },
+                datagrams(),
+            )
+            val observer = repository.vehicles.launchIn(backgroundScope)
+            delay(OBSERVED_BRIEFLY)
+            observer.cancel()
+
+            delay(SESSION_STOPPED * 2)
+
+            sent.last() shouldBeEqualTo (LAST_TICK_BEFORE_SESSION_CLOSED to SYSTEM_1_ADDRESS)
+        }
+
+    @Tag("REQ-021")
+    @Test
+    fun `GIVEN the watchdog timer runs late after sleep WHEN the timeout has passed THEN nothing is sent`() =
+        testScope.runTest {
+            val sent = recordSends()
+            val deviceClock = TestTimeSource()
+            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
+            val sleepy = DefaultVehicleRepository(
+                session = LinkSession(transport = transport, scope = backgroundScope),
+                timeSource = deviceClock,
+                rule = LinkLossRule(),
+                heartbeatSender = GcsHeartbeatSender(transport),
+                scope = backgroundScope,
+            )
+            sleepy.vehicles.launchIn(backgroundScope)
+            delay(ONE_AND_A_HALF_SECONDS)
+            // The device slept: its clock moved past the timeout while coroutine time (the watchdog's
+            // timer) barely did, so the watchdog still says CONNECTED.
+            deviceClock += WELL_PAST_TIMEOUT.milliseconds
+
+            delay(ONE_SECOND)
+
+            sent shouldBeEqualTo listOf(1_000L to SYSTEM_1_ADDRESS)
+            sleepy.vehicles.value.getValue(SYSTEM_1).link shouldBeEqualTo VehicleLink.CONNECTED
+        }
+
+    @Tag("REQ-021")
+    @Tag("REQ-017")
+    @Test
+    fun `GIVEN the watchdog fails WHEN HEARTBEATs keep arriving THEN this GCS stops announcing itself`() =
+        testScope.runTest {
+            val sent = recordSends()
+            // Its jobs end with the test (child of backgroundScope); the expected crashes are swallowed.
+            val appScope = CoroutineScope(
+                backgroundScope.coroutineContext +
+                    SupervisorJob(backgroundScope.coroutineContext.job) +
+                    CoroutineExceptionHandler { _, _ -> },
+            )
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                afterwards = { emitAll(heartbeatEverySecond(DISARMED_STABILIZE)) },
+            )
+            val failing = DefaultVehicleRepository(
+                session = LinkSession(transport = transport, scope = backgroundScope),
+                timeSource = FailsOnSecondMark(testScheduler.timeSource),
+                rule = LinkLossRule(),
+                heartbeatSender = GcsHeartbeatSender(transport),
+                scope = appScope,
+            )
+            failing.vehicles.launchIn(backgroundScope)
+
+            delay(SESSION_STOPPED)
+
+            sent shouldBeEqualTo listOf(1_000L to SYSTEM_1_ADDRESS)
+        }
+
     @Tag("REQ-017")
     @Test
     fun `GIVEN the watchdog fails WHEN HEARTBEATs keep arriving THEN every vehicle is LOST and the listener stops`() =
@@ -437,6 +573,9 @@ class DefaultVehicleRepositoryTest {
                     crashes += crash
                 },
             )
+            // The sender reads the same rule; idle here so that only the watchdog meets the failure.
+            val idleSender: GcsHeartbeatSender = mockk()
+            coEvery { idleSender.run(any()) } coAnswers { awaitCancellation() }
             val failingRule: LinkLossRule = mockk()
             every { failingRule.timeout } returns TIMEOUT
             every { failingRule.linkAfter(any()) } returns VehicleLink.CONNECTED andThenThrows IllegalStateException()
@@ -448,6 +587,7 @@ class DefaultVehicleRepositoryTest {
                 session = LinkSession(transport = transport, scope = backgroundScope),
                 timeSource = testScheduler.timeSource,
                 rule = failingRule,
+                heartbeatSender = idleSender,
                 scope = appScope,
             )
             failing.vehicles.launchIn(backgroundScope)
@@ -460,6 +600,25 @@ class DefaultVehicleRepositoryTest {
                 ClosedSendChannelException::class,
             )
         }
+
+    /**
+     * Every HEARTBEAT this GCS sends, as (virtual ms since this was called, destination). Call it first.
+     * While [isOpen] is false the transport answers [SendResult.NotOpen] and nothing is recorded, as a
+     * closed socket sends nothing.
+     */
+    private fun TestScope.recordSends(isOpen: () -> Boolean = { true }): List<Pair<Long, InetSocketAddress>> {
+        val sent = mutableListOf<Pair<Long, InetSocketAddress>>()
+        val start = testScheduler.timeSource.markNow()
+        coEvery { transport.send(any(), any()) } coAnswers {
+            if (isOpen()) {
+                sent += start.elapsedNow().inWholeMilliseconds to secondArg<InetSocketAddress>()
+                SendResult.Sent
+            } else {
+                SendResult.NotOpen
+            }
+        }
+        return sent
+    }
 }
 
 private const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
@@ -490,8 +649,43 @@ private const val AFTER_WATCHDOG_FAILED = 5_000L
 
 /** Longer than the observer stop timeout (5 s) plus the link-loss timeout: the session has stopped. */
 private const val SESSION_STOPPED = 10_000L
+private const val FOUR_AND_A_HALF_SECONDS = 4_500L
 private val TIMEOUT = 3.seconds
 private val CUSTOM_TIMEOUT = 500.milliseconds
+
+private val SYSTEM_1_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
+private val SYSTEM_2_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_561)
+private val GCS_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
+
+/** HEARTBEATs sent by this GCS while the vehicle is CONNECTED, at each tick of the sender (virtual ms). */
+private val SENT_WHILE_CONNECTED = listOf(1_000L, 2_000L, 3_000L)
+
+/** The last tick before the session closes at 6.2 s (observed for 1.2 s, then the 5 s stop timeout). */
+private const val LAST_TICK_BEFORE_SESSION_CLOSED = 6_000L
+private const val ONE_SECOND = 1_000L
+private const val ONE_AND_A_HALF_SECONDS = 1_500L
+
+/**
+ * The repository's clock, except that the second mark (the second HEARTBEAT's arrival) cannot be read:
+ * the watchdog fails on it, while the vehicle in the map keeps the first, readable mark.
+ */
+private class FailsOnSecondMark(private val clock: TimeSource.WithComparableMarks) : TimeSource.WithComparableMarks {
+    private var marks = 0
+
+    override fun markNow(): ComparableTimeMark = if (++marks == 2) Unreadable else clock.markNow()
+
+    private object Unreadable : ComparableTimeMark {
+        override fun elapsedNow(): Duration = error("Unreadable test mark")
+
+        override fun plus(duration: Duration): ComparableTimeMark = this
+
+        override fun minus(other: ComparableTimeMark): Duration = error("Unreadable test mark")
+
+        override fun equals(other: Any?): Boolean = other === this
+
+        override fun hashCode(): Int = System.identityHashCode(this)
+    }
+}
 
 private val SYSTEM_1 = SystemId(1)
 private val SYSTEM_2 = SystemId(2)
@@ -524,10 +718,10 @@ private fun copter(systemId: SystemId, mode: String, armed: Boolean) = VehicleSt
 )
 
 /** The same HEARTBEAT once per second for as long as the session lasts, as a live vehicle sends it. */
-private fun heartbeatEverySecond(fixture: String): Flow<ByteArray> = flow {
+private fun heartbeatEverySecond(fixture: String): Flow<Datagram> = flow {
     while (true) {
         delay(HEARTBEAT_PERIOD)
-        emit(readFixture(fixture))
+        emit(datagramOf(fixture))
     }
 }
 
@@ -537,11 +731,21 @@ private fun heartbeatEverySecond(fixture: String): Flow<ByteArray> = flow {
  */
 private fun datagrams(
     vararg fixtures: Pair<Long, String>,
-    afterwards: suspend FlowCollector<ByteArray>.() -> Unit = { awaitCancellation() },
-): Flow<ByteArray> = flow {
+    afterwards: suspend FlowCollector<Datagram>.() -> Unit = { awaitCancellation() },
+): Flow<Datagram> = flow {
     fixtures.forEach { (gap, fixture) ->
         delay(gap)
-        emit(readFixture(fixture))
+        emit(datagramOf(fixture))
     }
     afterwards()
 }
+
+/** [fixture] as the transport delivers it: system 2 and the ground station each send from their own address. */
+private fun datagramOf(fixture: String) = Datagram(
+    payload = readFixture(fixture),
+    sender = when (fixture) {
+        SYSTEM_2_LOITER -> SYSTEM_2_ADDRESS
+        GCS -> GCS_ADDRESS
+        else -> SYSTEM_1_ADDRESS
+    },
+)
