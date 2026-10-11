@@ -1,8 +1,29 @@
 <resources>
-    <string name="hud_title">Vehicle link</string>
     <string name="hud_datagrams_received">Datagrams received</string>
     <string name="hud_listening_on_port">Listening on UDP port %1$d</string>
     <string name="hud_port_unavailable">Cannot listen on UDP port %1$d: another app is using it.</string>
     <string name="hud_link_error">Link error: the vehicle link stopped unexpectedly.</string>
     <string name="hud_disclaimer">Educational project. Not for real operations.</string>
+    <string name="hud_waiting_for_vehicle">Waiting for a vehicle HEARTBEAT</string>
+    <string name="hud_label_system">System</string>
+    <string name="hud_system">SYS %1$d</string>
+    <string name="hud_label_link">Link</string>
+    <string name="hud_link_connected">Connected</string>
+    <string name="hud_link_waiting">Waiting</string>
+    <string name="hud_label_mode">Mode</string>
+    <string name="hud_mode_unknown">Mode %1$d</string>
+    <string name="hud_label_state">State</string>
+    <string name="hud_armed">Armed</string>
+    <string name="hud_disarmed">Disarmed</string>
+    <string name="hud_no_value" translatable="false">—</string>
+    <string name="hud_link_lost_title">Emergency · Link lost</string>
+    <string name="hud_link_lost_since">No signal for %1$s</string>
+    <string name="hud_last_known">Last known</string>
+    <string name="hud_link_failed">Error</string>
+    <string name="hud_local_fault_port">This device cannot listen on UDP port %1$d.</string>
+    <string name="hud_local_fault_failed">The link stopped on this device.</string>
+    <plurals name="hud_other_vehicles">
+        <item quantity="one">Other vehicle detected (SYS %1$s)</item>
+        <item quantity="other">Other vehicles detected (SYS %1$s)</item>
+    </plurals>
 </resources>

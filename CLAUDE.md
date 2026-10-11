@@ -200,3 +200,6 @@ Add one line per closed issue: what surprised us and what to do differently.
   new; keep messages without replay and put what late subscribers need (bind failure, counts) in a
   separate `StateFlow`. `stateIn` keeps its last value after it stops, so time-based state must not
   depend on observers to stay current.
+- #13 HUD: `adb emu redir` rules die with the emulator, so after a restart nothing reaches the app; run
+  `adb emu redir list` first. A `stateIn` value outlives its upstream, so a screen that resubscribes can
+  draw a stale CONNECTED: let the state expire to a neutral `Starting` (`replayExpiration = ZERO`).

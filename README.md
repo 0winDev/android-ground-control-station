@@ -153,5 +153,6 @@ Windows, macOS and Linux; `java` must be on your `PATH`.
 GCS is licensed under the [Apache License 2.0](LICENSE).
 
 The bundled fonts keep their own license: [Barlow and Barlow Condensed](https://github.com/jpt/barlow)
-and [IBM Plex Mono](https://github.com/IBM/plex) are licensed under the SIL Open Font License 1.1 —
-see [`core/designsystem/src/main/assets/licenses/`](core/designsystem/src/main/assets/licenses/).
+and [IBM Plex Mono](https://github.com/IBM/plex) are licensed under the SIL Open Font License 1.1, and
+the [Material Symbols](https://github.com/google/material-design-icons) icons under the Apache License
+2.0 — see [`core/designsystem/src/main/assets/licenses/`](core/designsystem/src/main/assets/licenses/).
