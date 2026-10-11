@@ -8,6 +8,7 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import java.io.IOException
 import java.net.BindException
+import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -69,7 +70,7 @@ internal class LinkSession @Inject constructor(
             transport.datagrams().collect { datagram ->
                 datagrams++
                 mutableStatus.value = LinkStatus.Running(datagrams)
-                parser.parse(datagram).forEach { frame -> emit(received(frame)) }
+                parser.parse(datagram.payload).forEach { frame -> emit(received(frame, datagram.sender)) }
             }
         }
             .catch { failure ->
@@ -94,9 +95,10 @@ internal class LinkSession @Inject constructor(
         else -> LinkStatus.Failed(cause = this)
     }
 
-    private fun received(frame: MavlinkFrame) = ReceivedMessage(
+    private fun received(frame: MavlinkFrame, sender: InetSocketAddress) = ReceivedMessage(
         systemId = frame.systemId,
         componentId = frame.componentId,
         message = MavlinkDecoder.decode(frame),
+        sender = sender,
     )
 }

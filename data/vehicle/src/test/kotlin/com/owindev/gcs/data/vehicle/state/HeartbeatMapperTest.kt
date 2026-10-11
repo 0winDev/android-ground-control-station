@@ -6,6 +6,8 @@ import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import org.amshove.kluent.shouldBeEqualTo
 import org.amshove.kluent.shouldBeNull
 import org.junit.jupiter.api.BeforeEach
@@ -139,7 +141,10 @@ private const val DISARMED_GUIDED_BASE_MODE = 89
 private const val ARMED_GUIDED_BASE_MODE = 217
 
 private fun received(message: MavlinkMessage, componentId: Int = MAV_COMP_ID_AUTOPILOT1, systemId: Int = SYSTEM_ID) =
-    ReceivedMessage(systemId = systemId, componentId = componentId, message = message)
+    ReceivedMessage(systemId = systemId, componentId = componentId, message = message, sender = SENDER)
+
+/** The mapper ignores where a message came from; any address will do. */
+private val SENDER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
 
 private fun heartbeat(
     type: Int = MAV_TYPE_QUADROTOR,

@@ -7,8 +7,10 @@ import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.ComparableTimeMark
@@ -35,13 +37,17 @@ import kotlinx.coroutines.launch
  * Keeps every vehicle heard on the shared [LinkSession], keyed by system ID (REQ-016), and watches each
  * one's link (REQ-017, REQ-019).
  *
- * Two jobs in the application scope, both started on first use:
+ * Three jobs in the application scope, all started on first use:
  * - the **listener** collects HEARTBEATs only while [vehicles] is observed (plus [LINK_STOP_TIMEOUT]),
  *   so the socket is not kept open for nobody;
  * - the **watchdog** owns the map and the per-vehicle timers, and runs for as long as the app does. A
  *   vehicle therefore goes [VehicleLink.LOST] on time even when nobody observes it, when the transport
  *   fails or when the message flow ends: it can never be left [VehicleLink.CONNECTED] without HEARTBEATs,
- *   and a new observer never sees a stale CONNECTED.
+ *   and a new observer never sees a stale CONNECTED;
+ * - the **heartbeat** job ([GcsHeartbeatSender]) announces this GCS to the active vehicle, at the address
+ *   its HEARTBEATs come from, only while that vehicle is CONNECTED (REQ-021): once it is lost, or the
+ *   socket closes because nobody observes the link, the vehicle stops hearing this GCS and its own GCS
+ *   failsafe can act. It only reads the current state, so it never keeps the link open by itself.
  *
  * The first vehicle heard becomes the [activeSystemId] and stays so (REQ-020); the others are kept in the
  * map like any vehicle, never merged into it.
@@ -63,6 +69,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val session: LinkSession,
     private val timeSource: TimeSource.WithComparableMarks,
     private val rule: LinkLossRule,
+    private val heartbeatSender: GcsHeartbeatSender,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository {
 
@@ -70,9 +77,14 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val mutableActiveSystemId = MutableStateFlow<SystemId?>(null)
     private val events = Channel<Event>(Channel.UNLIMITED)
 
+    /** Where each vehicle's last HEARTBEAT came from; written only by the watchdog. */
+    @Volatile
+    private var addresses: Map<SystemId, InetSocketAddress> = emptyMap()
+
     override val vehicles: StateFlow<Map<SystemId, Vehicle>> by lazy {
         scope.launch { watch() }
         scope.launch { listenWhileObserved() }
+        scope.launch { heartbeatSender.run(::activeAddressWhileConnected) }
         mutableVehicles.asStateFlow()
     }
 
@@ -89,9 +101,13 @@ internal class DefaultVehicleRepository @Inject constructor(
             .collectLatest { command ->
                 if (command == SharingCommand.START) {
                     session.messages
-                        .mapNotNull(HeartbeatMapper::vehicleStateOf)
-                        // Marked on arrival, not when the watchdog gets to it.
-                        .collect { state -> events.send(Event.Heard(state, timeSource.markNow())) }
+                        .mapNotNull { received ->
+                            HeartbeatMapper.vehicleStateOf(received)?.let { state ->
+                                // Marked on arrival, not when the watchdog gets to it.
+                                Event.Heard(state, timeSource.markNow(), received.sender)
+                            }
+                        }
+                        .collect { heard -> events.send(heard) }
                 }
             }
     }
@@ -119,6 +135,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Pinned once, in arrival order, and never moved (REQ-020): a second vehicle on the
                         // link must not silently take the operator's place.
                         if (mutableActiveSystemId.value == null) mutableActiveSystemId.value = systemId
+                        addresses += systemId to event.sender
                         mutableVehicles.value += systemId to Vehicle(event.state, link, event.at)
                         if (link == VehicleLink.CONNECTED) {
                             startTimer(systemId, rule.timeout - elapsed)
@@ -153,8 +170,22 @@ internal class DefaultVehicleRepository @Inject constructor(
         }
     }
 
+    /**
+     * The active vehicle's address while it is CONNECTED, otherwise `null`. CONNECTED is checked twice, as
+     * the HUD does: the watchdog's verdict and the rule applied to the age right now, because the watchdog's
+     * timer can run late after the device sleeps (#12) and this GCS must not keep announcing itself then.
+     */
+    private fun activeAddressWhileConnected(): InetSocketAddress? {
+        val systemId = mutableActiveSystemId.value
+        val vehicle = systemId?.let(mutableVehicles.value::get)
+        val connected = vehicle != null &&
+            vehicle.link == VehicleLink.CONNECTED &&
+            rule.linkAfter(vehicle.lastHeartbeat.elapsedNow()) == VehicleLink.CONNECTED
+        return if (connected) addresses[systemId] else null
+    }
+
     private sealed interface Event {
-        data class Heard(val state: VehicleState, val at: ComparableTimeMark) : Event
+        data class Heard(val state: VehicleState, val at: ComparableTimeMark, val sender: InetSocketAddress) : Event
 
         data class TimedOut(val systemId: SystemId) : Event
     }

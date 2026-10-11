@@ -110,7 +110,7 @@ servo_output_raw.bin  fd 0c 00 00 1d 01 01 24 00 00 89 f9 27 00 e8 03 e8 03 e8 0
 
 ## `derived/`, `unknown/` and `gcs/`
 
-Parser fixtures (#9) and vehicle-state fixtures (#11, #12). `derived/` frames are built from the real
+Parser fixtures (#9), vehicle-state fixtures (#11, #12) and encoder fixtures (#14). `derived/` frames are built from the real
 `heartbeat/` frames **by pymavlink 2.4.50**, never by our codec; `unknown/` and `gcs/` hold real frames
 extracted from `heartbeat/session.tlog`.
 Regenerate (same bytes):
@@ -129,6 +129,9 @@ py tools/fixtures/derive_fixtures.py
 | `derived/heartbeat-max-custom-mode.bin` | The HEARTBEAT re-packed by pymavlink with `custom_mode` = `0xFFFFFFFF`; pymavlink decodes 4294967295 | `custom_mode` is a uint32 and must not come out signed (#10) |
 | `derived/heartbeat-sysid-2.bin` | `heartbeat/disarmed-loiter.bin` re-packed by pymavlink with system ID 2; seq, component and every field unchanged (pymavlink decodes the same fields as the original) | A second vehicle on the link: its state is kept apart from system 1 (REQ-016, #11) |
 | `derived/heartbeat-gimbal-component.bin` | `heartbeat/disarmed-stabilize.bin` re-packed by pymavlink from component 154 (`MAV_COMP_ID_GIMBAL`); system, seq and every field unchanged (pymavlink decodes the same fields as the original) | Another component of the same vehicle: its HEARTBEAT does not describe the vehicle nor keep its link alive (#12) |
+| `derived/heartbeat-asymmetric-custom-mode.bin` | `heartbeat/disarmed-stabilize.bin` re-packed by pymavlink with `custom_mode` `0x12345678`; every other field unchanged | Encoder: the uint32 is little-endian byte by byte (`78 56 34 12`), so a swapped byte order would show (REQ-021, #14) |
+| `derived/heartbeat-trailing-zeros.bin` | `heartbeat/disarmed-stabilize.bin` re-packed by pymavlink with `custom_mode` 5, `base_mode` 0, `system_status` 0 and `mavlink_version` 0 (same seq, system, component, `type` 2 and `autopilot` 3); pymavlink truncates the three trailing zero bytes, so LEN is 6. Not a frame a compliant sender produces: `mavlink_version` is "not writable by user" and always 3 (`minimal.xml`), which is why a real HEARTBEAT never truncates | Encoder framing: trailing zero bytes are truncated, as the specification requires of a MAVLink 2 sender; tested through the internal `MavlinkEncoder.frame` (REQ-021, #14) |
+| `derived/heartbeat-all-zero.bin` | The same header with every field 0, re-packed by pymavlink: LEN 1, because the first payload byte is never truncated. Same caveat about `mavlink_version` | Encoder framing: an all-zero payload keeps one byte (#14) |
 | `gcs/heartbeat-mission-planner.bin` | Real HEARTBEAT (seq 44) from `session.tlog` sent by Mission Planner: system 255, component 190, `type` 6 = `MAV_TYPE_GCS`, `autopilot` 8 = `MAV_AUTOPILOT_INVALID`, `base_mode` 0, `custom_mode` 0 | A ground station's HEARTBEAT is not a vehicle (#11) |
 | `unknown/attitude-fd-in-payload.bin` | Real ATTITUDE (id 30, LEN 28, seq 42) from `session.tlog`, the first whose payload contains `0xFD` | A frame with an unknown message ID is skipped whole by its LEN, so the `0xFD` inside it starts no false frame |
 | `derived/attitude-signed.bin` | `unknown/attitude-fd-in-payload.bin` re-packed and signed by pymavlink with the same test key, link ID and timestamp; signature verified by pymavlink | A signed frame with a message ID the tests treat as unknown: skipped whole, signature included |
@@ -146,6 +149,9 @@ derived/heartbeat-extra-byte.bin        fd 0a 00 00 3b 01 01 00 00 00 00 00 00 0
 derived/heartbeat-max-custom-mode.bin   fd 09 00 00 3b 01 01 00 00 00 ff ff ff ff 02 03 51 03 03 85 52
 derived/heartbeat-sysid-2.bin           fd 09 00 00 ad 02 01 00 00 00 05 00 00 00 02 03 59 03 03 5d aa
 derived/heartbeat-gimbal-component.bin  fd 09 00 00 3b 01 9a 00 00 00 00 00 00 00 02 03 51 03 03 da 8e
+derived/heartbeat-asymmetric-custom-mode.bin  fd 09 00 00 3b 01 01 00 00 00 78 56 34 12 02 03 51 03 03 f7 30
+derived/heartbeat-trailing-zeros.bin    fd 06 00 00 3b 01 01 00 00 00 05 00 00 00 02 03 cc 0d
+derived/heartbeat-all-zero.bin          fd 01 00 00 3b 01 01 00 00 00 00 31 66
 gcs/heartbeat-mission-planner.bin       fd 09 00 00 2c ff be 00 00 00 00 00 00 00 06 08 00 00 03 fb 18
 unknown/attitude-fd-in-payload.bin      fd 1c 00 00 2a 01 01 1e 00 00 3f 0f 06 00 c9 b0 89 ba e6 32 a8 ba
                                         b1 39 3a bc 50 f7 69 b9 00 fd 67 b9 c0 a8 4a ba 42 9f

@@ -2,10 +2,13 @@ package com.owindev.gcs.data.vehicle.link
 
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
 import io.mockk.every
 import io.mockk.mockk
 import java.net.BindException
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.SocketException
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.awaitCancellation
@@ -44,8 +47,8 @@ class LinkSessionTest {
         testScope.runTest {
             val frame = readFixture(DISARMED_STABILIZE)
             every { transport.datagrams() } returns flowOf(
-                frame.copyOfRange(0, SPLIT),
-                frame.copyOfRange(SPLIT, frame.size),
+                Datagram(frame.copyOfRange(0, SPLIT), VEHICLE_ADDRESS),
+                Datagram(frame.copyOfRange(SPLIT, frame.size), VEHICLE_ADDRESS),
             )
 
             val result = session.messages.take(1).toList()
@@ -105,13 +108,17 @@ private fun disarmedStabilizeFromAutopilot() = ReceivedMessage(
         systemStatus = 3,
         mavlinkVersion = 3,
     ),
+    sender = VEHICLE_ADDRESS,
 )
 
 /** Delivers [datagram] once and then keeps the socket open with nothing more arriving. */
-private fun openWith(datagram: ByteArray): Flow<ByteArray> = flow {
+private fun openWith(datagram: ByteArray): Flow<Datagram> = flow {
     delay(GAP_MILLIS)
-    emit(datagram)
+    emit(Datagram(datagram, VEHICLE_ADDRESS))
     awaitCancellation()
 }
 
-private fun failingWith(failure: Throwable): Flow<ByteArray> = flow { throw failure }
+private fun failingWith(failure: Throwable): Flow<Datagram> = flow { throw failure }
+
+/** Where SITL's datagrams come from, as the transport reports it. */
+private val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)

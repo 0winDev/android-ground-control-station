@@ -3,12 +3,15 @@ package com.owindev.gcs.data.vehicle.link
 import android.util.Log
 import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.testing.verifyOnce
+import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import java.net.BindException
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.SocketException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -92,16 +95,16 @@ class DefaultLinkRepositoryTest {
 
 private const val PORT = 14550
 private const val GAP_MILLIS = 100L
-private val DATAGRAM = byteArrayOf(0xFD.toByte())
+private val DATAGRAM = Datagram(byteArrayOf(0xFD.toByte()), InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560))
 
 private fun receiving(datagrams: Long): LinkTraffic = LinkTraffic.Receiving(port = PORT, datagrams = datagrams)
 
 /** Spaced in virtual time so that every count reaches the observer instead of being conflated. */
-private fun datagramsArriving(count: Int): Flow<ByteArray> = flow {
+private fun datagramsArriving(count: Int): Flow<Datagram> = flow {
     repeat(count) {
         delay(GAP_MILLIS)
         emit(DATAGRAM)
     }
 }
 
-private fun failingWith(failure: Throwable): Flow<ByteArray> = flow { throw failure }
+private fun failingWith(failure: Throwable): Flow<Datagram> = flow { throw failure }
