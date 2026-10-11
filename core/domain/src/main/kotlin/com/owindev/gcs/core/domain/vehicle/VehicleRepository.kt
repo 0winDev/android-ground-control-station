@@ -13,4 +13,13 @@ interface VehicleRepository {
      * and comes back to [VehicleLink.CONNECTED] with its next HEARTBEAT (REQ-019).
      */
     val vehicles: StateFlow<Map<SystemId, Vehicle>>
+
+    /**
+     * The vehicle the operator is working with: the first one heard since the app started, `null` until
+     * then (REQ-020). It never changes on its own, not when a vehicle with a lower system ID appears nor
+     * when this one's link is lost; any other vehicle in [vehicles] is shown apart, never merged into it.
+     *
+     * It is decided from the same HEARTBEATs as [vehicles], so it only fills while [vehicles] is observed.
+     */
+    val activeSystemId: StateFlow<SystemId?>
 }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
@@ -376,6 +377,56 @@ class DefaultVehicleRepositoryTest {
             )
         }
 
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN only ground station HEARTBEATs WHEN observing the vehicles THEN there is no active vehicle`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(GAP to GCS, GAP to GCS)
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(AFTER_TWO_GAPS)
+
+            repository.activeSystemId.value shouldBeEqualTo null
+        }
+
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN a vehicle heard WHEN observing the vehicles THEN it is the active vehicle`() = testScope.runTest {
+        every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
+
+        repository.vehicles.first { it.isNotEmpty() }
+
+        repository.activeSystemId.value shouldBeEqualTo SYSTEM_1
+    }
+
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN a lower system ID heard after the first vehicle WHEN observing THEN the active one stays`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to SYSTEM_2_LOITER,
+                GAP to DISARMED_LOITER,
+            )
+
+            repository.vehicles.first { it.size == 2 }
+
+            repository.activeSystemId.value shouldBeEqualTo SYSTEM_2
+        }
+
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN the active vehicle is LOST and another is heard WHEN observing THEN the active one stays`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_LOITER,
+                afterwards = { emitAll(heartbeatEverySecond(SYSTEM_2_LOITER)) },
+            )
+
+            repository.vehicles.first { it[SYSTEM_1]?.link == VehicleLink.LOST }
+
+            repository.activeSystemId.value shouldBeEqualTo SYSTEM_1
+        }
+
     @Tag("REQ-017")
     @Test
     fun `GIVEN the watchdog fails WHEN HEARTBEATs keep arriving THEN every vehicle is LOST and the listener stops`() =
@@ -421,6 +472,7 @@ private const val GIMBAL = "derived/heartbeat-gimbal-component.bin"
 
 // Virtual milliseconds. The default timeout is 3 s (REQ-017).
 private const val GAP = 100L
+private const val AFTER_TWO_GAPS = 300L
 private const val HALF_TIMEOUT = 1_500L
 private const val JUST_UNDER_TIMEOUT = 2_900L
 private const val WELL_PAST_TIMEOUT = 4_000L

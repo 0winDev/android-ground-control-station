@@ -43,6 +43,9 @@ import kotlinx.coroutines.launch
  *   fails or when the message flow ends: it can never be left [VehicleLink.CONNECTED] without HEARTBEATs,
  *   and a new observer never sees a stale CONNECTED.
  *
+ * The first vehicle heard becomes the [activeSystemId] and stays so (REQ-020); the others are kept in the
+ * map like any vehicle, never merged into it.
+ *
  * The watchdog is the only writer: HEARTBEATs and timeouts reach it as events through one channel and
  * are handled one at a time, so no state is shared between threads. Vehicles are never removed: a lost
  * one keeps its last known state and comes back CONNECTED with its next HEARTBEAT.
@@ -64,12 +67,19 @@ internal class DefaultVehicleRepository @Inject constructor(
 ) : VehicleRepository {
 
     private val mutableVehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
+    private val mutableActiveSystemId = MutableStateFlow<SystemId?>(null)
     private val events = Channel<Event>(Channel.UNLIMITED)
 
     override val vehicles: StateFlow<Map<SystemId, Vehicle>> by lazy {
         scope.launch { watch() }
         scope.launch { listenWhileObserved() }
         mutableVehicles.asStateFlow()
+    }
+
+    override val activeSystemId: StateFlow<SystemId?> by lazy {
+        // Starts the jobs: the active vehicle comes from the same HEARTBEATs as the map.
+        vehicles
+        mutableActiveSystemId.asStateFlow()
     }
 
     private suspend fun listenWhileObserved() {
@@ -106,6 +116,9 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Normally CONNECTED; LOST only if the watchdog got to this HEARTBEAT after the
                         // timeout had already passed, so a late event never flashes CONNECTED.
                         val link = rule.linkAfter(elapsed)
+                        // Pinned once, in arrival order, and never moved (REQ-020): a second vehicle on the
+                        // link must not silently take the operator's place.
+                        if (mutableActiveSystemId.value == null) mutableActiveSystemId.value = systemId
                         mutableVehicles.value += systemId to Vehicle(event.state, link, event.at)
                         if (link == VehicleLink.CONNECTED) {
                             startTimer(systemId, rule.timeout - elapsed)
