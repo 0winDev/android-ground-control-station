@@ -25,6 +25,12 @@ Writes:
   <out>/derived/heartbeat-gimbal-component.bin  heartbeat/disarmed-stabilize.bin re-packed by pymavlink from
                                                 component 154 (MAV_COMP_ID_GIMBAL), same system, seq and
                                                 fields: another component of the vehicle
+  <out>/derived/heartbeat-trailing-zeros.bin   heartbeat/disarmed-stabilize.bin re-packed by pymavlink with
+                                                custom_mode 5 and base_mode, system_status and
+                                                mavlink_version 0 (same seq, system, component, type and
+                                                autopilot): pymavlink truncates the trailing zeros to LEN 6
+  <out>/derived/heartbeat-all-zero.bin          the same header with every field 0: truncated to LEN 1,
+                                                since the first payload byte is never truncated
   <out>/gcs/heartbeat-mission-planner.bin       a real GCS HEARTBEAT (not derived) from
                                                 heartbeat/session.tlog: Mission Planner, system 255
   <out>/unknown/attitude-fd-in-payload.bin      a real ATTITUDE frame (not derived) from
@@ -72,6 +78,8 @@ TEST_TIMESTAMP = 0x0000_1234_5678
 MAX_SHOWN = 64
 UNKNOWN_EXTENSION_BYTE = 0x2A
 MAX_UINT32 = 0xFFFF_FFFF
+LOITER_MODE = 5  # ArduCopter custom_mode for Loiter, as in heartbeat/disarmed-loiter.bin
+TRAILING_ZEROS_LENGTH = 6  # custom_mode (4 bytes), type, autopilot; the three zero fields after them go
 TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_HEARTBEAT: "heartbeat",
     common.MAVLINK_MSG_ID_SYS_STATUS: "sys_status",
@@ -132,6 +140,25 @@ def max_custom_mode(frame: bytes) -> bytes:
     mav.seq = msg.get_seq()
     copy = common.MAVLink_heartbeat_message(
         msg.type, msg.autopilot, msg.base_mode, MAX_UINT32, msg.system_status, msg.mavlink_version
+    )
+    return bytes(copy.pack(mav))
+
+
+def with_fields(frame: bytes, **fields) -> bytes:
+    """The HEARTBEAT re-packed by pymavlink with some fields replaced; seq, system and component unchanged.
+    pymavlink truncates the trailing zero bytes of a MAVLink 2 payload, as the specification requires."""
+    msg = decode(frame)
+    mav = common.MAVLink(io.BytesIO(), srcSystem=msg.get_srcSystem(), srcComponent=msg.get_srcComponent())
+    mav.seq = msg.get_seq()
+    values = {name: getattr(msg, name) for name in msg.get_fieldnames()}
+    values.update(fields)
+    copy = common.MAVLink_heartbeat_message(
+        values["type"],
+        values["autopilot"],
+        values["base_mode"],
+        values["custom_mode"],
+        values["system_status"],
+        values["mavlink_version"],
     )
     return bytes(copy.pack(mav))
 
@@ -250,6 +277,12 @@ def main() -> None:
         derived_dir / "heartbeat-empty-payload.bin": empty_payload(source),
         derived_dir / "heartbeat-extra-byte.bin": extra_byte(source),
         derived_dir / "heartbeat-max-custom-mode.bin": max_custom_mode(source),
+        derived_dir / "heartbeat-trailing-zeros.bin": with_fields(
+            source, custom_mode=LOITER_MODE, base_mode=0, system_status=0, mavlink_version=0
+        ),
+        derived_dir / "heartbeat-all-zero.bin": with_fields(
+            source, type=0, autopilot=0, base_mode=0, custom_mode=0, system_status=0, mavlink_version=0
+        ),
         derived_dir / "heartbeat-sysid-2.bin": with_system_id((args.out / LOITER).read_bytes(), SECOND_SYSTEM_ID),
         derived_dir / "heartbeat-gimbal-component.bin": with_component_id(source, MAV_COMP_ID_GIMBAL),
         gcs_dir / "heartbeat-mission-planner.bin": gcs_heartbeat(args.out / SESSION),
@@ -269,6 +302,11 @@ def main() -> None:
     gimbal = decode(outputs[derived_dir / "heartbeat-gimbal-component.bin"])
     assert gimbal.get_srcComponent() == MAV_COMP_ID_GIMBAL and gimbal.to_dict() == decode(source).to_dict()
     assert decode(outputs[gcs_dir / "heartbeat-mission-planner.bin"]).type == mavutil.mavlink.MAV_TYPE_GCS
+    trailing = outputs[derived_dir / "heartbeat-trailing-zeros.bin"]
+    assert trailing[1] == TRAILING_ZEROS_LENGTH, f"expected LEN {TRAILING_ZEROS_LENGTH}, got {trailing[1]}"
+    assert decode(trailing).custom_mode == LOITER_MODE and decode(trailing).mavlink_version == 0
+    all_zero = outputs[derived_dir / "heartbeat-all-zero.bin"]
+    assert all_zero[1] == 1 and all(value == 0 for value in decode(all_zero).to_dict().values() if value != "HEARTBEAT")
     extra = decode(outputs[derived_dir / "heartbeat-extra-byte.bin"]).to_dict()
     assert extra == decode(source).to_dict(), "pymavlink must decode the extra-byte frame like the original"
 
