@@ -42,11 +42,12 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 
 ## Known limitations
 
-- **Keep the app in the foreground while flying.** About 10 s after the app goes to the background or
-  the screen locks, the vehicle link closes and the app stops sending its own HEARTBEAT. An armed
-  vehicle with ArduPilot's GCS failsafe enabled (`FS_GCS_ENABLE`, off by default in ArduCopter) then
-  triggers it after `FS_GCS_TIMEOUT`. A foreground service that keeps the link open is planned before
-  any real hardware (#28, v0.4).
+- **Keep the app in the foreground while flying.** A few seconds after the app goes to the background
+  or the screen locks, it stops sending its own HEARTBEAT: on the Android 16 (API 36) emulator the
+  system blocks the app's network after about 5 s (`sendto` fails with `EPERM`), and in any case the
+  app closes the link about 10 s after the HUD is hidden. An armed vehicle with ArduPilot's GCS failsafe
+  enabled (`FS_GCS_ENABLE`, off by default in ArduCopter) then triggers it after `FS_GCS_TIMEOUT`. A
+  foreground service that keeps the link open is planned before any real hardware (#28, v0.4).
 - **The app does not yet warn when only its uplink fails.** If its HEARTBEATs stop reaching the vehicle
   while telemetry still arrives, the HUD stays connected; this is planned for v0.4 (#29).
 - **No link security until v0.6.** MAVLink packets are not signed yet, so anyone who can reach the UDP
