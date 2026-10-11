@@ -66,27 +66,28 @@ class MavlinkEncoderTest {
     }
 
     @Test
-    fun `GIVEN trailing zero fields WHEN encoding THEN they are truncated like the pymavlink frame`() {
-        val heartbeat = Heartbeat(
-            type = QUADROTOR,
-            autopilot = ARDUPILOTMEGA,
-            baseMode = 0,
-            customMode = LOITER,
-            systemStatus = 0,
-            mavlinkVersion = 0,
-        )
+    fun `GIVEN an asymmetric custom_mode WHEN encoding THEN its bytes are little-endian like the pymavlink frame`() {
+        val heartbeat = quadrotorHeartbeat(DISARMED_STABILIZE_BASE_MODE, ASYMMETRIC_CUSTOM_MODE)
 
         val result = encoder.encode(STABILIZE_SEQUENCE, VEHICLE_SYSTEM_ID, VEHICLE_COMPONENT_ID, heartbeat)
+
+        result shouldBeEqualTo readFixture(ASYMMETRIC_CUSTOM_MODE_FRAME)
+    }
+
+    @Test
+    fun `GIVEN a payload with trailing zero bytes WHEN framing it THEN they are truncated like the pymavlink frame`() {
+        val payload = byteArrayOf(LOITER, 0, 0, 0, QUADROTOR_BYTE, ARDUPILOTMEGA_BYTE, 0, 0, 0)
+
+        val result = encoder.frame(STABILIZE_SEQUENCE, VEHICLE_SYSTEM_ID, VEHICLE_COMPONENT_ID, HEARTBEAT_ID, payload)
 
         result shouldBeEqualTo readFixture(TRAILING_ZEROS)
     }
 
     @Test
-    fun `GIVEN every field zero WHEN encoding THEN one payload byte is kept like the pymavlink frame`() {
-        val heartbeat =
-            Heartbeat(type = 0, autopilot = 0, baseMode = 0, customMode = 0, systemStatus = 0, mavlinkVersion = 0)
+    fun `GIVEN an all-zero payload WHEN framing it THEN one byte is kept like the pymavlink frame`() {
+        val payload = ByteArray(HEARTBEAT_LENGTH)
 
-        val result = encoder.encode(STABILIZE_SEQUENCE, VEHICLE_SYSTEM_ID, VEHICLE_COMPONENT_ID, heartbeat)
+        val result = encoder.frame(STABILIZE_SEQUENCE, VEHICLE_SYSTEM_ID, VEHICLE_COMPONENT_ID, HEARTBEAT_ID, payload)
 
         result shouldBeEqualTo readFixture(ALL_ZERO)
     }
@@ -112,25 +113,6 @@ class MavlinkEncoderTest {
         result shouldBeEqualTo listOf(Decoded(LAST_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, heartbeat))
     }
 
-    @Test
-    fun `GIVEN a truncated HEARTBEAT WHEN parsing and decoding it THEN the zero fields come back`() {
-        val heartbeat =
-            Heartbeat(
-                type = QUADROTOR,
-                autopilot = 0,
-                baseMode = 0,
-                customMode = 0,
-                systemStatus = 0,
-                mavlinkVersion = 0,
-            )
-
-        val result = MavlinkParser(MavlinkMessages)
-            .parse(encoder.encode(0, VEHICLE_SYSTEM_ID, VEHICLE_COMPONENT_ID, heartbeat))
-            .map { frame -> MavlinkDecoder.decode(frame) }
-
-        result shouldBeEqualTo listOf(heartbeat)
-    }
-
     @ParameterizedTest(name = "seq {0}, sys {1}, comp {2}")
     @CsvSource(
         "-1, 255, 190",
@@ -152,22 +134,36 @@ class MavlinkEncoderTest {
         result shouldThrow IllegalArgumentException::class
     }
 
-    @ParameterizedTest(name = "type {0}, autopilot {1}, base_mode {2}, custom_mode {3}")
+    @ParameterizedTest(name = "type {0}, autopilot {1}, base_mode {2}, custom_mode {3}, system_status {4}")
     @CsvSource(
-        "256, 8, 0, 0",
-        "6, -1, 0, 0",
-        "6, 8, 256, 0",
-        "6, 8, 0, 4294967296",
-        "6, 8, 0, -1",
+        "256, 8, 0, 0, 0",
+        "6, -1, 0, 0, 0",
+        "6, 8, 256, 0, 0",
+        "6, 8, 0, 4294967296, 0",
+        "6, 8, 0, -1, 0",
+        "6, 8, 0, 0, 256",
+        "6, 8, 0, 0, -1",
     )
     fun `GIVEN a field out of range WHEN encoding THEN it throws IllegalArgumentException`(
         type: Int,
         autopilot: Int,
         baseMode: Int,
         customMode: Long,
+        systemStatus: Int,
     ) {
-        val heartbeat =
-            Heartbeat(type, autopilot, baseMode, customMode, systemStatus = 0, mavlinkVersion = MAVLINK_VERSION)
+        val heartbeat = Heartbeat(type, autopilot, baseMode, customMode, systemStatus, mavlinkVersion = MAVLINK_VERSION)
+
+        val result = invoking { encoder.encode(0, GCS_SYSTEM_ID, GCS_COMPONENT_ID, heartbeat) }
+
+        result shouldThrow IllegalArgumentException::class
+    }
+
+    @ParameterizedTest(name = "mavlink_version {0}")
+    @CsvSource("0", "2", "4", "255")
+    fun `GIVEN a mavlink_version other than 3 WHEN encoding THEN it throws IllegalArgumentException`(
+        mavlinkVersion: Int,
+    ) {
+        val heartbeat = gcsHeartbeat().copy(mavlinkVersion = mavlinkVersion)
 
         val result = invoking { encoder.encode(0, GCS_SYSTEM_ID, GCS_COMPONENT_ID, heartbeat) }
 
@@ -182,6 +178,7 @@ class MavlinkEncoderTest {
         const val MAX_CUSTOM_MODE = "derived/heartbeat-max-custom-mode.bin"
         const val TRAILING_ZEROS = "derived/heartbeat-trailing-zeros.bin"
         const val ALL_ZERO = "derived/heartbeat-all-zero.bin"
+        const val ASYMMETRIC_CUSTOM_MODE_FRAME = "derived/heartbeat-asymmetric-custom-mode.bin"
 
         // Mission Planner's HEARTBEAT in session.tlog, as pymavlink decodes it: seq 44, system 255,
         // component 190 (MAV_COMP_ID_MISSIONPLANNER), MAV_TYPE_GCS, MAV_AUTOPILOT_INVALID, the rest 0.
@@ -200,7 +197,12 @@ class MavlinkEncoderTest {
         const val STANDBY = 3
         const val MAVLINK_VERSION = 3
         const val DISARMED_STABILIZE_BASE_MODE = 81
-        const val LOITER = 5L
+        const val LOITER: Byte = 5
+        const val QUADROTOR_BYTE: Byte = 2
+        const val ARDUPILOTMEGA_BYTE: Byte = 3
+        const val HEARTBEAT_ID = 0
+        const val HEARTBEAT_LENGTH = 9
+        const val ASYMMETRIC_CUSTOM_MODE = 0x1234_5678L
         const val MAX_UINT32 = 4_294_967_295L
         const val SEQ_INDEX = 4
         const val BYTE_MASK = 0xFF
