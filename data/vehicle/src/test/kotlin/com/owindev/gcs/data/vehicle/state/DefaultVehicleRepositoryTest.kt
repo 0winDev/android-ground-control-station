@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.job
@@ -230,7 +231,11 @@ class DefaultVehicleRepositoryTest {
     @Test
     fun `GIVEN the transport fails after a HEARTBEAT WHEN the timeout passes THEN the vehicle is LOST`() =
         testScope.runTest {
-            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE) { throw SocketException() }
+            every { transport.datagrams() } returnsMany listOf(
+                datagrams(GAP to DISARMED_STABILIZE) { throw SocketException() },
+                // Every reopening attempt fails too: the link stays down.
+                datagrams { throw SocketException() },
+            )
 
             val result = repository.vehicles.map { it.seen() }.take(3).toList()
 
@@ -245,7 +250,8 @@ class DefaultVehicleRepositoryTest {
     @Test
     fun `GIVEN the datagrams end after a HEARTBEAT WHEN the timeout passes THEN the vehicle is LOST`() =
         testScope.runTest {
-            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE) { }
+            // The session reopens a transport that ended (REQ-019); the new socket hears nothing.
+            every { transport.datagrams() } returnsMany listOf(datagrams(GAP to DISARMED_STABILIZE) { }, datagrams())
 
             val result = repository.vehicles.map { it.seen() }.take(3).toList()
 
@@ -440,6 +446,43 @@ class DefaultVehicleRepositoryTest {
             repository.vehicles.first { it[SYSTEM_1]?.link == VehicleLink.LOST }
 
             repository.activeSystemId.value shouldBeEqualTo SYSTEM_1
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the transport fails while observed WHEN HEARTBEATs resume THEN the vehicle is LOST then CONNECTED`() =
+        testScope.runTest {
+            every { transport.datagrams() } returnsMany listOf(
+                datagrams(GAP to DISARMED_STABILIZE) { throw SocketException() },
+                datagrams(WELL_PAST_TIMEOUT to ARMED_GUIDED),
+            )
+
+            val result = repository.vehicles.map { it.seen() }.take(4).toList()
+
+            result shouldBeEqualTo listOf(
+                emptyMap(),
+                seen(SYSTEM_1 to connected(STABILIZE_DISARMED)),
+                seen(SYSTEM_1 to lost(STABILIZE_DISARMED)),
+                seen(SYSTEM_1 to connected(GUIDED_ARMED)),
+            )
+        }
+
+    @Tag("REQ-019")
+    @Tag("REQ-021")
+    @Test
+    fun `GIVEN the transport fails while observed WHEN it recovers THEN this GCS announces itself only while it can`() =
+        testScope.runTest {
+            var socketOpen = true
+            val sent = recordSends(isOpen = { socketOpen })
+            every { transport.datagrams() } returnsMany listOf(
+                datagrams(GAP to DISARMED_STABILIZE) { throw SocketException() }.onCompletion { socketOpen = false },
+                datagrams(WELL_PAST_TIMEOUT to ARMED_GUIDED).onStart { socketOpen = true },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(SEVEN_AND_A_HALF_SECONDS)
+
+            sent shouldBeEqualTo SENT_AROUND_THE_OUTAGE.map { it to SYSTEM_1_ADDRESS }
         }
 
     @Tag("REQ-021")
@@ -650,6 +693,13 @@ private const val AFTER_WATCHDOG_FAILED = 5_000L
 /** Longer than the observer stop timeout (5 s) plus the link-loss timeout: the session has stopped. */
 private const val SESSION_STOPPED = 10_000L
 private const val FOUR_AND_A_HALF_SECONDS = 4_500L
+private const val SEVEN_AND_A_HALF_SECONDS = 7_500L
+
+/**
+ * The socket fails at 0.1 s and reopens at 1.1 s: ticks at 2 and 3 s still see the vehicle CONNECTED (heard
+ * at 0.1 s) with the socket open; it is LOST from 3.1 s until heard again at 5.1 s; then 6 and 7 s.
+ */
+private val SENT_AROUND_THE_OUTAGE = listOf(2_000L, 3_000L, 6_000L, 7_000L)
 private val TIMEOUT = 3.seconds
 private val CUSTOM_TIMEOUT = 500.milliseconds
 

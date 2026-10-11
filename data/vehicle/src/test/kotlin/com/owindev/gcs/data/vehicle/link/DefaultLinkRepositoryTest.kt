@@ -13,9 +13,11 @@ import java.net.BindException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.SocketException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.TestScope
@@ -91,6 +93,78 @@ class DefaultLinkRepositoryTest {
             Log.w(any(), any<String>(), failure)
         }
     }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the socket fails and then works WHEN observing the traffic THEN goes Failed and back to Receiving`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            every { Log.i(any(), any()) } returns 0
+            every { transport.port } returns PORT
+            every { transport.datagrams() } returnsMany listOf(failingWith(SocketException()), datagramsArriving(1))
+
+            val result = repository.traffic.take(3).toList()
+
+            result shouldBeEqualTo listOf(receiving(0), LinkTraffic.Failed, receiving(1))
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the socket fails and then works WHEN observing the traffic THEN the recovery is logged once`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            every { Log.i(any(), any()) } returns 0
+            every { transport.port } returns PORT
+            every { transport.datagrams() } returnsMany listOf(failingWith(SocketException()), datagramsArriving(2))
+
+            repository.traffic.take(4).toList()
+
+            verifyOnce {
+                Log.i(any(), "Vehicle link reopened")
+            }
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a session stopped while failing WHEN the next session fails THEN that failure is logged too`() =
+        testScope.runTest {
+            var warnings = 0
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } answers {
+                warnings++
+                0
+            }
+            every { transport.port } returns PORT
+            every { transport.datagrams() } answers { failingWith(SocketException()) }
+            val firstObserver = repository.traffic.launchIn(backgroundScope)
+            delay(GAP_MILLIS)
+            firstObserver.cancel()
+            delay(SESSION_STOPPED)
+            repository.traffic.launchIn(backgroundScope)
+
+            delay(GAP_MILLIS)
+
+            warnings shouldBeEqualTo 2
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the socket keeps failing WHEN it is reopened several times THEN the failure is logged once`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            every { transport.port } returns PORT
+            every { transport.datagrams() } answers { failingWith(SocketException()) }
+            repository.traffic.launchIn(backgroundScope)
+
+            delay(SEVERAL_ATTEMPTS)
+
+            verifyOnce {
+                Log.w(any(), any<String>(), any())
+            }
+        }
 }
 
 private const val PORT = 14550
@@ -105,6 +179,14 @@ private fun datagramsArriving(count: Int): Flow<Datagram> = flow {
         delay(GAP_MILLIS)
         emit(DATAGRAM)
     }
+    // The socket stays open with nothing more arriving; a flow that ends would be reopened (REQ-019).
+    awaitCancellation()
 }
+
+/** Attempts at 0, 1, 3, 7 and 12 s. */
+private const val SEVERAL_ATTEMPTS = 12_500L
+
+/** Longer than both stop timeouts (traffic and session): the next observer starts a new session. */
+private const val SESSION_STOPPED = 15_000L
 
 private fun failingWith(failure: Throwable): Flow<Datagram> = flow { throw failure }

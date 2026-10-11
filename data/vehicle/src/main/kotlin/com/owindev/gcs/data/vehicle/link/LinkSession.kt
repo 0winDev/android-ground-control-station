@@ -6,6 +6,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import java.io.EOFException
 import java.io.IOException
 import java.net.BindException
 import java.net.InetSocketAddress
@@ -16,6 +17,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -36,6 +38,13 @@ import kotlinx.coroutines.flow.transform
 internal val LINK_STOP_TIMEOUT: Duration = 5.seconds
 
 /**
+ * Backoff before reopening the link after a transport failure while it is observed (REQ-019): doubles from
+ * [LINK_RETRY_FIRST] up to [LINK_RETRY_MAX], and starts again from the first delay once datagrams arrive.
+ */
+internal val LINK_RETRY_FIRST: Duration = 1.seconds
+internal val LINK_RETRY_MAX: Duration = 5.seconds
+
+/**
  * The one place that receives, parses and decodes the vehicle link; every repository builds on it.
  *
  * The transport can only be collected once (a second collection would bind the port twice and fail),
@@ -43,6 +52,12 @@ internal val LINK_STOP_TIMEOUT: Duration = 5.seconds
  * [whileOpen] (each repository already waits [LINK_STOP_TIMEOUT] before letting go); after that it
  * closes and [status] goes back to `Running(0)`; the next observer starts a new session with a new
  * socket and a new parser (it keeps partial frames between datagrams).
+ *
+ * While observed, a failed transport is reopened by itself after a bounded backoff ([LINK_RETRY_FIRST] to
+ * [LINK_RETRY_MAX]), so HEARTBEATs that resume are read again without restarting the app (REQ-019). A
+ * transport that ends without an error is treated the same way. The only failure never retried is the
+ * session's first bind failing ([LinkStatus.Unavailable]): another app holds the port. A bind failure
+ * while reopening is retried like any other failure.
  *
  * [messages] has no replay: a late subscriber only gets messages that arrive after it subscribed, so an
  * old HEARTBEAT is never delivered as a new one. What a late subscriber needs to know, such as a bind
@@ -59,26 +74,46 @@ internal class LinkSession @Inject constructor(
     /** The local UDP port the link listens on. */
     val port: Int get() = transport.port
 
-    /** The state of the current session; it only changes while the session is open. */
+    /**
+     * The state of the current session; it only changes while the session is open. The datagram count runs
+     * for the whole session, across reopenings of the socket.
+     */
     val status: StateFlow<LinkStatus> = mutableStatus.asStateFlow()
 
     // Built on first use, so the transport is only asked for its flow once someone observes the link.
     val messages: SharedFlow<ReceivedMessage> by lazy {
         flow {
-            val parser = MavlinkParser(MavlinkMessages)
             var datagrams = 0L
-            transport.datagrams().collect { datagram ->
-                datagrams++
-                mutableStatus.value = LinkStatus.Running(datagrams)
-                parser.parse(datagram.payload).forEach { frame -> emit(received(frame, datagram.sender)) }
+            var retryDelay = LINK_RETRY_FIRST
+            var reopening = false
+            while (true) {
+                // A new parser per socket: a frame split across two sockets is not one frame.
+                val parser = MavlinkParser(MavlinkMessages)
+                var failure: IOException = EOFException("The transport stopped delivering datagrams")
+                transport.datagrams()
+                    // Only the transport's own failures, never the downstream's: only I/O failures are link
+                    // states; anything else is a bug and must crash, not be shared. CancellationException is
+                    // not an IOException, so it always goes through.
+                    .catch { e -> failure = e as? IOException ?: throw e }
+                    .collect { datagram ->
+                        datagrams++
+                        retryDelay = LINK_RETRY_FIRST
+                        mutableStatus.value = LinkStatus.Running(datagrams)
+                        parser.parse(datagram.payload).forEach { frame -> emit(received(frame, datagram.sender)) }
+                    }
+                mutableStatus.value = failure.toStatus()
+                if (failure is BindException && !reopening) {
+                    // The port belongs to another app until the operator acts: never retried. Stay "open"
+                    // until the last subscriber leaves, so the failure stays in [status] meanwhile.
+                    awaitCancellation()
+                }
+                // Stays Failed (or Unavailable) while waiting; Running again with the first datagram, since
+                // a successful bind alone does not prove the link works.
+                reopening = true
+                delay(retryDelay)
+                retryDelay = minOf(retryDelay * 2, LINK_RETRY_MAX)
             }
         }
-            .catch { failure ->
-                // Only I/O failures are link states; anything else is a bug and must crash, not be shared.
-                mutableStatus.value = (failure as? IOException ?: throw failure).toStatus()
-                // Stay "open" until the last subscriber leaves, so the failure stays in [status] meanwhile.
-                awaitCancellation()
-            }
             // The last subscriber left and the session was stopped: the next one starts clean, never
             // showing this one's count or failure.
             .onCompletion { cause ->
