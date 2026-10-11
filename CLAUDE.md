@@ -208,3 +208,7 @@ Add one line per closed issue: what surprised us and what to do differently.
   Mission Planner's mirror kept feeding the emulator on a second redirect, so the app followed whichever
   route spoke last: remove stale redirects. On Windows `NUL` claims to be a terminal, so scripts started
   in the background need an explicit flag instead of `isatty()`.
+- #25 Transport recovery: a `try/catch` around `collect` also catches what `emit` throws downstream;
+  catch only the upstream with `.catch`. `shareIn` does not hand upstream crashes to subscribers, so a
+  "crashes on purpose" test needs its own scope with a handler. In airplane mode the emulator's bound UDP
+  socket never fails, so a real transport failure could not be reproduced in SITL.

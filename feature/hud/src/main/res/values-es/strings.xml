@@ -2,7 +2,7 @@
     <string name="hud_datagrams_received">Datagramas recibidos</string>
     <string name="hud_listening_on_port">Escuchando en el puerto UDP %1$d</string>
     <string name="hud_port_unavailable">No se puede escuchar en el puerto UDP %1$d: otra app lo está usando.</string>
-    <string name="hud_link_error">Error de enlace: el enlace con el vehículo se ha detenido inesperadamente.</string>
+    <string name="hud_link_error">Error de enlace en este dispositivo. Reabriendo el enlace y esperando al vehículo.</string>
     <string name="hud_disclaimer">Proyecto educativo. No apto para operaciones reales.</string>
     <string name="hud_waiting_for_vehicle">Esperando el HEARTBEAT de un vehículo</string>
     <string name="hud_label_system">Sistema</string>
@@ -20,7 +20,7 @@
     <string name="hud_last_known">Último estado conocido</string>
     <string name="hud_link_failed">Error</string>
     <string name="hud_local_fault_port">Este dispositivo no puede escuchar en el puerto UDP %1$d.</string>
-    <string name="hud_local_fault_failed">El enlace se ha detenido en este dispositivo.</string>
+    <string name="hud_local_fault_failed">El enlace ha fallado en este dispositivo. Reabriéndolo y esperando al vehículo.</string>
     <plurals name="hud_other_vehicles">
         <item quantity="one">Otro vehículo detectado (SYS %1$s)</item>
         <item quantity="many">Otros vehículos detectados (SYS %1$s)</item>
