@@ -40,6 +40,18 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 | v0.7 Interoperability | Vehicle position as Cursor on Target, visible in ATAK-CIV | The simulated drone appears in ATAK moving in real time | ⏳ |
 | v1.0 Robustness and release | Offline mode, offline maps, reconnection, full traceability, APK release | Cutting the simulator's network triggers the failsafe, the app shows it and recovers on its own | ⏳ |
 
+## Known limitations
+
+- **Keep the app in the foreground while flying.** About 10 s after the app goes to the background or
+  the screen locks, the vehicle link closes and the app stops sending its own HEARTBEAT. An armed
+  vehicle with ArduPilot's GCS failsafe enabled (`FS_GCS_ENABLE`, off by default in ArduCopter) then
+  triggers it after `FS_GCS_TIMEOUT`. A foreground service that keeps the link open is planned before
+  any real hardware (#28, v0.4).
+- **The app does not yet warn when only its uplink fails.** If its HEARTBEATs stop reaching the vehicle
+  while telemetry still arrives, the HUD stays connected; this is planned for v0.4 (#29).
+- **No link security until v0.6.** MAVLink packets are not signed yet, so anyone who can reach the UDP
+  port can forge them (see [`docs/security.md`](docs/security.md)).
+
 ## UI prototype
 
 Tablet screens from the UI prototype (in Spanish), used as the reference for the design system:
