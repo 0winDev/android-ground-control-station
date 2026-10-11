@@ -203,3 +203,8 @@ Add one line per closed issue: what surprised us and what to do differently.
 - #13 HUD: `adb emu redir` rules die with the emulator, so after a restart nothing reaches the app; run
   `adb emu redir list` first. A `stateIn` value outlives its upstream, so a screen that resubscribes can
   draw a stale CONNECTED: let the state expire to a neutral `Starting` (`replayExpiration = ZERO`).
+- #14 GCS HEARTBEAT: on the API 36 emulator Android blocks a background app's network after about 5 s
+  (`sendto` → `EPERM`), sooner than our own stop timeouts; measure in SITL before documenting timings.
+  Mission Planner's mirror kept feeding the emulator on a second redirect, so the app followed whichever
+  route spoke last: remove stale redirects. On Windows `NUL` claims to be a terminal, so scripts started
+  in the background need an explicit flag instead of `isatty()`.
