@@ -8,7 +8,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 
 /**
- * The v0.1 message table against pymavlink 2.4.50's bundled definitions (`minimal.xml` for HEARTBEAT,
+ * The codec's message table against pymavlink 2.4.50's bundled definitions (`minimal.xml` for HEARTBEAT,
  * `common.xml` for the rest), as listed in `src/test/resources/README.md`.
  */
 class MavlinkMessagesTest {
@@ -22,12 +22,15 @@ class MavlinkMessagesTest {
 
     @Tag("REQ-011")
     @Tag("REQ-013")
+    @Tag("REQ-022")
     @ParameterizedTest(name = "msgid {0}")
     @CsvSource(
         "0, 50, 9",
         "1, 124, 43",
         "36, 222, 37",
         "125, 203, 6",
+        "76, 152, 33",
+        "77, 143, 10",
     )
     fun `GIVEN a supported message WHEN looking it up THEN it has the CRC_EXTRA and full length of its definition`(
         msgId: Int,

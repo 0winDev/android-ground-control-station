@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive MAVLink test fixtures for the frame parser from the real SITL captures.
+"""Derive MAVLink test fixtures for the codec from the real SITL captures.
 
 Offline tool for the codec tests in :core:mavlink, like extract_fixtures.py. pymavlink is only the
 reference implementation that builds and checks these frames; our own codec is never used here.
@@ -44,6 +44,27 @@ Writes:
   <out>/derived/session-stream.bin              heartbeat/session.tlog as a plain byte stream: every
                                                 frame (MAVLink 1 and 2) in order, without the 8-byte
                                                 .tlog timestamps
+  <out>/command/set-message-interval.bin        a real COMMAND_LONG (not derived) from heartbeat/session.tlog:
+                                                Mission Planner's first MAV_CMD_SET_MESSAGE_INTERVAL
+  <out>/command/set-message-interval-ack.bin    ArduCopter's real COMMAND_ACK to that command
+  <out>/command/command-long-confirmation.bin   a real COMMAND_LONG with confirmation 1, so not truncated
+  <out>/derived/command-long-all-params.bin     the SET_MESSAGE_INTERVAL re-packed by pymavlink with seven
+                                                distinct params (NaN among them), command 0x1234 and
+                                                confirmation 7: every slot and byte shows
+  <out>/derived/command-ack-extensions.bin      the ACK re-packed by pymavlink with result IN_PROGRESS,
+                                                progress 50 and a negative result_param2
+  <out>/derived/command-ack-accepted-no-extensions.bin
+                                                the ACK re-packed by pymavlink with every extension 0:
+                                                result ACCEPTED (0) is a trailing zero too, so LEN 2
+  <out>/derived/command-ack-failed-no-extensions.bin
+                                                the same with result FAILED (4): LEN 3
+  <out>/derived/command-ack-split-param2.bin    the ACK with result_param2 256 and targets 0: LEN 6 cuts the
+                                                int32 after its second byte
+  <out>/derived/command-ack-target-system-only.bin
+                                                the ACK with target_component 0: LEN 9, only the last
+                                                extension byte is missing
+  <out>/derived/command-long-broadcast.bin      the SET_MESSAGE_INTERVAL re-packed by pymavlink to target
+                                                0/0: the zero targets and confirmation are truncated, LEN 30
 
 checks each output with pymavlink before writing it, and prints the session counts the parser tests
 expect.
@@ -90,7 +111,27 @@ TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_SYS_STATUS: "sys_status",
     common.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW: "servo_output_raw",
     common.MAVLINK_MSG_ID_POWER_STATUS: "power_status",
+    common.MAVLINK_MSG_ID_COMMAND_LONG: "command_long",
+    common.MAVLINK_MSG_ID_COMMAND_ACK: "command_ack",
 }
+SET_MESSAGE_INTERVAL = common.MAV_CMD_SET_MESSAGE_INTERVAL
+MAV_COMP_ID_MISSIONPLANNER = 190
+# Seven distinct params, exactly representable as float32 (NaN as pymavlink packs it, 00 00 c0 7f), and a
+# command and confirmation whose bytes all differ: a swapped slot or byte order shows. Not a real command.
+ALL_PARAMS = (1.5, -2.25, float("nan"), 100000.0, -1.0, 0.5, 65535.0)
+ARBITRARY_COMMAND = 0x1234
+ARBITRARY_CONFIRMATION = 7
+NAN_PARAM_INDEX = 2
+IN_PROGRESS_PROGRESS = 50
+NEGATIVE_RESULT_PARAM2 = -123456
+FULL_COMMAND_LONG_LENGTH = 33
+FULL_COMMAND_ACK_LENGTH = 10
+ACCEPTED_NO_EXTENSIONS_LENGTH = 2  # command (uint16); result 0 is truncated with the zero extensions
+FAILED_NO_EXTENSIONS_LENGTH = 3  # command (uint16), result
+SPLIT_RESULT_PARAM2 = 256  # 00 01 00 00: the two high zero bytes are truncated with the zero targets
+SPLIT_PARAM2_LENGTH = 6  # command, result, progress, the low two bytes of result_param2
+TARGET_SYSTEM_ONLY_LENGTH = 9  # everything but target_component
+BROADCAST_LENGTH = 30  # the seven params and command
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -189,6 +230,30 @@ def repacked(frame: bytes, system_id: int, component_id: int) -> bytes:
     return bytes(copy.pack(mav))
 
 
+def with_message_fields(frame: bytes, **fields) -> bytes:
+    """Any message re-packed by pymavlink with some fields replaced (extensions included); seq, system and
+    component unchanged. pymavlink truncates the trailing zero bytes of a MAVLink 2 payload."""
+    msg = decode(frame)
+    mav = common.MAVLink(io.BytesIO(), srcSystem=msg.get_srcSystem(), srcComponent=msg.get_srcComponent())
+    mav.seq = msg.get_seq()
+    values = {name: getattr(msg, name) for name in msg.get_fieldnames()}
+    values.update(fields)
+    copy = type(msg)(*[values[name] for name in msg.get_fieldnames()])
+    return bytes(copy.pack(mav))
+
+
+def session_frame(session: Path, message_type: str, matches) -> bytes:
+    """First real MAVLink 2 frame of the session of [message_type] for which [matches] is true."""
+    log = mavutil.mavlink_connection(str(session), dialect="common", robust_parsing=True)
+    while True:
+        msg = log.recv_match(type=message_type, blocking=False)
+        if msg is None:
+            raise SystemExit(f"no matching {message_type} in the session")
+        frame = bytes(msg.get_msgbuf())
+        if frame[0] == START_MARKER and matches(msg):
+            return frame
+
+
 def gcs_heartbeat(session: Path) -> bytes:
     """First real MAVLink 2 HEARTBEAT of the session sent by a ground station (MAV_TYPE_GCS)."""
     log = mavutil.mavlink_connection(str(session), dialect="common", robust_parsing=True)
@@ -274,6 +339,12 @@ def main() -> None:
     derived_dir.mkdir(parents=True, exist_ok=True)
     unknown_dir.mkdir(parents=True, exist_ok=True)
     gcs_dir.mkdir(parents=True, exist_ok=True)
+    command_dir = args.out / "command"
+    command_dir.mkdir(parents=True, exist_ok=True)
+    session = args.out / SESSION
+    interval = session_frame(session, "COMMAND_LONG", lambda m: m.command == SET_MESSAGE_INTERVAL)
+    interval_ack = session_frame(session, "COMMAND_ACK", lambda m: m.command == SET_MESSAGE_INTERVAL)
+    no_extensions = {"progress": 0, "result_param2": 0, "target_system": 0, "target_component": 0}
 
     outputs = {
         derived_dir / "heartbeat-signed.bin": signed(source),
@@ -295,6 +366,34 @@ def main() -> None:
         unknown_dir / "attitude-fd-in-payload.bin": attitude_with_fd(args.out / SESSION),
         derived_dir / "attitude-signed.bin": signed(attitude_with_fd(args.out / SESSION)),
         derived_dir / "session-stream.bin": session_stream(args.out / SESSION),
+        command_dir / "set-message-interval.bin": interval,
+        command_dir / "set-message-interval-ack.bin": interval_ack,
+        command_dir / "command-long-confirmation.bin": session_frame(
+            session, "COMMAND_LONG", lambda m: m.confirmation != 0
+        ),
+        derived_dir / "command-long-all-params.bin": with_message_fields(
+            interval,
+            **{f"param{index + 1}": value for index, value in enumerate(ALL_PARAMS)},
+            command=ARBITRARY_COMMAND,
+            confirmation=ARBITRARY_CONFIRMATION,
+        ),
+        derived_dir / "command-ack-extensions.bin": with_message_fields(
+            interval_ack,
+            result=common.MAV_RESULT_IN_PROGRESS,
+            progress=IN_PROGRESS_PROGRESS,
+            result_param2=NEGATIVE_RESULT_PARAM2,
+        ),
+        derived_dir / "command-ack-accepted-no-extensions.bin": with_message_fields(
+            interval_ack, result=common.MAV_RESULT_ACCEPTED, **no_extensions
+        ),
+        derived_dir / "command-ack-failed-no-extensions.bin": with_message_fields(
+            interval_ack, result=common.MAV_RESULT_FAILED, **no_extensions
+        ),
+        derived_dir / "command-ack-split-param2.bin": with_message_fields(
+            interval_ack, result_param2=SPLIT_RESULT_PARAM2, target_system=0, target_component=0
+        ),
+        derived_dir / "command-ack-target-system-only.bin": with_message_fields(interval_ack, target_component=0),
+        derived_dir / "command-long-broadcast.bin": with_message_fields(interval, target_system=0, target_component=0),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -318,11 +417,35 @@ def main() -> None:
     extra = decode(outputs[derived_dir / "heartbeat-extra-byte.bin"]).to_dict()
     assert extra == decode(source).to_dict(), "pymavlink must decode the extra-byte frame like the original"
 
+    real_interval = decode(interval)
+    assert real_interval.get_srcComponent() == MAV_COMP_ID_MISSIONPLANNER and real_interval.target_system == 1
+    real_ack = decode(interval_ack)
+    assert real_ack.result == common.MAV_RESULT_ACCEPTED and interval_ack[1] == FULL_COMMAND_ACK_LENGTH
+    assert outputs[command_dir / "command-long-confirmation.bin"][1] == FULL_COMMAND_LONG_LENGTH
+    all_params = decode(outputs[derived_dir / "command-long-all-params.bin"])
+    for index, value in enumerate(ALL_PARAMS):
+        packed = getattr(all_params, f"param{index + 1}")
+        assert packed != packed if index == NAN_PARAM_INDEX else packed == value, f"param{index + 1}"
+    assert all_params.command == ARBITRARY_COMMAND and all_params.confirmation == ARBITRARY_CONFIRMATION
+    extensions = decode(outputs[derived_dir / "command-ack-extensions.bin"])
+    assert extensions.result_param2 == NEGATIVE_RESULT_PARAM2 and extensions.progress == IN_PROGRESS_PROGRESS
+    accepted = outputs[derived_dir / "command-ack-accepted-no-extensions.bin"]
+    assert accepted[1] == ACCEPTED_NO_EXTENSIONS_LENGTH and decode(accepted).command == SET_MESSAGE_INTERVAL
+    failed = outputs[derived_dir / "command-ack-failed-no-extensions.bin"]
+    assert failed[1] == FAILED_NO_EXTENSIONS_LENGTH and decode(failed).result == common.MAV_RESULT_FAILED
+
+    split = outputs[derived_dir / "command-ack-split-param2.bin"]
+    assert split[1] == SPLIT_PARAM2_LENGTH and decode(split).result_param2 == SPLIT_RESULT_PARAM2
+    target_only = outputs[derived_dir / "command-ack-target-system-only.bin"]
+    assert target_only[1] == TARGET_SYSTEM_ONLY_LENGTH and decode(target_only).target_system == real_ack.target_system
+    broadcast = outputs[derived_dir / "command-long-broadcast.bin"]
+    assert broadcast[1] == BROADCAST_LENGTH and decode(broadcast).param2 == real_interval.param2
+
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
         path.write_bytes(frame)
         shown = frame.hex(" ") if len(frame) <= MAX_SHOWN else f"{len(frame)} bytes"
-        print(f"{path.relative_to(args.out).as_posix():40} {shown}")
+        print(f"{path.relative_to(args.out).as_posix():48} {shown}")
     print()
     print(f"session counts (pymavlink): {session_counts(args.out / SESSION)}")
 
