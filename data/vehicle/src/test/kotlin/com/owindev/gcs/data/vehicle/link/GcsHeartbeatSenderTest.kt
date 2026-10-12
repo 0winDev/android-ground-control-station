@@ -51,7 +51,7 @@ class GcsHeartbeatSenderTest {
             sent += firstArg<ByteArray>()
             results.removeFirstOrNull() ?: SendResult.Sent
         }
-        sender = GcsHeartbeatSender(transport)
+        sender = GcsHeartbeatSender(GcsMessageSender(transport))
     }
 
     @AfterEach

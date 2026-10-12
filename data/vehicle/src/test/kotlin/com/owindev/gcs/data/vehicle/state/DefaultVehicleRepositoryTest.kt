@@ -12,6 +12,7 @@ import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
+import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import io.mockk.coEvery
 import io.mockk.every
@@ -71,7 +72,7 @@ class DefaultVehicleRepositoryTest {
             session = session,
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(transport),
+            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
             scope = testScope.backgroundScope,
         )
     }
@@ -369,7 +370,7 @@ class DefaultVehicleRepositoryTest {
             session = LinkSession(transport = transport, scope = backgroundScope),
             timeSource = testScheduler.timeSource,
             rule = LinkLossRule(timeout = CUSTOM_TIMEOUT),
-            heartbeatSender = GcsHeartbeatSender(transport),
+            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
             scope = backgroundScope,
         )
 
@@ -561,7 +562,7 @@ class DefaultVehicleRepositoryTest {
                 session = LinkSession(transport = transport, scope = backgroundScope),
                 timeSource = deviceClock,
                 rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(transport),
+                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
                 scope = backgroundScope,
             )
             sleepy.vehicles.launchIn(backgroundScope)
@@ -596,7 +597,7 @@ class DefaultVehicleRepositoryTest {
                 session = LinkSession(transport = transport, scope = backgroundScope),
                 timeSource = FailsOnSecondMark(testScheduler.timeSource),
                 rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(transport),
+                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
                 scope = appScope,
             )
             failing.vehicles.launchIn(backgroundScope)
