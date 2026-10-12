@@ -1,5 +1,6 @@
 package com.owindev.gcs.core.mavlink
 
+import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 
 /**
@@ -75,6 +76,10 @@ object MavlinkEncoder {
         }
         return frame(sequence, systemId, componentId, HEARTBEAT_ID, heartbeatPayload(heartbeat))
     }
+
+    /** Encodes [commandLong] as one frame. Test-first stub: implemented in the next commit. */
+    fun encode(sequence: Int, systemId: Int, componentId: Int, commandLong: CommandLong): ByteArray =
+        TODO("Encode $commandLong as seq $sequence from $systemId/$componentId")
 
     private fun heartbeatPayload(heartbeat: Heartbeat): ByteArray {
         val payload = ByteArray(HEARTBEAT_LENGTH)

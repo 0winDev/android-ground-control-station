@@ -1,5 +1,7 @@
 package com.owindev.gcs.core.mavlink
 
+import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
+import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.testing.readFixture
@@ -15,7 +17,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 
 /**
- * Decoder tests from real ArduPilot SITL frames run through the parser with the v0.1 message table.
+ * Decoder tests from real ArduPilot SITL frames run through the parser with the codec's message table.
  * Expected values come from pymavlink 2.4.50 (see `src/test/resources/README.md`), never from the decoder.
  */
 class MavlinkDecoderTest {
@@ -63,6 +65,7 @@ class MavlinkDecoderTest {
         "truncated/sys_status.bin, 1, 43",
         "truncated/power_status.bin, 125, 6",
         "truncated/servo_output_raw.bin, 36, 37",
+        "command/set-message-interval.bin, 76, 33",
     )
     fun `GIVEN a real truncated frame WHEN decoding THEN its wire payload is zero-filled to the full length`(
         fixture: String,
@@ -110,6 +113,65 @@ class MavlinkDecoderTest {
             customMode = 4,
             systemStatus = 0,
             mavlinkVersion = 0,
+        )
+    }
+
+    @Tag("REQ-022")
+    @Test
+    fun `GIVEN ArduCopter's real ACK to SET_MESSAGE_INTERVAL WHEN decoding THEN it has the fields pymavlink decodes`() {
+        val frame = parsedFrame(SET_MESSAGE_INTERVAL_ACK)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo CommandAck(
+            command = MAV_CMD_SET_MESSAGE_INTERVAL,
+            result = MAV_RESULT_ACCEPTED,
+            progress = 0,
+            resultParam2 = 0,
+            targetSystem = GCS_SYSTEM_ID,
+            targetComponent = GCS_COMPONENT_ID,
+        )
+    }
+
+    @Tag("REQ-022")
+    @Test
+    fun `GIVEN an ACK with every extension set WHEN decoding THEN progress and a negative result_param2 come out`() {
+        val frame = parsedFrame(ACK_EXTENSIONS)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo CommandAck(
+            command = MAV_CMD_SET_MESSAGE_INTERVAL,
+            result = MAV_RESULT_IN_PROGRESS,
+            progress = IN_PROGRESS_PERCENT,
+            resultParam2 = NEGATIVE_RESULT_PARAM2,
+            targetSystem = GCS_SYSTEM_ID,
+            targetComponent = GCS_COMPONENT_ID,
+        )
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-022")
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(
+        "derived/command-ack-accepted-no-extensions.bin, 0",
+        "derived/command-ack-failed-no-extensions.bin, 4",
+    )
+    fun `GIVEN an ACK truncated before its extensions WHEN decoding THEN the missing fields read as zero`(
+        fixture: String,
+        ackResult: Int,
+    ) {
+        val frame = parsedFrame(fixture)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo CommandAck(
+            command = MAV_CMD_SET_MESSAGE_INTERVAL,
+            result = ackResult,
+            progress = 0,
+            resultParam2 = 0,
+            targetSystem = 0,
+            targetComponent = 0,
         )
     }
 
@@ -181,6 +243,8 @@ class MavlinkDecoderTest {
 
     private fun MavlinkMessage.kind(): String = when (this) {
         is Heartbeat -> "HEARTBEAT"
+        is CommandAck -> "COMMAND_ACK"
+        is CommandLong -> "COMMAND_LONG"
         is Undecoded -> "$messageId/${payload.size}"
     }
 
@@ -191,6 +255,17 @@ class MavlinkDecoderTest {
         const val SYS_STATUS = "truncated/sys_status.bin"
         const val ATTITUDE = "unknown/attitude-fd-in-payload.bin"
         const val SESSION_STREAM = "derived/session-stream.bin"
+        const val SET_MESSAGE_INTERVAL_ACK = "command/set-message-interval-ack.bin"
+        const val ACK_EXTENSIONS = "derived/command-ack-extensions.bin"
+
+        // Field values of the COMMAND_ACK fixtures as pymavlink decodes them (see the fixtures README).
+        const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
+        const val MAV_RESULT_ACCEPTED = 0
+        const val MAV_RESULT_IN_PROGRESS = 5
+        const val IN_PROGRESS_PERCENT = 50
+        const val NEGATIVE_RESULT_PARAM2 = -123_456
+        const val GCS_SYSTEM_ID = 255
+        const val GCS_COMPONENT_ID = 190
         const val POWER_STATUS_ID = 125
         const val SYS_STATUS_ID = 1
         const val HEARTBEAT_ID = 0
@@ -200,7 +275,7 @@ class MavlinkDecoderTest {
         const val FUZZ_FRAMES = 10_000
         const val MAX_PAYLOAD = 255
         const val MAX_MESSAGE_ID = 0xFF_FFFF
-        val FUZZ_IDS = listOf(0, 1, 36, 125)
+        val FUZZ_IDS = listOf(0, 1, 36, 76, 77, 125)
         const val ATTITUDE_ID = 30
         const val QUADROTOR = 2
         const val ARDUPILOTMEGA = 3
@@ -208,7 +283,7 @@ class MavlinkDecoderTest {
         const val MAVLINK_VERSION = 3
         const val DISARMED_STABILIZE_BASE_MODE = 81
         const val MAX_UINT32 = 4_294_967_295L
-        const val SESSION_UNKNOWN = 4_609L
+        const val SESSION_UNKNOWN = 4_585L
         const val SESSION_MAVLINK1_BYTES = 82L
         const val HEADER_LENGTH = 10
         const val LEN_INDEX = 1
@@ -218,7 +293,14 @@ class MavlinkDecoderTest {
 
         // Counts printed by tools/fixtures/derive_fixtures.py (pymavlink); undecoded ones keyed by
         // "msgid/restored length", so every one of them is checked to be zero-filled to its full length.
-        val sessionCounts = sortedMapOf("HEARTBEAT" to 133, "1/43" to 325, "36/37" to 130, "125/6" to 325)
+        val sessionCounts = sortedMapOf(
+            "HEARTBEAT" to 133,
+            "1/43" to 325,
+            "36/37" to 130,
+            "125/6" to 325,
+            "76/33" to 11,
+            "COMMAND_ACK" to 13,
+        )
 
         // Vcc = 5000 (0x1388, little-endian), Vservo = 0, flags = 0, as pymavlink decodes it.
         val restoredPowerStatus = byteArrayOf(0x88.toByte(), 0x13, 0x00, 0x00, 0x00, 0x00)
