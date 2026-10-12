@@ -272,12 +272,12 @@ class MavlinkEncoderTest {
 
     @Tag("REQ-022")
     @Test
-    fun `GIVEN a broadcast COMMAND_LONG WHEN encoding THEN the zero targets are truncated after command`() {
+    fun `GIVEN a broadcast COMMAND_LONG WHEN encoding THEN the zero targets are truncated like the pymavlink frame`() {
         val command = setMessageInterval().copy(targetSystem = 0, targetComponent = 0)
 
         val result = encoder.encode(SET_MESSAGE_INTERVAL_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, command)
 
-        result[LEN_INDEX].toInt() shouldBeEqualTo BROADCAST_LENGTH
+        result shouldBeEqualTo readFixture(BROADCAST_FRAME)
     }
 
     private fun wirePayload(frame: ByteArray): ByteArray =
@@ -325,11 +325,9 @@ class MavlinkEncoderTest {
         const val SET_MESSAGE_INTERVAL_FRAME = "command/set-message-interval.bin"
         const val CONFIRMATION_FRAME = "command/command-long-confirmation.bin"
         const val ALL_PARAMS_FRAME = "derived/command-long-all-params.bin"
+        const val BROADCAST_FRAME = "derived/command-long-broadcast.bin"
         const val COMMAND_LONG_ID = 76
         const val COMMAND_LONG_FULL_LENGTH = 33
-
-        // param1..7 (28 bytes) and command (2 bytes); both targets and confirmation 0 are truncated.
-        const val BROADCAST_LENGTH = 30
 
         // Mission Planner's COMMAND_LONGs in session.tlog, as pymavlink decodes them (see the fixtures
         // README): SET_MESSAGE_INTERVAL (seq 81) for message 271 every 200000 µs, and a resent

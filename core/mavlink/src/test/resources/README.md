@@ -178,7 +178,8 @@ so no new capture was needed. `command/` holds real frames extracted from the se
 ones are re-packed **by pymavlink 2.4.50** from them (same seq, system and component), never by our
 codec. Regenerate with `py tools/fixtures/derive_fixtures.py` (same bytes).
 
-Wire layout (offsets from pymavlink's `mavparse` over `common.xml`):
+Wire layout (offsets from pymavlink's `mavparse` over `common.xml`; field types and order are the same
+on `mavlink/mavlink` master, whose descriptions the KDoc quotes):
 
 - COMMAND_LONG, full LEN 33, no extensions: `param1`…`param7` (float, offsets 0–24), `command` (uint16,
   28), `target_system` (30), `target_component` (31), `confirmation` (32). Floats are IEEE-754 single
@@ -196,6 +197,9 @@ Wire layout (offsets from pymavlink's `mavparse` over `common.xml`):
 | `derived/command-ack-extensions.bin` | The ACK re-packed with result 5 (`MAV_RESULT_IN_PROGRESS`), progress 50, result_param2 -123456 | command 511, result 5, progress 50, result_param2 -123456 (`c0 1d fe ff`), target 255/190 | Decoder: extension offsets and a signed `result_param2` |
 | `derived/command-ack-accepted-no-extensions.bin` | The ACK re-packed with every extension 0 | command 511, result 0, the rest 0. LEN **2**: `result` 0 is a trailing zero too, so it is truncated with the extensions | Decoder: zero-fill restores `result` itself, not only the extensions |
 | `derived/command-ack-failed-no-extensions.bin` | The same with result 4 (`MAV_RESULT_FAILED`) | command 511, result 4, the rest 0. LEN 3 | Decoder: an ACK without extensions, as an older sender writes it |
+| `derived/command-ack-split-param2.bin` | The ACK re-packed with result_param2 256 and targets 0 | command 511, result 0, progress 0, result_param2 256 (`00 01 00 00`), target 0/0. LEN 6: the payload ends after the second byte of `result_param2` | Decoder: an int32 cut by truncation reads its missing high bytes as zero |
+| `derived/command-ack-target-system-only.bin` | The ACK re-packed with target_component 0 | command 511, result 0, progress 0, result_param2 0, target 255/0. LEN 9 | Decoder: only the last extension byte is missing |
+| `derived/command-long-broadcast.bin` | The SET_MESSAGE_INTERVAL re-packed to target 0/0 | as `command/set-message-interval.bin`, target 0/0. LEN 30: the zero targets and confirmation are truncated | Encoder: a broadcast COMMAND_LONG truncates after `command` |
 
 Raw bytes:
 
@@ -215,4 +219,10 @@ derived/command-ack-extensions.bin              fd 0a 00 00 c2 01 01 4d 00 00 ff
                                                 ff be 7c bd
 derived/command-ack-accepted-no-extensions.bin  fd 02 00 00 c2 01 01 4d 00 00 ff 01 64 ae
 derived/command-ack-failed-no-extensions.bin    fd 03 00 00 c2 01 01 4d 00 00 ff 01 04 ba 34
+derived/command-ack-split-param2.bin            fd 06 00 00 c2 01 01 4d 00 00 ff 01 00 00 00 01 28 59
+derived/command-ack-target-system-only.bin      fd 09 00 00 c2 01 01 4d 00 00 ff 01 00 00 00 00 00 00
+                                                ff 3a 8c
+derived/command-long-broadcast.bin              fd 1e 00 00 51 ff be 4c 00 00 00 80 87 43 00 50 43 48
+                                                00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                                                00 00 ff 01 a1 5c
 ```

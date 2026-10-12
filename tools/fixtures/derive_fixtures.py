@@ -58,6 +58,13 @@ Writes:
                                                 result ACCEPTED (0) is a trailing zero too, so LEN 2
   <out>/derived/command-ack-failed-no-extensions.bin
                                                 the same with result FAILED (4): LEN 3
+  <out>/derived/command-ack-split-param2.bin    the ACK with result_param2 256 and targets 0: LEN 6 cuts the
+                                                int32 after its second byte
+  <out>/derived/command-ack-target-system-only.bin
+                                                the ACK with target_component 0: LEN 9, only the last
+                                                extension byte is missing
+  <out>/derived/command-long-broadcast.bin      the SET_MESSAGE_INTERVAL re-packed by pymavlink to target
+                                                0/0: the zero targets and confirmation are truncated, LEN 30
 
 checks each output with pymavlink before writing it, and prints the session counts the parser tests
 expect.
@@ -121,6 +128,10 @@ FULL_COMMAND_LONG_LENGTH = 33
 FULL_COMMAND_ACK_LENGTH = 10
 ACCEPTED_NO_EXTENSIONS_LENGTH = 2  # command (uint16); result 0 is truncated with the zero extensions
 FAILED_NO_EXTENSIONS_LENGTH = 3  # command (uint16), result
+SPLIT_RESULT_PARAM2 = 256  # 00 01 00 00: the two high zero bytes are truncated with the zero targets
+SPLIT_PARAM2_LENGTH = 6  # command, result, progress, the low two bytes of result_param2
+TARGET_SYSTEM_ONLY_LENGTH = 9  # everything but target_component
+BROADCAST_LENGTH = 30  # the seven params and command
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -378,6 +389,11 @@ def main() -> None:
         derived_dir / "command-ack-failed-no-extensions.bin": with_message_fields(
             interval_ack, result=common.MAV_RESULT_FAILED, **no_extensions
         ),
+        derived_dir / "command-ack-split-param2.bin": with_message_fields(
+            interval_ack, result_param2=SPLIT_RESULT_PARAM2, target_system=0, target_component=0
+        ),
+        derived_dir / "command-ack-target-system-only.bin": with_message_fields(interval_ack, target_component=0),
+        derived_dir / "command-long-broadcast.bin": with_message_fields(interval, target_system=0, target_component=0),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -417,6 +433,13 @@ def main() -> None:
     assert accepted[1] == ACCEPTED_NO_EXTENSIONS_LENGTH and decode(accepted).command == SET_MESSAGE_INTERVAL
     failed = outputs[derived_dir / "command-ack-failed-no-extensions.bin"]
     assert failed[1] == FAILED_NO_EXTENSIONS_LENGTH and decode(failed).result == common.MAV_RESULT_FAILED
+
+    split = outputs[derived_dir / "command-ack-split-param2.bin"]
+    assert split[1] == SPLIT_PARAM2_LENGTH and decode(split).result_param2 == SPLIT_RESULT_PARAM2
+    target_only = outputs[derived_dir / "command-ack-target-system-only.bin"]
+    assert target_only[1] == TARGET_SYSTEM_ONLY_LENGTH and decode(target_only).target_system == real_ack.target_system
+    broadcast = outputs[derived_dir / "command-long-broadcast.bin"]
+    assert broadcast[1] == BROADCAST_LENGTH and decode(broadcast).param2 == real_interval.param2
 
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():

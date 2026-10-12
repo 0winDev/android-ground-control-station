@@ -175,6 +175,32 @@ class MavlinkDecoderTest {
         )
     }
 
+    @Tag("REQ-013")
+    @Tag("REQ-022")
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(
+        "derived/command-ack-split-param2.bin, 256, 0",
+        "derived/command-ack-target-system-only.bin, 0, 255",
+    )
+    fun `GIVEN an ACK truncated inside its extensions WHEN decoding THEN only the cut bytes read as zero`(
+        fixture: String,
+        resultParam2: Int,
+        targetSystem: Int,
+    ) {
+        val frame = parsedFrame(fixture)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo CommandAck(
+            command = MAV_CMD_SET_MESSAGE_INTERVAL,
+            result = MAV_RESULT_ACCEPTED,
+            progress = 0,
+            resultParam2 = resultParam2,
+            targetSystem = targetSystem,
+            targetComponent = 0,
+        )
+    }
+
     @Tag("REQ-012")
     @Test
     fun `GIVEN frames with random IDs and payloads of any size WHEN decoding THEN nothing is thrown`() {
