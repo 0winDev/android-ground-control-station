@@ -154,9 +154,13 @@ internal class TelemetryRequester @Inject constructor(
 
     companion object {
         /**
-         * How long to wait for each request's COMMAND_ACK. Not extended after `MAV_RESULT_IN_PROGRESS`, as the
-         * command protocol advises for long-running commands ("the GCS should have a much increased timeout"):
-         * `MAV_CMD_SET_MESSAGE_INTERVAL` is not one. Do not copy this into a command service.
+         * How long to wait for each request's COMMAND_ACK. Measured in SITL (#36, ArduCopter V4.7.2-beta over
+         * loopback): every answer within 6–27 ms over 10 requests. 1 s is about 37 times the worst of those,
+         * room for a radio link's round trip, and keeps a round with no answers to 5 s.
+         *
+         * Not extended after `MAV_RESULT_IN_PROGRESS`, as the command protocol advises for long-running
+         * commands ("the GCS should have a much increased timeout"): `MAV_CMD_SET_MESSAGE_INTERVAL` is not one.
+         * Do not copy this into a command service.
          */
         val ACK_TIMEOUT: Duration = 1.seconds
 
