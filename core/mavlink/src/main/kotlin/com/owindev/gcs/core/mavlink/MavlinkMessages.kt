@@ -7,9 +7,9 @@ package com.owindev.gcs.core.mavlink
  * Source: the official definitions, `message_definitions/v1.0/minimal.xml` (HEARTBEAT) and `common.xml`
  * (the others) in https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked
  * against `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK checked with pymavlink's `mavparse`
- * (#35). SYS_STATUS, SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far; their
- * fields are decoded later in v0.2. COMMAND_LONG is only sent by the codec, so a received one stays
- * undecoded.
+ * and against master (#35). SYS_STATUS, SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored
+ * so far; their fields are decoded later in v0.2. COMMAND_LONG is only sent by the codec, so a received one
+ * stays undecoded.
  */
 object MavlinkMessages : CrcExtraLookup {
 

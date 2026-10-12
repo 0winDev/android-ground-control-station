@@ -94,9 +94,10 @@ object MavlinkEncoder {
     /**
      * Encodes [commandLong] as one frame from [systemId]/[componentId] with sequence number [sequence].
      *
-     * The params are written as their IEEE-754 bits, little-endian, so a NaN is sent as given. A trailing `confirmation` 0 is truncated like any trailing zero byte.
+     * The params are written as their IEEE-754 bits, little-endian, so a NaN is sent as given. A trailing
+     * `confirmation` 0 is truncated like any trailing zero byte.
      *
-     * @param sequence 0..255, as for [encode] of a HEARTBEAT.
+     * @param sequence 0..255, as for HEARTBEAT.
      * @param systemId 1..255.
      * @param componentId 1..255.
      */
