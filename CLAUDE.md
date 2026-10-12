@@ -212,3 +212,7 @@ Add one line per closed issue: what surprised us and what to do differently.
   catch only the upstream with `.catch`. `shareIn` does not hand upstream crashes to subscribers, so a
   "crashes on purpose" test needs its own scope with a handler. In airplane mode the emulator's bound UDP
   socket never fails, so a real transport failure could not be reproduced in SITL.
+- #35 COMMAND_LONG/ACK: extension fields keep XML order on the wire (only base fields are sorted by size),
+  and zero-fill cannot produce a field's "invalid" value (COMMAND_ACK `progress` unknown is 255), so the data
+  layer must not read a restored 0 as real. List an existing capture with pymavlink before planning a new one:
+  `session.tlog` already had the MAVLink 2 commands. ktlint and detekt skip KDoc line length; check it by hand.
