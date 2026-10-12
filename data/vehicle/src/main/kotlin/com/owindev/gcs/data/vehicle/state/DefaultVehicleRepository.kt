@@ -10,6 +10,8 @@ import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
 import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -37,7 +40,7 @@ import kotlinx.coroutines.launch
  * Keeps every vehicle heard on the shared [LinkSession], keyed by system ID (REQ-016), and watches each
  * one's link (REQ-017, REQ-019).
  *
- * Three jobs in the application scope, all started on first use:
+ * Four jobs in the application scope, all started on first use:
  * - the **listener** collects HEARTBEATs only while [vehicles] is observed (plus [LINK_STOP_TIMEOUT]),
  *   so the socket is not kept open for nobody;
  * - the **watchdog** owns the map and the per-vehicle timers, and runs for as long as the app does. A
@@ -47,7 +50,11 @@ import kotlinx.coroutines.launch
  * - the **heartbeat** job ([GcsHeartbeatSender]) announces this GCS to the active vehicle, at the address
  *   its HEARTBEATs come from, only while that vehicle is CONNECTED (REQ-021): once it is lost, or the
  *   socket closes because nobody observes the link, the vehicle stops hearing this GCS and its own GCS
- *   failsafe can act. It only reads the current state, so it never keeps the link open by itself.
+ *   failsafe can act. It only reads the current state, so it never keeps the link open by itself;
+ * - the **telemetry** job ([TelemetryRequester]) asks the active vehicle for the HUD's telemetry each time
+ *   it becomes CONNECTED (REQ-023), and never any other system ID. The watchdog tells it of every change
+ *   of the active vehicle's link, in order, so a LOST followed at once by a CONNECTED still starts a new
+ *   round. It only listens for answers while it is waiting for one.
  *
  * The first vehicle heard becomes the [activeSystemId] and stays so (REQ-020); the others are kept in the
  * map like any vehicle, never merged into it.
@@ -70,12 +77,20 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val timeSource: TimeSource.WithComparableMarks,
     private val rule: LinkLossRule,
     private val heartbeatSender: GcsHeartbeatSender,
+    private val telemetryRequester: TelemetryRequester,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository {
 
     private val mutableVehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val mutableActiveSystemId = MutableStateFlow<SystemId?>(null)
     private val events = Channel<Event>(Channel.UNLIMITED)
+
+    /**
+     * Each change of the active vehicle's link, for the telemetry job: its target when it becomes CONNECTED,
+     * `null` when it is lost. A channel, not a state: two changes in a row must both arrive, and there is a
+     * single consumer, so nothing is replayed to a late one.
+     */
+    private val activeLinkChanges = Channel<TelemetryTarget?>(Channel.UNLIMITED)
 
     /** Where each vehicle's last HEARTBEAT came from; written only by the watchdog. */
     @Volatile
@@ -85,6 +100,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         scope.launch { watch() }
         scope.launch { listenWhileObserved() }
         scope.launch { heartbeatSender.run(::activeAddressWhileConnected) }
+        scope.launch { telemetryRequester.run(activeLinkChanges.receiveAsFlow()) }
         mutableVehicles.asStateFlow()
     }
 
@@ -136,7 +152,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // link must not silently take the operator's place.
                         if (mutableActiveSystemId.value == null) mutableActiveSystemId.value = systemId
                         addresses += systemId to event.sender
-                        mutableVehicles.value += systemId to Vehicle(event.state, link, event.at)
+                        update(systemId, Vehicle(event.state, link, event.at))
                         if (link == VehicleLink.CONNECTED) {
                             startTimer(systemId, rule.timeout - elapsed)
                         } else {
@@ -154,7 +170,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                             rule.linkAfter(elapsed) == VehicleLink.CONNECTED ->
                                 startTimer(event.systemId, rule.timeout - elapsed)
 
-                            else -> mutableVehicles.value += event.systemId to vehicle.copy(link = VehicleLink.LOST)
+                            else -> update(event.systemId, vehicle.copy(link = VehicleLink.LOST))
                         }
                     }
                 }
@@ -167,6 +183,25 @@ internal class DefaultVehicleRepository @Inject constructor(
             mutableVehicles.update { vehicles ->
                 vehicles.mapValues { (_, vehicle) -> vehicle.copy(link = VehicleLink.LOST) }
             }
+            activeLinkChanges.trySend(null)
+            activeLinkChanges.close()
+        }
+    }
+
+    /**
+     * Writes [vehicle] and tells the telemetry job if the active vehicle's link changed. Only the watchdog
+     * calls it, after writing the vehicle's address.
+     */
+    private fun update(systemId: SystemId, vehicle: Vehicle) {
+        val before = mutableVehicles.value[systemId]?.link ?: VehicleLink.LOST
+        mutableVehicles.value += systemId to vehicle
+        if (systemId == mutableActiveSystemId.value && vehicle.link != before) {
+            val target = if (vehicle.link == VehicleLink.CONNECTED) {
+                TelemetryTarget(systemId, addresses.getValue(systemId))
+            } else {
+                null
+            }
+            activeLinkChanges.trySend(target)
         }
     }
 
