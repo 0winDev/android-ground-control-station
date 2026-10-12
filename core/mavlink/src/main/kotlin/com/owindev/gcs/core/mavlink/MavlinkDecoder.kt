@@ -1,5 +1,6 @@
 package com.owindev.gcs.core.mavlink
 
+import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 
@@ -17,7 +18,8 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
  * Decoded messages read the frame's payload in place, so they allocate nothing beyond the message.
  * [Undecoded] always gets its own copy of the payload: it never shares the frame's array.
  *
- * Fields are little-endian and on the wire ordered by type size, not XML order.
+ * Fields are little-endian and on the wire ordered by type size, not XML order; extension fields follow
+ * them in XML order, never re-sorted by size.
  */
 object MavlinkDecoder {
 
@@ -30,6 +32,20 @@ object MavlinkDecoder {
     private const val BASE_MODE_OFFSET = 6
     private const val SYSTEM_STATUS_OFFSET = 7
     private const val MAVLINK_VERSION_OFFSET = 8
+
+    private const val COMMAND_ACK_ID = 77
+
+    // COMMAND_ACK wire layout: command (uint16), result, then the extensions in XML order: progress,
+    // result_param2 (int32), target_system, target_component.
+    private const val ACK_COMMAND_OFFSET = 0
+    private const val ACK_RESULT_OFFSET = 2
+    private const val ACK_PROGRESS_OFFSET = 3
+    private const val ACK_RESULT_PARAM2_OFFSET = 4
+    private const val ACK_TARGET_SYSTEM_OFFSET = 8
+    private const val ACK_TARGET_COMPONENT_OFFSET = 9
+
+    private const val UINT16_BYTES = 2
+    private const val INT32_BYTES = 4
     private const val UINT32_BYTES = 4
     private const val BYTE_MASK = 0xFF
     private const val UINT32_MASK = 0xFFFF_FFFFL
@@ -39,6 +55,7 @@ object MavlinkDecoder {
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
         return when (frame.messageId) {
             HEARTBEAT_ID -> heartbeat(frame.payload)
+            COMMAND_ACK_ID -> commandAck(frame.payload)
             else -> Undecoded(frame.messageId, frame.payload.copyOf(fullLength))
         }
     }
@@ -52,15 +69,32 @@ object MavlinkDecoder {
         mavlinkVersion = payload.uint8(MAVLINK_VERSION_OFFSET),
     )
 
+    private fun commandAck(payload: ByteArray) = CommandAck(
+        command = payload.uint16(ACK_COMMAND_OFFSET),
+        result = payload.uint8(ACK_RESULT_OFFSET),
+        progress = payload.uint8(ACK_PROGRESS_OFFSET),
+        resultParam2 = payload.int32(ACK_RESULT_PARAM2_OFFSET),
+        targetSystem = payload.uint8(ACK_TARGET_SYSTEM_OFFSET),
+        targetComponent = payload.uint8(ACK_TARGET_COMPONENT_OFFSET),
+    )
+
     /** A byte past the end of a truncated payload reads as zero, which restores it without copying. */
     private fun ByteArray.uint8(offset: Int): Int = if (offset < size) this[offset].toInt() and BYTE_MASK else 0
 
+    private fun ByteArray.uint16(offset: Int): Int = littleEndian(offset, UINT16_BYTES)
+
+    /** Little-endian int32: Kotlin's [Int] is the same two's-complement 32 bits, so the sign comes for free. */
+    private fun ByteArray.int32(offset: Int): Int = littleEndian(offset, INT32_BYTES)
+
     /** Little-endian uint32, returned as a [Long] so values above `Int.MAX_VALUE` stay positive. */
-    private fun ByteArray.uint32(offset: Int): Long {
+    private fun ByteArray.uint32(offset: Int): Long = littleEndian(offset, UINT32_BYTES).toLong() and UINT32_MASK
+
+    /** The [bytes] bytes at [offset], least significant first, as the low bits of an [Int]. */
+    private fun ByteArray.littleEndian(offset: Int, bytes: Int): Int {
         var value = 0
-        for (index in UINT32_BYTES - 1 downTo 0) {
+        for (index in bytes - 1 downTo 0) {
             value = (value shl Byte.SIZE_BITS) or uint8(offset + index)
         }
-        return value.toLong() and UINT32_MASK
+        return value
     }
 }

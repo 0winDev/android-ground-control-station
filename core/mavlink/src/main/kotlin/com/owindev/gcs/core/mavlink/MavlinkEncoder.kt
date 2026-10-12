@@ -59,6 +59,20 @@ object MavlinkEncoder {
      */
     private const val MAVLINK_VERSION = 3
 
+    private const val COMMAND_LONG_ID = 76
+
+    // COMMAND_LONG wire layout: param1..param7 as seven consecutive floats first, then command (uint16),
+    // then the three uint8 fields. No extensions.
+    private const val COMMAND_LONG_LENGTH = 33
+    private const val PARAM1_OFFSET = 0
+    private const val COMMAND_OFFSET = 28
+    private const val TARGET_SYSTEM_OFFSET = 30
+    private const val TARGET_COMPONENT_OFFSET = 31
+    private const val CONFIRMATION_OFFSET = 32
+    private const val FLOAT_BYTES = 4
+    private const val UINT16_BYTES = 2
+    private val UINT16_RANGE = 0..0xFFFF
+
     /**
      * Encodes [heartbeat] as one frame from [systemId]/[componentId] with sequence number [sequence].
      *
@@ -77,9 +91,17 @@ object MavlinkEncoder {
         return frame(sequence, systemId, componentId, HEARTBEAT_ID, heartbeatPayload(heartbeat))
     }
 
-    /** Encodes [commandLong] as one frame. Test-first stub: implemented in the next commit. */
+    /**
+     * Encodes [commandLong] as one frame from [systemId]/[componentId] with sequence number [sequence].
+     *
+     * The params are written as their IEEE-754 bits, little-endian, so a NaN is sent as given. A trailing `confirmation` 0 is truncated like any trailing zero byte.
+     *
+     * @param sequence 0..255, as for [encode] of a HEARTBEAT.
+     * @param systemId 1..255.
+     * @param componentId 1..255.
+     */
     fun encode(sequence: Int, systemId: Int, componentId: Int, commandLong: CommandLong): ByteArray =
-        TODO("Encode $commandLong as seq $sequence from $systemId/$componentId")
+        frame(sequence, systemId, componentId, COMMAND_LONG_ID, commandLongPayload(commandLong))
 
     private fun heartbeatPayload(heartbeat: Heartbeat): ByteArray {
         val payload = ByteArray(HEARTBEAT_LENGTH)
@@ -92,9 +114,31 @@ object MavlinkEncoder {
         return payload
     }
 
+    private fun commandLongPayload(command: CommandLong): ByteArray {
+        val payload = ByteArray(COMMAND_LONG_LENGTH)
+        val params = floatArrayOf(
+            command.param1,
+            command.param2,
+            command.param3,
+            command.param4,
+            command.param5,
+            command.param6,
+            command.param7,
+        )
+        params.forEachIndexed { index, param ->
+            // Any float is valid, NaN and infinities included: its raw IEEE-754 bits go on the wire unchanged.
+            payload.putLittleEndian(PARAM1_OFFSET + index * FLOAT_BYTES, param.toRawBits().toLong(), FLOAT_BYTES)
+        }
+        payload.putUint16(COMMAND_OFFSET, command.command, "command")
+        payload.putUint8(TARGET_SYSTEM_OFFSET, command.targetSystem, "target_system")
+        payload.putUint8(TARGET_COMPONENT_OFFSET, command.targetComponent, "target_component")
+        payload.putUint8(CONFIRMATION_OFFSET, command.confirmation, "confirmation")
+        return payload
+    }
+
     /**
      * Frames a full-length [payload] of [messageId]: header, the payload without its trailing zero bytes,
-     * checksum. Internal so that truncation can be tested before a message that really truncates exists.
+     * checksum. Internal so that framing can be tested with payloads no real message produces.
      */
     internal fun frame(sequence: Int, systemId: Int, componentId: Int, messageId: Int, payload: ByteArray): ByteArray {
         require(sequence in UINT8_RANGE) { "Sequence $sequence is outside $UINT8_RANGE" }
@@ -128,6 +172,11 @@ object MavlinkEncoder {
     private fun ByteArray.putUint8(offset: Int, value: Int, field: String) {
         require(value in UINT8_RANGE) { "$field $value is outside $UINT8_RANGE" }
         this[offset] = value.toByte()
+    }
+
+    private fun ByteArray.putUint16(offset: Int, value: Int, field: String) {
+        require(value in UINT16_RANGE) { "$field $value is outside $UINT16_RANGE" }
+        putLittleEndian(offset, value.toLong(), UINT16_BYTES)
     }
 
     private fun ByteArray.putUint32(offset: Int, value: Long, field: String) {
