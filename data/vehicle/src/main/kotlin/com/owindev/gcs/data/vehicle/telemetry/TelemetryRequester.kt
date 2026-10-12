@@ -48,9 +48,18 @@ internal sealed interface StreamResult {
  *
  * Each stream is one `MAV_CMD_SET_MESSAGE_INTERVAL` in a COMMAND_LONG to the autopilot component
  * (`MAV_COMP_ID_AUTOPILOT1`), sent one at a time: the COMMAND_ACK only names the command, not the message
- * it was about, so with one request in flight the next final ACK from the autopilot is its answer. It is
- * not sent to component 0 (all components), which could bring answers from other components. There is no
- * retry (v0.4): a stream that does not arrive is requested again once telemetry has an age (#39).
+ * it was about, so the answer is taken to be the next final ACK for this command from the autopilot, at
+ * the vehicle's address, to this GCS. It is not sent to component 0 (all components), which could bring
+ * answers from other components.
+ *
+ * Known limits, acceptable because the results only feed the log:
+ * - an ACK that arrives after [ACK_TIMEOUT] is taken as the answer to the next request, shifting the
+ *   results by one. Whether a stream really flows is shown by the stream itself, once telemetry has an
+ *   age (#39); the ACK is never the proof;
+ * - the command protocol says "If no acknowledgement is received the command must be automatically
+ *   re-sent" (https://mavlink.io/en/services/command.html). Not here: a stream that does not arrive is
+ *   requested again in #39, and the command service with retries comes in v0.4;
+ * - the ACK is unsigned until v0.6, so a forged one can hide a rejection (`docs/security.md`, N-2).
  *
  * Only the ACK's `result` is read. Its `progress` reads 0 when the sender omits the extensions, which is
  * not a real value (#35), and `MAV_RESULT_IN_PROGRESS` is not final, so it is skipped while waiting.
@@ -83,7 +92,7 @@ internal class TelemetryRequester @Inject constructor(
     private suspend fun request(target: TelemetryTarget, stream: TelemetryStream): StreamResult = coroutineScope {
         // Listening before sending, so an answer faster than the send's return is not missed.
         val ack = async(start = CoroutineStart.UNDISPATCHED) {
-            withTimeoutOrNull(ACK_TIMEOUT) { session.messages.first { it.isFinalAckFrom(target.systemId) } }
+            withTimeoutOrNull(ACK_TIMEOUT) { session.messages.first { it.isFinalAckFrom(target) } }
         }
         when (sender.send(setMessageInterval(target.systemId, stream), target.address)) {
             SendResult.Sent -> ack.await()?.let { received -> resultOf(received.message as CommandAck) }
@@ -96,10 +105,11 @@ internal class TelemetryRequester @Inject constructor(
         }
     }
 
-    private fun ReceivedMessage.isFinalAckFrom(systemId: SystemId): Boolean {
+    private fun ReceivedMessage.isFinalAckFrom(target: TelemetryTarget): Boolean {
         val ack = message as? CommandAck ?: return false
-        return this.systemId == systemId.value &&
+        return systemId == target.systemId.value &&
             componentId == MAV_COMP_ID_AUTOPILOT1 &&
+            sender == target.address &&
             ack.command == MAV_CMD_SET_MESSAGE_INTERVAL &&
             ack.result != MAV_RESULT_IN_PROGRESS &&
             ack.isForThisGcs()
@@ -143,7 +153,11 @@ internal class TelemetryRequester @Inject constructor(
     )
 
     companion object {
-        /** How long to wait for each request's COMMAND_ACK. */
+        /**
+         * How long to wait for each request's COMMAND_ACK. Not extended after `MAV_RESULT_IN_PROGRESS`, as the
+         * command protocol advises for long-running commands ("the GCS should have a much increased timeout"):
+         * `MAV_CMD_SET_MESSAGE_INTERVAL` is not one. Do not copy this into a command service.
+         */
         val ACK_TIMEOUT: Duration = 1.seconds
 
         /** `MAV_CMD_SET_MESSAGE_INTERVAL` (`common.xml`): param1 message ID, param2 interval in µs. */

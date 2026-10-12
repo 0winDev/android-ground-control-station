@@ -156,6 +156,46 @@ class TelemetryRequesterTest {
     }
 
     @Test
+    fun `GIVEN ACKs from another address WHEN requesting THEN they are ignored`() = runTest {
+        mockLog()
+        vehicleAnswers { ack(MAV_RESULT_ACCEPTED).copy(sender = OTHER_ADDRESS) }
+
+        val result = requester.requestAll(TARGET)
+
+        result shouldBeEqualTo List(STREAMS) { StreamResult.NoAck }
+    }
+
+    /**
+     * A known limit (see the class KDoc): the ACK names no message, so ATTITUDE's late DENIED (1.02 s) is taken
+     * as the answer to GLOBAL_POSITION_INT (sent at 1 s), and every later answer shifts by one.
+     */
+    @Test
+    fun `GIVEN an ACK later than its timeout WHEN requesting THEN it answers the next request`() = runTest {
+        mockLog()
+        vehicleAnswers(after = { command ->
+            if (command.param1 ==
+                ATTITUDE_ID
+            ) {
+                LATE
+            } else {
+                ANSWER_DELAY
+            }
+        }) { command ->
+            ack(if (command.param1 == ATTITUDE_ID) MAV_RESULT_DENIED else MAV_RESULT_ACCEPTED)
+        }
+
+        val result = requester.requestAll(TARGET)
+
+        result shouldBeEqualTo listOf(
+            StreamResult.NoAck,
+            StreamResult.Rejected(MAV_RESULT_DENIED),
+            StreamResult.Accepted,
+            StreamResult.Accepted,
+            StreamResult.Accepted,
+        )
+    }
+
+    @Test
     fun `GIVEN ACKs without extensions WHEN requesting THEN their zero targets are accepted as the answer`() = runTest {
         vehicleAnswers { ack(MAV_RESULT_ACCEPTED, targetSystem = 0, targetComponent = 0) }
 
@@ -258,20 +298,26 @@ class TelemetryRequesterTest {
             sent.map { it.param1 } shouldBeEqualTo STREAM_IDS.take(2)
         }
 
-    /** The vehicle answers each COMMAND_LONG sent with [answer], or not at all when it gives `null`. */
-    private fun TestScope.vehicleAnswers(answer: (CommandLong) -> ReceivedMessage?) {
+    /**
+     * The vehicle answers each COMMAND_LONG sent with [answer], [after] virtual ms later, or not at all when
+     * [answer] gives `null`.
+     */
+    private fun TestScope.vehicleAnswers(
+        after: (CommandLong) -> Long = { ANSWER_DELAY },
+        answer: (CommandLong) -> ReceivedMessage?,
+    ) {
         coEvery { sender.send(any<CommandLong>(), VEHICLE_ADDRESS) } coAnswers {
             val command = firstArg<CommandLong>()
             sent += command
-            answer(command)?.let { answerLater(it) }
+            answer(command)?.let { answerLater(it, after = after(command)) }
             SendResult.Sent
         }
     }
 
     /** Puts [answers] on the link after the send returns, as a real vehicle's reply arrives later. */
-    private fun TestScope.answerLater(vararg answers: ReceivedMessage) {
+    private fun TestScope.answerLater(vararg answers: ReceivedMessage, after: Long = ANSWER_DELAY) {
         backgroundScope.launch {
-            delay(ANSWER_DELAY)
+            delay(after)
             answers.forEach { messages.emit(it) }
         }
     }
@@ -291,11 +337,15 @@ class TelemetryRequesterTest {
         const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
         const val STREAMS = 5
         const val VFR_HUD_ID = 74f
+        const val ATTITUDE_ID = 30f
         const val MAV_RESULT_ACCEPTED = 0
         const val MAV_RESULT_DENIED = 2
         const val MAV_RESULT_IN_PROGRESS = 5
         const val ACK_TIMEOUT_MILLIS = 1_000L
         const val ANSWER_DELAY = 50L
+
+        // 20 ms past the timeout: lands while the next request waits, before that request's own answer (50 ms).
+        const val LATE = 1_020L
         const val ONE_MINUTE = 60_000L
 
         // The first request times out at 1 s, so the second one is in flight when the vehicle is lost.
@@ -303,6 +353,7 @@ class TelemetryRequesterTest {
 
         val STREAM_IDS = listOf(30f, 33f, 74f, 24f, 1f)
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
+        val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
         val TARGET = TelemetryTarget(SystemId(VEHICLE_SYSTEM_ID), VEHICLE_ADDRESS)
 
         fun ack(result: Int, targetSystem: Int = GCS_SYSTEM_ID, targetComponent: Int = GCS_COMPONENT_ID) =

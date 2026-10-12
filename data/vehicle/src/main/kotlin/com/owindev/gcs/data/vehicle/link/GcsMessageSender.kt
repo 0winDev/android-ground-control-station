@@ -20,6 +20,11 @@ import kotlinx.coroutines.sync.withLock
  * The number advances only for frames actually sent and wraps after 255. Senders run in different
  * coroutines (the HEARTBEAT loop, the telemetry requests), so encoding, sending and advancing happen under
  * one lock: a frame is never sent with a number another frame already used.
+ *
+ * Known limit: a sender cancelled while the socket write is under way (a telemetry round cut short by a
+ * lost link) does not advance the number even if the frame left, so the next frame repeats it. The vehicle
+ * then counts one more lost packet than there was; nothing else depends on it. Advancing anyway would do
+ * the opposite when the frame did not leave.
  */
 @Singleton
 internal class GcsMessageSender @Inject constructor(private val transport: UdpTransport) {
