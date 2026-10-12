@@ -23,7 +23,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingCommand
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,10 +30,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -54,8 +52,9 @@ import kotlinx.coroutines.launch
  *   socket closes because nobody observes the link, the vehicle stops hearing this GCS and its own GCS
  *   failsafe can act. It only reads the current state, so it never keeps the link open by itself;
  * - the **telemetry** job ([TelemetryRequester]) asks the active vehicle for the HUD's telemetry each time
- *   it becomes CONNECTED (REQ-023), and never any other system ID. It only listens for answers while it
- *   is waiting for one.
+ *   it becomes CONNECTED (REQ-023), and never any other system ID. The watchdog tells it of every change
+ *   of the active vehicle's link, in order, so a LOST followed at once by a CONNECTED still starts a new
+ *   round. It only listens for answers while it is waiting for one.
  *
  * The first vehicle heard becomes the [activeSystemId] and stays so (REQ-020); the others are kept in the
  * map like any vehicle, never merged into it.
@@ -86,6 +85,13 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val mutableActiveSystemId = MutableStateFlow<SystemId?>(null)
     private val events = Channel<Event>(Channel.UNLIMITED)
 
+    /**
+     * Each change of the active vehicle's link, for the telemetry job: its target when it becomes CONNECTED,
+     * `null` when it is lost. A channel, not a state: two changes in a row must both arrive, and there is a
+     * single consumer, so nothing is replayed to a late one.
+     */
+    private val activeLinkChanges = Channel<TelemetryTarget?>(Channel.UNLIMITED)
+
     /** Where each vehicle's last HEARTBEAT came from; written only by the watchdog. */
     @Volatile
     private var addresses: Map<SystemId, InetSocketAddress> = emptyMap()
@@ -94,7 +100,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         scope.launch { watch() }
         scope.launch { listenWhileObserved() }
         scope.launch { heartbeatSender.run(::activeAddressWhileConnected) }
-        scope.launch { telemetryRequester.run(activeTargetWhileConnected()) }
+        scope.launch { telemetryRequester.run(activeLinkChanges.receiveAsFlow()) }
         mutableVehicles.asStateFlow()
     }
 
@@ -146,7 +152,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // link must not silently take the operator's place.
                         if (mutableActiveSystemId.value == null) mutableActiveSystemId.value = systemId
                         addresses += systemId to event.sender
-                        mutableVehicles.value += systemId to Vehicle(event.state, link, event.at)
+                        update(systemId, Vehicle(event.state, link, event.at))
                         if (link == VehicleLink.CONNECTED) {
                             startTimer(systemId, rule.timeout - elapsed)
                         } else {
@@ -164,7 +170,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                             rule.linkAfter(elapsed) == VehicleLink.CONNECTED ->
                                 startTimer(event.systemId, rule.timeout - elapsed)
 
-                            else -> mutableVehicles.value += event.systemId to vehicle.copy(link = VehicleLink.LOST)
+                            else -> update(event.systemId, vehicle.copy(link = VehicleLink.LOST))
                         }
                     }
                 }
@@ -177,6 +183,25 @@ internal class DefaultVehicleRepository @Inject constructor(
             mutableVehicles.update { vehicles ->
                 vehicles.mapValues { (_, vehicle) -> vehicle.copy(link = VehicleLink.LOST) }
             }
+            activeLinkChanges.trySend(null)
+            activeLinkChanges.close()
+        }
+    }
+
+    /**
+     * Writes [vehicle] and tells the telemetry job if the active vehicle's link changed. Only the watchdog
+     * calls it, after writing the vehicle's address.
+     */
+    private fun update(systemId: SystemId, vehicle: Vehicle) {
+        val before = mutableVehicles.value[systemId]?.link ?: VehicleLink.LOST
+        mutableVehicles.value += systemId to vehicle
+        if (systemId == mutableActiveSystemId.value && vehicle.link != before) {
+            val target = if (vehicle.link == VehicleLink.CONNECTED) {
+                TelemetryTarget(systemId, addresses.getValue(systemId))
+            } else {
+                null
+            }
+            activeLinkChanges.trySend(target)
         }
     }
 
@@ -193,17 +218,6 @@ internal class DefaultVehicleRepository @Inject constructor(
             rule.linkAfter(vehicle.lastHeartbeat.elapsedNow()) == VehicleLink.CONNECTED
         return if (connected) addresses[systemId] else null
     }
-
-    /**
-     * The active vehicle and its address while it is CONNECTED, `null` otherwise; a new value each time it
-     * becomes CONNECTED again. The watchdog writes the address before the vehicle, so it is always there.
-     */
-    private fun activeTargetWhileConnected(): Flow<TelemetryTarget?> =
-        combine(mutableActiveSystemId, mutableVehicles) { systemId, vehicles ->
-            systemId?.takeIf { vehicles[it]?.link == VehicleLink.CONNECTED }
-        }
-            .distinctUntilChanged()
-            .map { systemId -> systemId?.let { TelemetryTarget(it, addresses.getValue(it)) } }
 
     private sealed interface Event {
         data class Heard(val state: VehicleState, val at: ComparableTimeMark, val sender: InetSocketAddress) : Event

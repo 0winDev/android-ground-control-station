@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.state
 
+import android.util.Log
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -20,7 +21,9 @@ import io.mockk.CapturingSlot
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.unmockkStatic
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.SocketException
@@ -45,6 +48,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -54,6 +58,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.amshove.kluent.shouldBeEqualTo
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -86,6 +91,11 @@ class DefaultVehicleRepositoryTest {
             telemetryRequester = telemetryRequester,
             scope = testScope.backgroundScope,
         )
+    }
+
+    @AfterEach
+    fun tearDown() {
+        unmockkStatic(Log::class)
     }
 
     @Tag("REQ-018")
@@ -671,9 +681,9 @@ class DefaultVehicleRepositoryTest {
             repository.vehicles.launchIn(backgroundScope)
             runCurrent()
 
-            val result = telemetryTargets.captured.take(2).toList()
+            val result = telemetryTargets.captured.take(1).toList()
 
-            result shouldBeEqualTo listOf(null, TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS))
+            result shouldBeEqualTo listOf(TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS))
         }
 
     @Tag("REQ-023")
@@ -688,9 +698,9 @@ class DefaultVehicleRepositoryTest {
             repository.vehicles.launchIn(backgroundScope)
             runCurrent()
 
-            val result = telemetryTargets.captured.take(3).toList()
+            val result = telemetryTargets.captured.take(2).toList()
 
-            result shouldBeEqualTo listOf(null, TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS), null)
+            result shouldBeEqualTo listOf(TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS), null)
         }
 
     @Tag("REQ-023")
@@ -705,14 +715,66 @@ class DefaultVehicleRepositoryTest {
             repository.vehicles.launchIn(backgroundScope)
             runCurrent()
 
-            val result = telemetryTargets.captured.take(4).toList()
+            val result = telemetryTargets.captured.take(3).toList()
 
             result shouldBeEqualTo listOf(
-                null,
                 TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
                 null,
                 TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
             )
+        }
+
+    /**
+     * The telemetry job busy while the vehicle is lost and heard again: both changes still reach it, so a
+     * new round starts. A state that only kept the latest value would show CONNECTED twice and lose it.
+     */
+    @Tag("REQ-023")
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the telemetry job is busy WHEN the vehicle is lost and heard again THEN it still gets both changes`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                WELL_PAST_TIMEOUT to DISARMED_GUIDED,
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            runCurrent()
+
+            val result = telemetryTargets.captured.onEach { delay(BUSY_PAST_RECOVERY) }.take(3).toList()
+
+            result shouldBeEqualTo listOf(
+                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                null,
+                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+            )
+        }
+
+    @Tag("REQ-023")
+    @Test
+    fun `GIVEN a round waiting for ACKs WHEN the last observer leaves THEN the socket closes on time all the same`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>()) } returns 0
+            var closedAt: Long? = null
+            val start = testScheduler.timeSource.markNow()
+            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
+                .onCompletion { closedAt = start.elapsedNow().inWholeMilliseconds }
+            val session = LinkSession(transport = transport, scope = backgroundScope)
+            val requesting = DefaultVehicleRepository(
+                session = session,
+                timeSource = testScheduler.timeSource,
+                rule = LinkLossRule(),
+                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+                telemetryRequester = TelemetryRequester(GcsMessageSender(transport), session),
+                scope = backgroundScope,
+            )
+            val observer = requesting.vehicles.launchIn(backgroundScope)
+            delay(OBSERVED_BRIEFLY)
+            observer.cancel()
+
+            delay(SESSION_STOPPED)
+
+            closedAt shouldBeEqualTo SESSION_CLOSED_AFTER_OBSERVED_BRIEFLY
         }
 
     /**
@@ -754,6 +816,12 @@ private const val HEARTBEAT_PERIOD = 1_000L
 
 /** The first observer leaves after the first HEARTBEAT; the session then stops 5 s later (at 6.2 s). */
 private const val OBSERVED_BRIEFLY = 1_200L
+
+/** The observer leaves at 1.2 s and the session waits 5 s more: closed at 6.2 s, whoever else is listening. */
+private const val SESSION_CLOSED_AFTER_OBSERVED_BRIEFLY = 6_200L
+
+/** Longer than from the first HEARTBEAT (0.1 s) to the LOST (3.1 s) and the recovery (4.1 s). */
+private const val BUSY_PAST_RECOVERY = 5_000L
 
 /** From the observer leaving to 7.2 s: the session has stopped but the last HEARTBEAT (6 s) is not 3 s old. */
 private const val UNTIL_SESSION_STOPPED_BEFORE_TIMEOUT = 6_000L
