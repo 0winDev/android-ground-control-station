@@ -40,10 +40,12 @@ parsing `common.xml` alone does not find it.
 | SYS_STATUS (1) | `common.xml` | 124 |
 | SERVO_OUTPUT_RAW (36) | `common.xml` | 222 |
 | POWER_STATUS (125) | `common.xml` | 203 |
+| COMMAND_LONG (76) | `common.xml` | 152 |
+| COMMAND_ACK (77) | `common.xml` | 143 |
 
 With these values, pymavlink's `x25crc` over bytes 1 to 10 + LEN of each `.bin`, then CRC_EXTRA, equals
-the frame's checksum bytes for all seven fixtures (truncated ones included: the checksum covers the
-bytes on the wire).
+the frame's checksum bytes for all seven fixtures above and every COMMAND fixture (truncated ones
+included: the checksum covers the bytes on the wire).
 
 ## `heartbeat/`
 
@@ -163,5 +165,54 @@ derived/attitude-signed.bin             fd 1c 01 00 2a 01 01 1e 00 00 3f 0f 06 0
 `derived/session-stream.bin` as a parser input (counts from pymavlink, printed by `derive_fixtures.py`): 5,524 frames, 5,522 MAVLink 2 frames (all incompat `0x00`, 39 message
 IDs including ArduPilot-dialect ones), 133 of them HEARTBEAT, plus 2 MAVLink 1 frames (`0xFE`, COMMAND_LONG, 41 bytes each, no `0xFD` inside). With a
 lookup that knows only HEARTBEAT, the other 5,389 MAVLink 2 frames are unknown message IDs.
-With the full v0.1 message table (#10): 133 HEARTBEAT, 325 SYS_STATUS, 130 SERVO_OUTPUT_RAW and 325
-POWER_STATUS frames are known, and the other 4,609 MAVLink 2 frames are unknown message IDs.
+With the full message table (#10, #35): 133 HEARTBEAT, 325 SYS_STATUS, 130 SERVO_OUTPUT_RAW, 325
+POWER_STATUS, 11 COMMAND_LONG and 13 COMMAND_ACK frames are known, and the other 4,585 MAVLink 2 frames
+are unknown message IDs.
+
+## `command/` and the COMMAND fixtures in `derived/` (#35)
+
+COMMAND_LONG (76) and COMMAND_ACK (77). `heartbeat/session.tlog` already holds them as MAVLink 2 frames:
+11 COMMAND_LONGs sent by Mission Planner (system 255, component 190) and 13 COMMAND_ACKs from ArduCopter
+(system 1, component 1). Only the 2 COMMAND_LONGs Mission Planner broadcasts to system 0 are MAVLink 1,
+so no new capture was needed. `command/` holds real frames extracted from the session; the `derived/`
+ones are re-packed **by pymavlink 2.4.50** from them (same seq, system and component), never by our
+codec. Regenerate with `py tools/fixtures/derive_fixtures.py` (same bytes).
+
+Wire layout (offsets from pymavlink's `mavparse` over `common.xml`):
+
+- COMMAND_LONG, full LEN 33, no extensions: `param1`…`param7` (float, offsets 0–24), `command` (uint16,
+  28), `target_system` (30), `target_component` (31), `confirmation` (32). Floats are IEEE-754 single
+  precision, little-endian.
+- COMMAND_ACK, LEN 3 without extensions, full LEN 10: `command` (uint16, 0), `result` (uint8, 2), then
+  the extensions **in XML order, not sorted by size**: `progress` (uint8, 3), `result_param2` (**int32**,
+  4), `target_system` (8), `target_component` (9).
+
+| File | How it was made | Fields (pymavlink) | Used for |
+|---|---|---|---|
+| `command/set-message-interval.bin` | Real COMMAND_LONG (seq 81) from Mission Planner: `MAV_CMD_SET_MESSAGE_INTERVAL` (511) | target 1/1, command 511, confirmation 0, param1 271.0 (message ID), param2 200000.0 (interval in µs), param3–7 0.0. LEN 32: the trailing `confirmation` 0 is truncated | Encoder: byte-identical to a real GCS request that ArduCopter accepted (REQ-022) |
+| `command/set-message-interval-ack.bin` | ArduCopter's real COMMAND_ACK (seq 194) to that request | command 511, result 0 (`MAV_RESULT_ACCEPTED`), progress 0, result_param2 0, target 255/190. LEN 10: the non-zero targets keep every extension on the wire | Decoder: a real ACK, extensions included (REQ-022) |
+| `command/command-long-confirmation.bin` | Real COMMAND_LONG (seq 138) from Mission Planner: a resend of `MAV_CMD_REQUEST_MESSAGE` (512) | target 1/1, command 512, confirmation 1, param1 259.0, param2–7 0.0. LEN 33 | Encoder: a full-length COMMAND_LONG |
+| `derived/command-long-all-params.bin` | The SET_MESSAGE_INTERVAL re-packed with seven distinct params, command `0x1234` (arbitrary, not a real command) and confirmation 7 | params 1.5, -2.25, NaN (`00 00 c0 7f`), 100000.0, -1.0, 0.5, 65535.0; target 1/1 | Encoder: a swapped param slot, float byte order or uint16 byte order shows |
+| `derived/command-ack-extensions.bin` | The ACK re-packed with result 5 (`MAV_RESULT_IN_PROGRESS`), progress 50, result_param2 -123456 | command 511, result 5, progress 50, result_param2 -123456 (`c0 1d fe ff`), target 255/190 | Decoder: extension offsets and a signed `result_param2` |
+| `derived/command-ack-accepted-no-extensions.bin` | The ACK re-packed with every extension 0 | command 511, result 0, the rest 0. LEN **2**: `result` 0 is a trailing zero too, so it is truncated with the extensions | Decoder: zero-fill restores `result` itself, not only the extensions |
+| `derived/command-ack-failed-no-extensions.bin` | The same with result 4 (`MAV_RESULT_FAILED`) | command 511, result 4, the rest 0. LEN 3 | Decoder: an ACK without extensions, as an older sender writes it |
+
+Raw bytes:
+
+```
+command/set-message-interval.bin                fd 20 00 00 51 ff be 4c 00 00 00 80 87 43 00 50 43 48
+                                                00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                                                00 00 ff 01 01 01 e0 5e
+command/set-message-interval-ack.bin            fd 0a 00 00 c2 01 01 4d 00 00 ff 01 00 00 00 00 00 00
+                                                ff be 3b 24
+command/command-long-confirmation.bin           fd 21 00 00 8a ff be 4c 00 00 00 80 81 43 00 00 00 00
+                                                00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                                                00 02 01 01 01 a6 15
+derived/command-long-all-params.bin             fd 21 00 00 51 ff be 4c 00 00 00 00 c0 3f 00 00 10 c0
+                                                00 00 c0 7f 00 50 c3 47 00 00 80 bf 00 00 00 3f 00 ff
+                                                7f 47 34 12 01 01 07 06 00
+derived/command-ack-extensions.bin              fd 0a 00 00 c2 01 01 4d 00 00 ff 01 05 32 c0 1d fe ff
+                                                ff be 7c bd
+derived/command-ack-accepted-no-extensions.bin  fd 02 00 00 c2 01 01 4d 00 00 ff 01 64 ae
+derived/command-ack-failed-no-extensions.bin    fd 03 00 00 c2 01 01 4d 00 00 ff 01 04 ba 34
+```
