@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Relay between ArduPilot SITL and the app, to check what the app sends (manual SITL tool, #14).
+"""Relay between ArduPilot SITL and the app, to check what the app sends (manual SITL tool, #14, #36).
 
 Downlink: every frame SITL sends on a TCP port is forwarded as one UDP datagram to the emulator
 (host port redirected into the app's 14550). Uplink: whatever the app sends back arrives at this relay's
 UDP socket (the emulator NAT replies to the sender address), is decoded by pymavlink (the reference
 decoder) and logged, and is forwarded to SITL so the vehicle hears it.
+
+Telemetry streams (#36): every --rates-every seconds it logs the rate at which the vehicle sent each message
+the app requests (counted on the SITL side, so even while the downlink is cut), and it logs every
+COMMAND_LONG from the app with the vehicle's COMMAND_ACK and how long the answer took.
 
 Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), q = quit.
 With --background (no terminal; on Windows NUL even claims to be one): create the file
@@ -29,6 +33,12 @@ from pymavlink import mavutil
 from pymavlink.dialects.v20 import common
 
 CONTROL_POLL_S = 0.2
+# The streams the app requests (data/vehicle/.../telemetry/TelemetryStream.kt), by pymavlink type name.
+REQUESTED = ("ATTITUDE", "GLOBAL_POSITION_INT", "VFR_HUD", "GPS_RAW_INT", "SYS_STATUS")
+counts = {name: 0 for name in REQUESTED}
+counts_lock = threading.Lock()
+# When each COMMAND_LONG from the app reached the relay, by command, to time the vehicle's answer.
+commands_sent = {}
 downlink_on = threading.Event()
 downlink_on.set()
 stop = threading.Event()
@@ -61,6 +71,16 @@ def downlink(sitl, udp: socket.socket, app: tuple) -> None:
                 last = state
         if msg.get_type() == "STATUSTEXT":
             log(f"VEHICLE STATUSTEXT: {msg.text}")
+        if msg.get_srcSystem() == 1 and msg.get_type() in counts:
+            with counts_lock:
+                counts[msg.get_type()] += 1
+        if msg.get_type() == "COMMAND_ACK":
+            sent_at = commands_sent.pop(msg.command, None)
+            latency = "" if sent_at is None else f" after {(time.monotonic() - sent_at) * 1000:.0f} ms"
+            log(
+                f"VEHICLE COMMAND_ACK from {msg.get_srcSystem()}/{msg.get_srcComponent()} command={msg.command} "
+                f"result={msg.result} target={msg.target_system}/{msg.target_component}{latency}"
+            )
         if downlink_on.is_set():
             udp.sendto(bytes(msg.get_msgbuf()), app)
 
@@ -78,6 +98,15 @@ def uplink(sitl, udp: socket.socket) -> None:
             continue
         sitl.write(data)
         for msg in parser.parse_buffer(data) or []:
+            if msg.get_type() == "COMMAND_LONG":
+                commands_sent[msg.command] = time.monotonic()
+                log(
+                    f"APP COMMAND_LONG seq={msg.get_seq()} sys={msg.get_srcSystem()} comp={msg.get_srcComponent()} "
+                    f"to {msg.target_system}/{msg.target_component} command={msg.command} "
+                    f"params={[msg.param1, msg.param2, msg.param3, msg.param4, msg.param5, msg.param6, msg.param7]} "
+                    f"confirmation={msg.confirmation}"
+                )
+                continue
             if msg.get_type() != "HEARTBEAT":
                 log(f"APP {msg.get_type()} from {sender}")
                 continue
@@ -95,6 +124,16 @@ def uplink(sitl, udp: socket.socket) -> None:
                 first_logged = True
 
 
+def rates(every_s: float) -> None:
+    """Logs the vehicle's rate of each requested message over the last [every_s] seconds."""
+    while not stop.wait(every_s):
+        with counts_lock:
+            snapshot = dict(counts)
+            for name in counts:
+                counts[name] = 0
+        log("RATES " + " ".join(f"{name}={snapshot[name] / every_s:.1f}Hz" for name in REQUESTED))
+
+
 def main() -> None:
     global log_file
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -102,6 +141,7 @@ def main() -> None:
     parser.add_argument("--app", default="127.0.0.1:14561", help="host:port redirected into the emulator")
     parser.add_argument("--log", default="relay-14.log")
     parser.add_argument("--background", action="store_true", help="control by file instead of the terminal")
+    parser.add_argument("--rates-every", type=float, default=5.0, help="seconds between RATES lines")
     args = parser.parse_args()
     host, port = args.app.rsplit(":", 1)
     app = (host, int(port))
@@ -115,7 +155,7 @@ def main() -> None:
     udp.settimeout(0.5)
     log(f"relay up: SITL {args.sitl} -> app {app}; app replies come back to {udp.getsockname()}")
 
-    for target in (lambda: downlink(sitl, udp, app), lambda: uplink(sitl, udp)):
+    for target in (lambda: downlink(sitl, udp, app), lambda: uplink(sitl, udp), lambda: rates(args.rates_every)):
         threading.Thread(target=target, daemon=True).start()
     if not args.background:
         for line in sys.stdin:
