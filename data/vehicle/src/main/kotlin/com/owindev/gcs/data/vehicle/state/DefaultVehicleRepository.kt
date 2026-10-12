@@ -10,6 +10,8 @@ import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
 import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingCommand
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,7 +31,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -37,7 +42,7 @@ import kotlinx.coroutines.launch
  * Keeps every vehicle heard on the shared [LinkSession], keyed by system ID (REQ-016), and watches each
  * one's link (REQ-017, REQ-019).
  *
- * Three jobs in the application scope, all started on first use:
+ * Four jobs in the application scope, all started on first use:
  * - the **listener** collects HEARTBEATs only while [vehicles] is observed (plus [LINK_STOP_TIMEOUT]),
  *   so the socket is not kept open for nobody;
  * - the **watchdog** owns the map and the per-vehicle timers, and runs for as long as the app does. A
@@ -47,7 +52,10 @@ import kotlinx.coroutines.launch
  * - the **heartbeat** job ([GcsHeartbeatSender]) announces this GCS to the active vehicle, at the address
  *   its HEARTBEATs come from, only while that vehicle is CONNECTED (REQ-021): once it is lost, or the
  *   socket closes because nobody observes the link, the vehicle stops hearing this GCS and its own GCS
- *   failsafe can act. It only reads the current state, so it never keeps the link open by itself.
+ *   failsafe can act. It only reads the current state, so it never keeps the link open by itself;
+ * - the **telemetry** job ([TelemetryRequester]) asks the active vehicle for the HUD's telemetry each time
+ *   it becomes CONNECTED (REQ-023), and never any other system ID. It only listens for answers while it
+ *   is waiting for one.
  *
  * The first vehicle heard becomes the [activeSystemId] and stays so (REQ-020); the others are kept in the
  * map like any vehicle, never merged into it.
@@ -70,6 +78,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val timeSource: TimeSource.WithComparableMarks,
     private val rule: LinkLossRule,
     private val heartbeatSender: GcsHeartbeatSender,
+    private val telemetryRequester: TelemetryRequester,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository {
 
@@ -85,6 +94,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         scope.launch { watch() }
         scope.launch { listenWhileObserved() }
         scope.launch { heartbeatSender.run(::activeAddressWhileConnected) }
+        scope.launch { telemetryRequester.run(activeTargetWhileConnected()) }
         mutableVehicles.asStateFlow()
     }
 
@@ -183,6 +193,17 @@ internal class DefaultVehicleRepository @Inject constructor(
             rule.linkAfter(vehicle.lastHeartbeat.elapsedNow()) == VehicleLink.CONNECTED
         return if (connected) addresses[systemId] else null
     }
+
+    /**
+     * The active vehicle and its address while it is CONNECTED, `null` otherwise; a new value each time it
+     * becomes CONNECTED again. The watchdog writes the address before the vehicle, so it is always there.
+     */
+    private fun activeTargetWhileConnected(): Flow<TelemetryTarget?> =
+        combine(mutableActiveSystemId, mutableVehicles) { systemId, vehicles ->
+            systemId?.takeIf { vehicles[it]?.link == VehicleLink.CONNECTED }
+        }
+            .distinctUntilChanged()
+            .map { systemId -> systemId?.let { TelemetryTarget(it, addresses.getValue(it)) } }
 
     private sealed interface Event {
         data class Heard(val state: VehicleState, val at: ComparableTimeMark, val sender: InetSocketAddress) : Event

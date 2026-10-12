@@ -14,9 +14,13 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
+import io.mockk.CapturingSlot
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.SocketException
@@ -28,6 +32,7 @@ import kotlin.time.TestTimeSource
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.ClosedSendChannelException
@@ -46,6 +51,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.amshove.kluent.shouldBeEqualTo
 import org.junit.jupiter.api.BeforeEach
@@ -57,22 +63,27 @@ import org.junit.jupiter.api.Test
  * watchdog), in virtual time: the repository's clock is the test scheduler's, so no test sleeps for real.
  * Expected values come from pymavlink and the ArduCopter docs (`src/test/resources/README.md`).
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class DefaultVehicleRepositoryTest {
 
     private val testScope = TestScope()
     private val transport: UdpTransport = mockk()
+    private val telemetryRequester: TelemetryRequester = mockk()
+    private val telemetryTargets: CapturingSlot<Flow<TelemetryTarget?>> = slot()
 
     private lateinit var repository: DefaultVehicleRepository
 
     @BeforeEach
     fun setUp() {
         coEvery { transport.send(any(), any()) } returns SendResult.Sent
+        coEvery { telemetryRequester.run(capture(telemetryTargets)) } coAnswers { awaitCancellation() }
         val session = LinkSession(transport = transport, scope = testScope.backgroundScope)
         repository = DefaultVehicleRepository(
             session = session,
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
             heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+            telemetryRequester = telemetryRequester,
             scope = testScope.backgroundScope,
         )
     }
@@ -371,6 +382,7 @@ class DefaultVehicleRepositoryTest {
             timeSource = testScheduler.timeSource,
             rule = LinkLossRule(timeout = CUSTOM_TIMEOUT),
             heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+            telemetryRequester = telemetryRequester,
             scope = backgroundScope,
         )
 
@@ -563,6 +575,7 @@ class DefaultVehicleRepositoryTest {
                 timeSource = deviceClock,
                 rule = LinkLossRule(),
                 heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+                telemetryRequester = telemetryRequester,
                 scope = backgroundScope,
             )
             sleepy.vehicles.launchIn(backgroundScope)
@@ -598,6 +611,7 @@ class DefaultVehicleRepositoryTest {
                 timeSource = FailsOnSecondMark(testScheduler.timeSource),
                 rule = LinkLossRule(),
                 heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+                telemetryRequester = telemetryRequester,
                 scope = appScope,
             )
             failing.vehicles.launchIn(backgroundScope)
@@ -632,6 +646,7 @@ class DefaultVehicleRepositoryTest {
                 timeSource = testScheduler.timeSource,
                 rule = failingRule,
                 heartbeatSender = idleSender,
+                telemetryRequester = telemetryRequester,
                 scope = appScope,
             )
             failing.vehicles.launchIn(backgroundScope)
@@ -642,6 +657,61 @@ class DefaultVehicleRepositoryTest {
             crashes.map { it::class } shouldBeEqualTo listOf(
                 IllegalStateException::class,
                 ClosedSendChannelException::class,
+            )
+        }
+
+    @Tag("REQ-023")
+    @Test
+    fun `GIVEN the active vehicle is heard WHEN observing THEN its telemetry is requested at its address`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                afterwards = { emitAll(heartbeatEverySecond(DISARMED_STABILIZE)) },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            runCurrent()
+
+            val result = telemetryTargets.captured.take(2).toList()
+
+            result shouldBeEqualTo listOf(null, TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS))
+        }
+
+    @Tag("REQ-023")
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN another vehicle still heard WHEN the active one is LOST THEN no telemetry is requested from it`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_LOITER,
+                afterwards = { emitAll(heartbeatEverySecond(SYSTEM_2_LOITER)) },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            runCurrent()
+
+            val result = telemetryTargets.captured.take(3).toList()
+
+            result shouldBeEqualTo listOf(null, TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS), null)
+        }
+
+    @Tag("REQ-023")
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the active vehicle is LOST WHEN it is heard again THEN its telemetry is requested again`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                WELL_PAST_TIMEOUT to DISARMED_GUIDED,
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            runCurrent()
+
+            val result = telemetryTargets.captured.take(4).toList()
+
+            result shouldBeEqualTo listOf(
+                null,
+                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                null,
+                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
             )
         }
 
