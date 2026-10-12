@@ -216,3 +216,7 @@ Add one line per closed issue: what surprised us and what to do differently.
   and zero-fill cannot produce a field's "invalid" value (COMMAND_ACK `progress` unknown is 255), so the data
   layer must not read a restored 0 as real. List an existing capture with pymavlink before planning a new one:
   `session.tlog` already had the MAVLink 2 commands. ktlint and detekt skip KDoc line length; check it by hand.
+- #36 Telemetry streams: ArduPilot keeps message rates per channel, so Mission Planner's requests on TCP 5760
+  never reach the relay's 5763; measure a baseline on the app's own channel. A trigger derived from StateFlows
+  can conflate LOST → CONNECTED into nothing; let the single writer send each transition through a Channel. In
+  virtual time, a timeout and an answer due at the same instant race: keep test timings off each other's edges.
