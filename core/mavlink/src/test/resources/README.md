@@ -50,8 +50,8 @@ The last three were also computed with `mavparse` from `common.xml` and `standar
 master (#37): same CRC_EXTRA, full length and wire order.
 
 With these values, pymavlink's `x25crc` over bytes 1 to 10 + LEN of each `.bin`, then CRC_EXTRA, equals
-the frame's checksum bytes for all seven fixtures above and every COMMAND and telemetry fixture
-(truncated ones included: the checksum covers the bytes on the wire).
+the frame's checksum bytes for the seven `heartbeat/` and `truncated/` fixtures and for every COMMAND and
+telemetry fixture (truncated ones included: the checksum covers the bytes on the wire).
 
 ## `heartbeat/`
 

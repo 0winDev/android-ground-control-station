@@ -8,9 +8,9 @@ package com.owindev.gcs.core.mavlink
  * (GLOBAL_POSITION_INT) and `common.xml` (the others), which includes both, in
  * https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked against
  * `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK (#35) and ATTITUDE, GLOBAL_POSITION_INT and
- * VFR_HUD (#37) computed with pymavlink's `mavparse` from both. SYS_STATUS, SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored
- * so far; their fields are decoded later in v0.2. COMMAND_LONG is only sent by the codec, so a received one
- * stays undecoded.
+ * VFR_HUD (#37) computed with pymavlink's `mavparse` from both. SYS_STATUS, SERVO_OUTPUT_RAW and
+ * POWER_STATUS are only validated and restored so far; their fields are decoded later in v0.2. COMMAND_LONG
+ * is only sent by the codec, so a received one stays undecoded.
  */
 object MavlinkMessages : CrcExtraLookup {
 

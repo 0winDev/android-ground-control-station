@@ -112,6 +112,9 @@ sealed interface MavlinkMessage {
      * definition; converting them is up to `:data:vehicle`. Field descriptions quote `standard.xml` on
      * `mavlink/mavlink` master.
      *
+     * The description goes on "The position is in GPS-frame (right-handed, Z-up)", yet the `vz` field says
+     * "positive down"; [vz] follows the field, so a climbing vehicle sends a negative `vz`.
+     *
      * @property timeBootMs "Timestamp (time since system boot)" in ms, a uint32 (hence [Long]).
      * @property lat latitude in degE7 (degrees × 10⁷).
      * @property lon longitude in degE7.
