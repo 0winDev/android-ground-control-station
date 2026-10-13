@@ -9,7 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource
 
 /**
  * The codec's message table against pymavlink 2.4.50's bundled definitions (`minimal.xml` for HEARTBEAT,
- * `common.xml` for the rest), as listed in `src/test/resources/README.md`.
+ * `standard.xml` for GLOBAL_POSITION_INT, `common.xml` for the rest), as listed in `src/test/resources/README.md`.
  */
 class MavlinkMessagesTest {
 
@@ -23,11 +23,15 @@ class MavlinkMessagesTest {
     @Tag("REQ-011")
     @Tag("REQ-013")
     @Tag("REQ-022")
+    @Tag("REQ-024")
     @ParameterizedTest(name = "msgid {0}")
     @CsvSource(
         "0, 50, 9",
         "1, 124, 43",
+        "30, 39, 28",
+        "33, 104, 28",
         "36, 222, 37",
+        "74, 20, 20",
         "125, 203, 6",
         "76, 152, 33",
         "77, 143, 10",
@@ -47,14 +51,14 @@ class MavlinkMessagesTest {
     @Tag("REQ-011")
     @Test
     fun `GIVEN a message outside the table WHEN looking it up THEN it is not supported`() {
-        val attitude = ATTITUDE_ID
+        val scaledPressure = SCALED_PRESSURE_ID
 
-        val result = messages.crcExtraFor(attitude) to messages.fullLengthOf(attitude)
+        val result = messages.crcExtraFor(scaledPressure) to messages.fullLengthOf(scaledPressure)
 
         result shouldBeEqualTo (null to null)
     }
 
     private companion object {
-        const val ATTITUDE_ID = 30
+        const val SCALED_PRESSURE_ID = 29
     }
 }

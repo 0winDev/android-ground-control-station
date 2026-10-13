@@ -33,6 +33,10 @@ object MavlinkDecoder {
     private const val SYSTEM_STATUS_OFFSET = 7
     private const val MAVLINK_VERSION_OFFSET = 8
 
+    private const val ATTITUDE_ID = 30
+    private const val GLOBAL_POSITION_INT_ID = 33
+    private const val VFR_HUD_ID = 74
+
     private const val COMMAND_ACK_ID = 77
 
     // COMMAND_ACK wire layout: command (uint16), result, then the extensions in XML order: progress,
@@ -55,6 +59,9 @@ object MavlinkDecoder {
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
         return when (frame.messageId) {
             HEARTBEAT_ID -> heartbeat(frame.payload)
+            ATTITUDE_ID -> TODO("#37")
+            GLOBAL_POSITION_INT_ID -> TODO("#37")
+            VFR_HUD_ID -> TODO("#37")
             COMMAND_ACK_ID -> commandAck(frame.payload)
             else -> Undecoded(frame.messageId, frame.payload.copyOf(fullLength))
         }

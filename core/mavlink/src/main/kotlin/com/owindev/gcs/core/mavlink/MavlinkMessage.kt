@@ -80,6 +80,87 @@ sealed interface MavlinkMessage {
     ) : MavlinkMessage
 
     /**
+     * ATTITUDE (id 30), as defined in https://mavlink.io/en/messages/common.html#ATTITUDE: "The attitude in
+     * the aeronautical frame (right-handed, Z-down, Y-right, X-front, ZYX, intrinsic)."
+     *
+     * Raw fields in the units of the definition (radians, not degrees); converting them is up to
+     * `:data:vehicle`. Field descriptions quote `common.xml` on `mavlink/mavlink` master.
+     *
+     * @property timeBootMs "Timestamp (time since system boot)" in ms, a uint32 (hence [Long]).
+     * @property roll "Roll angle (-pi..+pi)" in rad.
+     * @property pitch "Pitch angle (-pi..+pi)" in rad.
+     * @property yaw "Yaw angle (-pi..+pi)" in rad.
+     * @property rollspeed "Roll angular speed" in rad/s.
+     * @property pitchspeed "Pitch angular speed" in rad/s.
+     * @property yawspeed "Yaw angular speed" in rad/s.
+     */
+    data class Attitude(
+        val timeBootMs: Long,
+        val roll: Float,
+        val pitch: Float,
+        val yaw: Float,
+        val rollspeed: Float,
+        val pitchspeed: Float,
+        val yawspeed: Float,
+    ) : MavlinkMessage
+
+    /**
+     * GLOBAL_POSITION_INT (id 33), as defined in https://mavlink.io/en/messages/common.html#GLOBAL_POSITION_INT:
+     * "The filtered global position (e.g. fused GPS and accelerometers)."
+     *
+     * Defined in `standard.xml`, which `common.xml` includes. Raw scaled integers in the units of the
+     * definition; converting them is up to `:data:vehicle`. Field descriptions quote `standard.xml` on
+     * `mavlink/mavlink` master.
+     *
+     * @property timeBootMs "Timestamp (time since system boot)" in ms, a uint32 (hence [Long]).
+     * @property lat latitude in degE7 (degrees × 10⁷).
+     * @property lon longitude in degE7.
+     * @property alt "Altitude (MSL)" in mm.
+     * @property relativeAlt "Altitude above home" in mm: not above the ground under the vehicle.
+     * @property vx "Ground X Speed (Latitude, positive north)" in cm/s.
+     * @property vy "Ground Y Speed (Longitude, positive east)" in cm/s.
+     * @property vz "Ground Z Speed (Altitude, positive down)" in cm/s: negative while climbing.
+     * @property hdg "Vehicle heading (yaw angle), 0.0..359.99 degrees" in cdeg, a uint16; "If unknown, set to:
+     * UINT16_MAX" (65535).
+     */
+    // One property per field of the message definition; grouping them would hide that mapping.
+    @Suppress("LongParameterList")
+    data class GlobalPositionInt(
+        val timeBootMs: Long,
+        val lat: Int,
+        val lon: Int,
+        val alt: Int,
+        val relativeAlt: Int,
+        val vx: Int,
+        val vy: Int,
+        val vz: Int,
+        val hdg: Int,
+    ) : MavlinkMessage
+
+    /**
+     * VFR_HUD (id 74), as defined in https://mavlink.io/en/messages/common.html#VFR_HUD: "Metrics typically
+     * displayed on a HUD for fixed wing aircraft."
+     *
+     * Raw fields in the units of the definition. Field descriptions quote `common.xml` on `mavlink/mavlink`
+     * master.
+     *
+     * @property airspeed "Vehicle speed in form appropriate for vehicle type" in m/s.
+     * @property groundspeed "Current ground speed" in m/s.
+     * @property heading "Current heading in compass units (0-360, 0=north)" in degrees, an int16.
+     * @property throttle "Current throttle setting (0 to 100)" in %, a uint16.
+     * @property alt "Current altitude (MSL)" in m.
+     * @property climb "Current climb rate" in m/s.
+     */
+    data class VfrHud(
+        val airspeed: Float,
+        val groundspeed: Float,
+        val heading: Int,
+        val throttle: Int,
+        val alt: Float,
+        val climb: Float,
+    ) : MavlinkMessage
+
+    /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.
      *

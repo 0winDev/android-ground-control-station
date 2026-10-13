@@ -1,9 +1,12 @@
 package com.owindev.gcs.core.mavlink
 
+import com.owindev.gcs.core.mavlink.MavlinkMessage.Attitude
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
+import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
+import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
 import com.owindev.gcs.core.testing.readFixture
 import kotlin.random.Random
 import org.amshove.kluent.AnyException
@@ -201,6 +204,104 @@ class MavlinkDecoderTest {
         )
     }
 
+    @Tag("REQ-024")
+    @Test
+    fun `GIVEN a real SITL ATTITUDE WHEN decoding THEN it has the fields pymavlink decodes`() {
+        val frame = parsedFrame(ATTITUDE)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo Attitude(
+            timeBootMs = 397_119,
+            roll = -0.0010504957f,
+            pitch = -0.0012832552f,
+            yaw = -0.011366294f,
+            rollspeed = -0.00022312743f,
+            pitchspeed = -0.00022124127f,
+            yawspeed = -0.0007730834f,
+        )
+    }
+
+    @Tag("REQ-024")
+    @Test
+    fun `GIVEN an ATTITUDE with distinct floats WHEN decoding THEN each lands in its field and time is unsigned`() {
+        val frame = parsedFrame(ATTITUDE_EDGES)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo Attitude(
+            timeBootMs = LARGE_TIME_BOOT_MS,
+            roll = 0.5f,
+            pitch = -0.25f,
+            yaw = -3.1415927f,
+            rollspeed = 1.5f,
+            pitchspeed = -0.75f,
+            yawspeed = 0.125f,
+        )
+    }
+
+    @Tag("REQ-024")
+    @Test
+    fun `GIVEN a real SITL GLOBAL_POSITION_INT WHEN decoding THEN it has the fields pymavlink decodes`() {
+        val frame = parsedFrame(GLOBAL_POSITION_INT)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo GlobalPositionInt(
+            timeBootMs = 397_289,
+            lat = SITL_LAT,
+            lon = SITL_LON,
+            alt = 587_130,
+            relativeAlt = -13,
+            vx = 1,
+            vy = -1,
+            vz = 0,
+            hdg = 35_935,
+        )
+    }
+
+    @Tag("REQ-024")
+    @Test
+    fun `GIVEN a GLOBAL_POSITION_INT with negatives and unknown hdg WHEN decoding THEN signs and UINT16_MAX hold`() {
+        val frame = parsedFrame(GLOBAL_POSITION_INT_EDGES)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo GlobalPositionInt(
+            timeBootMs = LARGE_TIME_BOOT_MS,
+            lat = SITL_LAT,
+            lon = SITL_LON,
+            alt = -12_345,
+            relativeAlt = -500,
+            vx = -300,
+            vy = 1_234,
+            vz = -150,
+            hdg = UINT16_MAX,
+        )
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-024")
+    @Test
+    fun `GIVEN a real SITL VFR_HUD truncated before throttle WHEN decoding THEN throttle reads as zero`() {
+        val frame = parsedFrame(VFR_HUD)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo sitlVfrHud(throttle = 0, climb = -0.00015098024f)
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-024")
+    @Test
+    fun `GIVEN a VFR_HUD truncated inside throttle WHEN decoding THEN only its high byte reads as zero`() {
+        val frame = parsedFrame(VFR_HUD_EDGES)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo sitlVfrHud(throttle = 65, climb = -2.5f)
+    }
+
     @Tag("REQ-012")
     @Test
     fun `GIVEN frames with random IDs and payloads of any size WHEN decoding THEN nothing is thrown`() {
@@ -223,16 +324,17 @@ class MavlinkDecoderTest {
 
     @Test
     fun `GIVEN a frame whose message is not in the table WHEN decoding THEN it is undecoded with its payload as is`() {
-        val attitude = readFixture(ATTITUDE)
-        val frame = frameOf(ATTITUDE_ID, wirePayload(attitude))
+        val scaledPressure = readFixture(SCALED_PRESSURE)
+        val frame = frameOf(SCALED_PRESSURE_ID, wirePayload(scaledPressure))
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo Undecoded(ATTITUDE_ID, wirePayload(attitude))
+        result shouldBeEqualTo Undecoded(SCALED_PRESSURE_ID, wirePayload(scaledPressure))
     }
 
     @Tag("REQ-013")
     @Tag("REQ-015")
+    @Tag("REQ-024")
     @Test
     fun `GIVEN the SITL session WHEN parsing and decoding THEN each table message comes out as pymavlink counts`() {
         val parser = MavlinkParser(MavlinkMessages)
@@ -269,6 +371,9 @@ class MavlinkDecoderTest {
 
     private fun MavlinkMessage.kind(): String = when (this) {
         is Heartbeat -> "HEARTBEAT"
+        is Attitude -> "ATTITUDE"
+        is GlobalPositionInt -> "GLOBAL_POSITION_INT"
+        is VfrHud -> "VFR_HUD"
         is CommandAck -> "COMMAND_ACK"
         is CommandLong -> "COMMAND_LONG"
         is Undecoded -> "$messageId/${payload.size}"
@@ -279,7 +384,13 @@ class MavlinkDecoderTest {
         const val EXTRA_BYTE = "derived/heartbeat-extra-byte.bin"
         const val POWER_STATUS = "truncated/power_status.bin"
         const val SYS_STATUS = "truncated/sys_status.bin"
-        const val ATTITUDE = "unknown/attitude-fd-in-payload.bin"
+        const val SCALED_PRESSURE = "unknown/scaled-pressure.bin"
+        const val ATTITUDE = "telemetry/attitude.bin"
+        const val ATTITUDE_EDGES = "derived/attitude-edges.bin"
+        const val GLOBAL_POSITION_INT = "telemetry/global-position-int.bin"
+        const val GLOBAL_POSITION_INT_EDGES = "derived/global-position-int-edges.bin"
+        const val VFR_HUD = "telemetry/vfr-hud.bin"
+        const val VFR_HUD_EDGES = "derived/vfr-hud-edges.bin"
         const val SESSION_STREAM = "derived/session-stream.bin"
         const val SET_MESSAGE_INTERVAL_ACK = "command/set-message-interval-ack.bin"
         const val ACK_EXTENSIONS = "derived/command-ack-extensions.bin"
@@ -293,6 +404,17 @@ class MavlinkDecoderTest {
         const val GCS_SYSTEM_ID = 255
         const val GCS_COMPONENT_ID = 190
         const val POWER_STATUS_ID = 125
+
+        // Field values of the telemetry fixtures as pymavlink decodes them (see the fixtures README); floats
+        // are the shortest decimal text of the same float32, printed by tools/fixtures/derive_fixtures.py.
+        const val SITL_LAT = -353_633_514
+        const val SITL_LON = 1_491_652_411
+        const val SITL_AIRSPEED = 0.023872377f
+        const val SITL_GROUNDSPEED = 0.023871899f
+        const val SITL_HEADING = 359
+        const val SITL_ALT_MSL = 587.13f
+        const val LARGE_TIME_BOOT_MS = 4_000_000_000L
+        const val UINT16_MAX = 65_535
         const val SYS_STATUS_ID = 1
         const val HEARTBEAT_ID = 0
 
@@ -301,15 +423,15 @@ class MavlinkDecoderTest {
         const val FUZZ_FRAMES = 10_000
         const val MAX_PAYLOAD = 255
         const val MAX_MESSAGE_ID = 0xFF_FFFF
-        val FUZZ_IDS = listOf(0, 1, 36, 76, 77, 125)
-        const val ATTITUDE_ID = 30
+        val FUZZ_IDS = listOf(0, 1, 30, 33, 36, 74, 76, 77, 125)
+        const val SCALED_PRESSURE_ID = 29
         const val QUADROTOR = 2
         const val ARDUPILOTMEGA = 3
         const val STANDBY = 3
         const val MAVLINK_VERSION = 3
         const val DISARMED_STABILIZE_BASE_MODE = 81
         const val MAX_UINT32 = 4_294_967_295L
-        const val SESSION_UNKNOWN = 4_585L
+        const val SESSION_UNKNOWN = 3_935L
         const val SESSION_MAVLINK1_BYTES = 82L
         const val HEADER_LENGTH = 10
         const val LEN_INDEX = 1
@@ -321,6 +443,9 @@ class MavlinkDecoderTest {
         // "msgid/restored length", so every one of them is checked to be zero-filled to its full length.
         val sessionCounts = sortedMapOf(
             "HEARTBEAT" to 133,
+            "ATTITUDE" to 260,
+            "GLOBAL_POSITION_INT" to 130,
+            "VFR_HUD" to 260,
             "1/43" to 325,
             "36/37" to 130,
             "125/6" to 325,
@@ -338,6 +463,15 @@ class MavlinkDecoderTest {
             customMode = customMode,
             systemStatus = STANDBY,
             mavlinkVersion = MAVLINK_VERSION,
+        )
+
+        fun sitlVfrHud(throttle: Int, climb: Float) = VfrHud(
+            airspeed = SITL_AIRSPEED,
+            groundspeed = SITL_GROUNDSPEED,
+            heading = SITL_HEADING,
+            throttle = throttle,
+            alt = SITL_ALT_MSL,
+            climb = climb,
         )
 
         fun frameOf(messageId: Int, payload: ByteArray) = MavlinkFrame(
