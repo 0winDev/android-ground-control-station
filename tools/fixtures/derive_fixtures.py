@@ -65,9 +65,23 @@ Writes:
                                                 extension byte is missing
   <out>/derived/command-long-broadcast.bin      the SET_MESSAGE_INTERVAL re-packed by pymavlink to target
                                                 0/0: the zero targets and confirmation are truncated, LEN 30
+  <out>/telemetry/attitude.bin                  the first real ATTITUDE (not derived) of heartbeat/session.tlog
+  <out>/telemetry/global-position-int.bin       the first real GLOBAL_POSITION_INT of the session with a
+                                                negative vy, so a real int16 is negative
+  <out>/telemetry/vfr-hud.bin                   the first real VFR_HUD of the session: throttle 0 is
+                                                truncated, LEN 18
+  <out>/unknown/scaled-pressure.bin             the first real SCALED_PRESSURE of the session: a message the
+                                                codec does not decode
+  <out>/derived/attitude-edges.bin              the ATTITUDE re-packed by pymavlink with time_boot_ms above
+                                                Int.MAX_VALUE and distinct floats, yaw near -pi
+  <out>/derived/global-position-int-edges.bin   the GLOBAL_POSITION_INT re-packed by pymavlink with
+                                                time_boot_ms above Int.MAX_VALUE, negative alt,
+                                                relative_alt, vx and vz, and hdg UINT16_MAX (unknown)
+  <out>/derived/vfr-hud-edges.bin               the VFR_HUD re-packed by pymavlink with a negative climb and
+                                                throttle 65: only its zero high byte is truncated (LEN 19)
 
-checks each output with pymavlink before writing it, and prints the session counts the parser tests
-expect.
+checks each output with pymavlink before writing it, prints the decoded fields of the telemetry fixtures
+(floats as the shortest decimal text that is the same float32) and the session counts the tests expect.
 
 Usage:
   py -m pip install --user pymavlink==2.4.50
@@ -76,6 +90,7 @@ Usage:
 
 import argparse
 import io
+import struct
 from pathlib import Path
 
 import pymavlink
@@ -108,6 +123,9 @@ LOITER_MODE = 5  # ArduCopter custom_mode for Loiter, as in heartbeat/disarmed-l
 TRAILING_ZEROS_LENGTH = 6  # custom_mode (4 bytes), type, autopilot; the three zero fields after them go
 TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_HEARTBEAT: "heartbeat",
+    common.MAVLINK_MSG_ID_ATTITUDE: "attitude",
+    common.MAVLINK_MSG_ID_GLOBAL_POSITION_INT: "global_position_int",
+    common.MAVLINK_MSG_ID_VFR_HUD: "vfr_hud",
     common.MAVLINK_MSG_ID_SYS_STATUS: "sys_status",
     common.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW: "servo_output_raw",
     common.MAVLINK_MSG_ID_POWER_STATUS: "power_status",
@@ -132,6 +150,33 @@ SPLIT_RESULT_PARAM2 = 256  # 00 01 00 00: the two high zero bytes are truncated 
 SPLIT_PARAM2_LENGTH = 6  # command, result, progress, the low two bytes of result_param2
 TARGET_SYSTEM_ONLY_LENGTH = 9  # everything but target_component
 BROADCAST_LENGTH = 30  # the seven params and command
+# time_boot_ms above Int.MAX_VALUE (0xEE6B2800): a uint32 read as a signed Int would come out negative.
+LARGE_TIME_BOOT_MS = 4_000_000_000
+# Distinct floats; all but yaw are exact in float32. yaw is packed as the float32 closest to -pi.
+ATTITUDE_EDGES = {
+    "roll": 0.5,
+    "pitch": -0.25,
+    "yaw": -3.141592653589793,
+    "rollspeed": 1.5,
+    "pitchspeed": -0.75,
+    "yawspeed": 0.125,
+}
+# Negative int32 and int16 fields, and hdg UINT16_MAX ("If unknown, set to: UINT16_MAX", common.xml).
+POSITION_EDGES = {
+    "alt": -12345,
+    "relative_alt": -500,
+    "vx": -300,
+    "vy": 1234,
+    "vz": -150,
+    "hdg": 0xFFFF,
+}
+VFR_HUD_CLIMB = -2.5
+VFR_HUD_THROTTLE = 65
+FULL_ATTITUDE_LENGTH = 28
+FULL_GLOBAL_POSITION_INT_LENGTH = 28
+VFR_HUD_EDGES_LENGTH = 19  # throttle 65 is 41 00: its zero high byte, last on the wire, is truncated
+TRUNCATED_VFR_HUD_LENGTH = 18  # throttle (uint16) 0, last on the wire, is truncated
+FLOAT32_DIGITS = 9  # enough significant digits to round-trip any float32
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -292,6 +337,26 @@ def attitude_with_fd(session: Path) -> bytes:
             return frame
 
 
+def float32_text(value: float) -> str:
+    """The shortest decimal text that parses back to the same float32 as [value]."""
+    bits = struct.pack("<f", value)
+    for digits in range(1, FLOAT32_DIGITS + 1):
+        text = f"{value:.{digits}g}"
+        if struct.pack("<f", float(text)) == bits:
+            return text
+    raise AssertionError(f"no float32 text for {value}")
+
+
+def fields_text(frame: bytes) -> str:
+    """The fields of [frame] as pymavlink decodes them, floats as float32 text."""
+    msg = decode(frame)
+    values = []
+    for name, kind in zip(msg.get_fieldnames(), msg.fieldtypes):
+        value = getattr(msg, name)
+        values.append(f"{name}={float32_text(value) if kind == 'float' else value}")
+    return ", ".join(values)
+
+
 def session_stream(session: Path) -> bytes:
     """Every frame of the session in order, as on the wire, without the .tlog timestamps."""
     log = mavutil.mavlink_connection(str(session), dialect="ardupilotmega", robust_parsing=True)
@@ -341,10 +406,15 @@ def main() -> None:
     gcs_dir.mkdir(parents=True, exist_ok=True)
     command_dir = args.out / "command"
     command_dir.mkdir(parents=True, exist_ok=True)
+    telemetry_dir = args.out / "telemetry"
+    telemetry_dir.mkdir(parents=True, exist_ok=True)
     session = args.out / SESSION
     interval = session_frame(session, "COMMAND_LONG", lambda m: m.command == SET_MESSAGE_INTERVAL)
     interval_ack = session_frame(session, "COMMAND_ACK", lambda m: m.command == SET_MESSAGE_INTERVAL)
     no_extensions = {"progress": 0, "result_param2": 0, "target_system": 0, "target_component": 0}
+    attitude = session_frame(session, "ATTITUDE", lambda m: True)
+    position = session_frame(session, "GLOBAL_POSITION_INT", lambda m: m.vy < 0)
+    vfr_hud = session_frame(session, "VFR_HUD", lambda m: True)
 
     outputs = {
         derived_dir / "heartbeat-signed.bin": signed(source),
@@ -394,6 +464,17 @@ def main() -> None:
         ),
         derived_dir / "command-ack-target-system-only.bin": with_message_fields(interval_ack, target_component=0),
         derived_dir / "command-long-broadcast.bin": with_message_fields(interval, target_system=0, target_component=0),
+        telemetry_dir / "attitude.bin": attitude,
+        telemetry_dir / "global-position-int.bin": position,
+        telemetry_dir / "vfr-hud.bin": vfr_hud,
+        unknown_dir / "scaled-pressure.bin": session_frame(session, "SCALED_PRESSURE", lambda m: True),
+        derived_dir / "attitude-edges.bin": with_message_fields(
+            attitude, time_boot_ms=LARGE_TIME_BOOT_MS, **ATTITUDE_EDGES
+        ),
+        derived_dir / "global-position-int-edges.bin": with_message_fields(
+            position, time_boot_ms=LARGE_TIME_BOOT_MS, **POSITION_EDGES
+        ),
+        derived_dir / "vfr-hud-edges.bin": with_message_fields(vfr_hud, climb=VFR_HUD_CLIMB, throttle=VFR_HUD_THROTTLE),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -441,11 +522,33 @@ def main() -> None:
     broadcast = outputs[derived_dir / "command-long-broadcast.bin"]
     assert broadcast[1] == BROADCAST_LENGTH and decode(broadcast).param2 == real_interval.param2
 
+    assert attitude[1] == FULL_ATTITUDE_LENGTH and position[1] == FULL_GLOBAL_POSITION_INT_LENGTH
+    assert vfr_hud[1] == TRUNCATED_VFR_HUD_LENGTH and decode(vfr_hud).throttle == 0
+    attitude_edges = decode(outputs[derived_dir / "attitude-edges.bin"])
+    assert attitude_edges.time_boot_ms == LARGE_TIME_BOOT_MS and attitude_edges.pitch == ATTITUDE_EDGES["pitch"]
+    position_edges = outputs[derived_dir / "global-position-int-edges.bin"]
+    assert position_edges[1] == FULL_GLOBAL_POSITION_INT_LENGTH
+    assert all(getattr(decode(position_edges), name) == value for name, value in POSITION_EDGES.items())
+    assert decode(position_edges).lat == decode(position).lat
+    vfr_hud_edges = outputs[derived_dir / "vfr-hud-edges.bin"]
+    assert vfr_hud_edges[1] == VFR_HUD_EDGES_LENGTH and decode(vfr_hud_edges).throttle == VFR_HUD_THROTTLE
+    assert decode(vfr_hud_edges).climb == VFR_HUD_CLIMB
+
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
         path.write_bytes(frame)
         shown = frame.hex(" ") if len(frame) <= MAX_SHOWN else f"{len(frame)} bytes"
         print(f"{path.relative_to(args.out).as_posix():48} {shown}")
+    print()
+    for path in (
+        telemetry_dir / "attitude.bin",
+        telemetry_dir / "global-position-int.bin",
+        telemetry_dir / "vfr-hud.bin",
+        derived_dir / "attitude-edges.bin",
+        derived_dir / "global-position-int-edges.bin",
+        derived_dir / "vfr-hud-edges.bin",
+    ):
+        print(f"{path.relative_to(args.out).as_posix()}: seq {outputs[path][4]}, {fields_text(outputs[path])}")
     print()
     print(f"session counts (pymavlink): {session_counts(args.out / SESSION)}")
 
