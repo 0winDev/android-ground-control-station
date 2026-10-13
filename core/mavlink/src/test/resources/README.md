@@ -310,8 +310,10 @@ Wire layout (offsets from `mavparse`, the same on pymavlink 2.4.50 and on `mavli
   `vel_acc` (uint32 mm/s, 42), `hdg_acc` (uint32 degE5, 46), `yaw` (uint16 cdeg, 50).
 
 "Unknown" values from `common.xml`: `voltage_battery` UINT16_MAX, `current_battery` and `battery_remaining`
--1; `eph`, `epv`, `vel`, `cog` UINT16_MAX, `satellites_visible` UINT8_MAX, `yaw` 0 ("use 36000 for north").
-Zero-fill restores a truncated field as 0, so only `yaw` reads "unknown" after truncation.
+-1; `eph`, `epv`, `vel`, `cog` UINT16_MAX, `satellites_visible` UINT8_MAX; `yaw` 0 when the GPS does not
+provide yaw and UINT16_MAX when it should but cannot ("use 36000 for north"). Zero-fill restores a truncated
+field as 0: for `yaw` that reads as "not provided", but a restored 0 accuracy or `alt_ellipsoid` is not a
+real value, so the data layer must not trust extension fields the sender did not put on the wire.
 
 | File | How it was made | Fields (pymavlink) | Used for |
 |---|---|---|---|

@@ -171,8 +171,8 @@ sealed interface MavlinkMessage {
      * quote `common.xml` on `mavlink/mavlink` master. The battery fields are "ambiguous on multi-battery
      * systems"; the definition recommends BATTERY_STATUS instead.
      *
-     * The three `*Extended` fields are MAVLink 2 extensions. ArduCopter sends them as 0, so they are always
-     * truncated and read as 0 here (the wire rule).
+     * The three `*Extended` fields are MAVLink 2 extensions. ArduCopter sends them as 0, so they are normally
+     * truncated (LEN 31 in the captured session) and read as 0 here (the wire rule).
      *
      * @property onboardControlSensorsPresent `MAV_SYS_STATUS_SENSOR` bitmap: "Value of 0: not present. Value
      * of 1: present." A uint32 (hence [Long]).
@@ -225,10 +225,11 @@ sealed interface MavlinkMessage {
      *
      * Every field after [satellitesVisible] is a MAVLink 2 extension: a sender may omit or truncate them, and
      * then they read as 0 (the wire rule). Only for [yaw] does 0 mean "not provided"; a 0 accuracy is not a
-     * perfect one.
+     * perfect one, and a 0 [altEllipsoid] may not be a real altitude.
      *
      * @property timeUsec "Timestamp (UNIX Epoch time or time since system boot)" in µs, a uint64 read as a
-     * [Long]; "the receiving end can infer timestamp format ... by checking for the magnitude of the number".
+     * [Long]: the magnitude tells which of the two it is. A negative value means the sender put 2⁶³ or more,
+     * which no real timestamp reaches, so it is out of range.
      * @property fixType "GPS fix type", a `GPS_FIX_TYPE`.
      * @property lat "Latitude (WGS84, EGM96 ellipsoid)" in degE7.
      * @property lon "Longitude (WGS84, EGM96 ellipsoid)" in degE7.
