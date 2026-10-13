@@ -31,8 +31,8 @@ checksum, no signature (incompatibility flags `0x00`) and no `.tlog` timestamp.
 
 The checksum tests (`MavlinkCrcTest`) need each message's CRC_EXTRA. The values were computed from
 pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and match its generated
-`dialects.v20.common` constants. HEARTBEAT is defined in `minimal.xml` (included by `common.xml`), so
-parsing `common.xml` alone does not find it.
+`dialects.v20.common` constants. HEARTBEAT is defined in `minimal.xml` and GLOBAL_POSITION_INT in
+`standard.xml` (both included by `common.xml`), so parsing `common.xml` alone finds neither.
 
 | Message (id) | Definition | CRC_EXTRA |
 |---|---|---|
@@ -42,10 +42,16 @@ parsing `common.xml` alone does not find it.
 | POWER_STATUS (125) | `common.xml` | 203 |
 | COMMAND_LONG (76) | `common.xml` | 152 |
 | COMMAND_ACK (77) | `common.xml` | 143 |
+| ATTITUDE (30) | `common.xml` | 39 |
+| GLOBAL_POSITION_INT (33) | `standard.xml` | 104 |
+| VFR_HUD (74) | `common.xml` | 20 |
+
+The last three were also computed with `mavparse` from `common.xml` and `standard.xml` on `mavlink/mavlink`
+master (#37): same CRC_EXTRA, full length and wire order.
 
 With these values, pymavlink's `x25crc` over bytes 1 to 10 + LEN of each `.bin`, then CRC_EXTRA, equals
-the frame's checksum bytes for all seven fixtures above and every COMMAND fixture (truncated ones
-included: the checksum covers the bytes on the wire).
+the frame's checksum bytes for the seven `heartbeat/` and `truncated/` fixtures and for every COMMAND and
+telemetry fixture (truncated ones included: the checksum covers the bytes on the wire).
 
 ## `heartbeat/`
 
@@ -135,7 +141,8 @@ py tools/fixtures/derive_fixtures.py
 | `derived/heartbeat-trailing-zeros.bin` | `heartbeat/disarmed-stabilize.bin` re-packed by pymavlink with `custom_mode` 5, `base_mode` 0, `system_status` 0 and `mavlink_version` 0 (same seq, system, component, `type` 2 and `autopilot` 3); pymavlink truncates the three trailing zero bytes, so LEN is 6. Not a frame a compliant sender produces: `mavlink_version` is "not writable by user" and always 3 (`minimal.xml`), which is why a real HEARTBEAT never truncates | Encoder framing: trailing zero bytes are truncated, as the specification requires of a MAVLink 2 sender; tested through the internal `MavlinkEncoder.frame` (REQ-021, #14) |
 | `derived/heartbeat-all-zero.bin` | The same header with every field 0, re-packed by pymavlink: LEN 1, because the first payload byte is never truncated. Same caveat about `mavlink_version` | Encoder framing: an all-zero payload keeps one byte (#14) |
 | `gcs/heartbeat-mission-planner.bin` | Real HEARTBEAT (seq 44) from `session.tlog` sent by Mission Planner: system 255, component 190, `type` 6 = `MAV_TYPE_GCS`, `autopilot` 8 = `MAV_AUTOPILOT_INVALID`, `base_mode` 0, `custom_mode` 0 | A ground station's HEARTBEAT is not a vehicle (#11) |
-| `unknown/attitude-fd-in-payload.bin` | Real ATTITUDE (id 30, LEN 28, seq 42) from `session.tlog`, the first whose payload contains `0xFD` | A frame with an unknown message ID is skipped whole by its LEN, so the `0xFD` inside it starts no false frame |
+| `unknown/attitude-fd-in-payload.bin` | Real ATTITUDE (id 30, LEN 28, seq 42) from `session.tlog`, the first whose payload contains `0xFD` | A frame with an unknown message ID is skipped whole by its LEN, so the `0xFD` inside it starts no false frame. ATTITUDE is decoded since #37: it is unknown only to the parser tests' HEARTBEAT-only lookup |
+| `unknown/scaled-pressure.bin` | Real SCALED_PRESSURE (id 29, LEN 14, seq 59) from `session.tlog` | A message outside the codec's table: undecoded, payload as received (#37) |
 | `derived/attitude-signed.bin` | `unknown/attitude-fd-in-payload.bin` re-packed and signed by pymavlink with the same test key, link ID and timestamp; signature verified by pymavlink | A signed frame with a message ID the tests treat as unknown: skipped whole, signature included |
 | `derived/session-stream.bin` | `session.tlog` without the 8-byte timestamps: every frame (MAVLink 1 and 2) in order, 187,700 bytes, rebuilt from pymavlink's decoded frames (no BAD_DATA) | The whole session as a parser input, cut into datagrams by the tests |
 
@@ -160,14 +167,16 @@ unknown/attitude-fd-in-payload.bin      fd 1c 00 00 2a 01 01 1e 00 00 3f 0f 06 0
 derived/attitude-signed.bin             fd 1c 01 00 2a 01 01 1e 00 00 3f 0f 06 00 c9 b0 89 ba e6 32 a8 ba
                                         b1 39 3a bc 50 f7 69 b9 00 fd 67 b9 c0 a8 4a ba 1d 25 00 78 56 34 12
                                         00 00 34 7e c3 65 29 bc
+unknown/scaled-pressure.bin             fd 0e 00 00 3b 01 01 1d 00 00 e9 0f 06 00 8c 2b 6c 44 00 00 00 00
+                                        2e 0c a0 3d
 ```
 
 `derived/session-stream.bin` as a parser input (counts from pymavlink, printed by `derive_fixtures.py`): 5,524 frames, 5,522 MAVLink 2 frames (all incompat `0x00`, 39 message
 IDs including ArduPilot-dialect ones), 133 of them HEARTBEAT, plus 2 MAVLink 1 frames (`0xFE`, COMMAND_LONG, 41 bytes each, no `0xFD` inside). With a
 lookup that knows only HEARTBEAT, the other 5,389 MAVLink 2 frames are unknown message IDs.
-With the full message table (#10, #35): 133 HEARTBEAT, 325 SYS_STATUS, 130 SERVO_OUTPUT_RAW, 325
-POWER_STATUS, 11 COMMAND_LONG and 13 COMMAND_ACK frames are known, and the other 4,585 MAVLink 2 frames
-are unknown message IDs.
+With the full message table (#10, #35, #37): 133 HEARTBEAT, 325 SYS_STATUS, 260 ATTITUDE, 130
+GLOBAL_POSITION_INT, 130 SERVO_OUTPUT_RAW, 260 VFR_HUD, 325 POWER_STATUS, 11 COMMAND_LONG and 13
+COMMAND_ACK frames are known, and the other 3,935 MAVLink 2 frames are unknown message IDs.
 
 ## `command/` and the COMMAND fixtures in `derived/` (#35)
 
@@ -225,4 +234,52 @@ derived/command-ack-target-system-only.bin      fd 09 00 00 c2 01 01 4d 00 00 ff
 derived/command-long-broadcast.bin              fd 1e 00 00 51 ff be 4c 00 00 00 80 87 43 00 50 43 48
                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
                                                 00 00 ff 01 a1 5c
+```
+
+## `telemetry/` and the telemetry fixtures in `derived/` (#37)
+
+ATTITUDE (30), GLOBAL_POSITION_INT (33) and VFR_HUD (74). `heartbeat/session.tlog` already holds them from
+ArduCopter (system 1, component 1): 260 ATTITUDE, 130 GLOBAL_POSITION_INT and 260 VFR_HUD, all MAVLink 2,
+so no new capture was needed. The vehicle stays on the ground at the SITL home in that session (position
+fixed, speeds near zero), so the `derived/` frames, re-packed **by pymavlink 2.4.50** from the real ones
+(same seq, system and component), add the values a grounded vehicle never sends. Regenerate with
+`py tools/fixtures/derive_fixtures.py` (same bytes); it prints the decoded fields below, floats as the
+shortest decimal text that is the same float32, so the Kotlin `Float` literals in the tests are bit-exact.
+
+Wire layout (offsets from `mavparse`, the same on pymavlink 2.4.50 and on `mavlink/mavlink` master). None
+of the three has extensions; floats are IEEE-754 single precision, little-endian:
+
+- ATTITUDE, full LEN 28: `time_boot_ms` (uint32, 0), then `roll`, `pitch`, `yaw`, `rollspeed`,
+  `pitchspeed`, `yawspeed` (float, 4–24). Angles in rad, rates in rad/s.
+- GLOBAL_POSITION_INT, full LEN 28: `time_boot_ms` (uint32, 0), `lat`, `lon` (int32 degE7, 4, 8), `alt`,
+  `relative_alt` (int32 mm, 12, 16), `vx`, `vy`, `vz` (int16 cm/s, 20, 22, 24), `hdg` (uint16 cdeg, 26;
+  UINT16_MAX = unknown). The XML order is already sorted by size, so it is also the wire order.
+- VFR_HUD, full LEN 20: `airspeed`, `groundspeed`, `alt`, `climb` (float, 0–12), then `heading` (int16
+  deg, 16) and `throttle` (uint16 %, 18). The XML order is airspeed, groundspeed, **heading, throttle**,
+  alt, climb: the size sort moves the two 16-bit fields after the floats.
+
+| File | How it was made | Fields (pymavlink) | Used for |
+|---|---|---|---|
+| `telemetry/attitude.bin` | The first real ATTITUDE (seq 42) of the session; the same frame as `unknown/attitude-fd-in-payload.bin` | time_boot_ms 397119, roll -0.0010504957, pitch -0.0012832552, yaw -0.011366294, rollspeed -0.00022312743, pitchspeed -0.00022124127, yawspeed -0.0007730834. LEN 28 | Decoder: a real ATTITUDE (REQ-024) |
+| `telemetry/global-position-int.bin` | The first real GLOBAL_POSITION_INT (seq 53) with a negative `vy` | time_boot_ms 397289, lat -353633514, lon 1491652411, alt 587130, relative_alt -13, vx 1, vy -1, vz 0, hdg 35935. LEN 28 | Decoder: a real one with negative int32 and int16 values (REQ-024) |
+| `telemetry/vfr-hud.bin` | The first real VFR_HUD (seq 43) | airspeed 0.023872377, groundspeed 0.023871899, heading 359, throttle 0, alt 587.13, climb -0.00015098024. LEN **18**: `throttle` 0, last on the wire, is truncated | Decoder: a real truncated frame, zero-filled (REQ-013, REQ-024) |
+| `derived/attitude-edges.bin` | The ATTITUDE re-packed with `time_boot_ms` 4,000,000,000 and distinct floats, `yaw` the float32 closest to -π | time_boot_ms 4000000000 (`00 28 6b ee`), roll 0.5, pitch -0.25, yaw -3.1415927, rollspeed 1.5, pitchspeed -0.75, yawspeed 0.125. LEN 28 | Decoder: a swapped float slot shows; a `time_boot_ms` above `Int.MAX_VALUE` stays positive |
+| `derived/global-position-int-edges.bin` | The GLOBAL_POSITION_INT re-packed with `time_boot_ms` 4,000,000,000, negative altitudes and speeds and `hdg` UINT16_MAX | lat and lon as the real one, alt -12345, relative_alt -500, vx -300, vy 1234, vz -150, hdg 65535. LEN 28 | Decoder: int32 and int16 sign extension; an unknown `hdg` stays 65535, never -1 |
+| `derived/vfr-hud-edges.bin` | The VFR_HUD re-packed with climb -2.5 and throttle 65 | as the real one, but throttle 65 and climb -2.5. LEN **19**: throttle 65 is `41 00`, so only its zero high byte is truncated | Decoder: a uint16 cut in half by truncation (REQ-013) |
+
+Raw bytes:
+
+```
+telemetry/attitude.bin                  fd 1c 00 00 2a 01 01 1e 00 00 3f 0f 06 00 c9 b0 89 ba e6 32 a8 ba
+                                        b1 39 3a bc 50 f7 69 b9 00 fd 67 b9 c0 a8 4a ba 42 9f
+telemetry/global-position-int.bin       fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 16 fb eb ea 3b cf e8 58
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 5f 8c f8 c7
+telemetry/vfr-hud.bin                   fd 12 00 00 2b 01 01 4a 00 00 01 90 c3 3c 00 8f c3 3c 52 c8 12 44
+                                        73 50 1e b9 67 01 00 ef
+derived/attitude-edges.bin              fd 1c 00 00 2a 01 01 1e 00 00 00 28 6b ee 00 00 00 3f 00 00 80 be
+                                        db 0f 49 c0 00 00 c0 3f 00 00 40 bf 00 00 00 3e 04 46
+derived/global-position-int-edges.bin   fd 1c 00 00 35 01 01 21 00 00 00 28 6b ee 16 fb eb ea 3b cf e8 58
+                                        c7 cf ff ff 0c fe ff ff d4 fe d2 04 6a ff ff ff 90 05
+derived/vfr-hud-edges.bin               fd 13 00 00 2b 01 01 4a 00 00 01 90 c3 3c 00 8f c3 3c 52 c8 12 44
+                                        00 00 20 c0 67 01 41 b7 c8
 ```

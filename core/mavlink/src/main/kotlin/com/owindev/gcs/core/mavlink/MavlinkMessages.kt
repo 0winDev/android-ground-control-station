@@ -4,25 +4,32 @@ package com.owindev.gcs.core.mavlink
  * The messages the codec supports: CRC_EXTRA (to validate received frames and checksum sent ones) and full
  * payload length, extension fields included (to zero-fill truncated payloads).
  *
- * Source: the official definitions, `message_definitions/v1.0/minimal.xml` (HEARTBEAT) and `common.xml`
- * (the others) in https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked
- * against `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK checked with pymavlink's `mavparse`
- * and against master (#35). SYS_STATUS, SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored
- * so far; their fields are decoded later in v0.2. COMMAND_LONG is only sent by the codec, so a received one
- * stays undecoded.
+ * Source: the official definitions, `message_definitions/v1.0/minimal.xml` (HEARTBEAT), `standard.xml`
+ * (GLOBAL_POSITION_INT) and `common.xml` (the others), which includes both, in
+ * https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked against
+ * `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK (#35) and ATTITUDE, GLOBAL_POSITION_INT and
+ * VFR_HUD (#37) computed with pymavlink's `mavparse` from both. SYS_STATUS, SERVO_OUTPUT_RAW and
+ * POWER_STATUS are only validated and restored so far; their fields are decoded later in v0.2. COMMAND_LONG
+ * is only sent by the codec, so a received one stays undecoded.
  */
 object MavlinkMessages : CrcExtraLookup {
 
     private const val HEARTBEAT_ID = 0
     private const val SYS_STATUS_ID = 1
+    private const val ATTITUDE_ID = 30
+    private const val GLOBAL_POSITION_INT_ID = 33
     private const val SERVO_OUTPUT_RAW_ID = 36
+    private const val VFR_HUD_ID = 74
     private const val POWER_STATUS_ID = 125
     private const val COMMAND_LONG_ID = 76
     private const val COMMAND_ACK_ID = 77
 
     private val heartbeat = Definition(crcExtra = 50, fullLength = 9)
     private val sysStatus = Definition(crcExtra = 124, fullLength = 43)
+    private val attitude = Definition(crcExtra = 39, fullLength = 28)
+    private val globalPositionInt = Definition(crcExtra = 104, fullLength = 28)
     private val servoOutputRaw = Definition(crcExtra = 222, fullLength = 37)
+    private val vfrHud = Definition(crcExtra = 20, fullLength = 20)
     private val powerStatus = Definition(crcExtra = 203, fullLength = 6)
     private val commandLong = Definition(crcExtra = 152, fullLength = 33)
 
@@ -38,7 +45,10 @@ object MavlinkMessages : CrcExtraLookup {
     private fun definitionOf(msgId: Int): Definition? = when (msgId) {
         HEARTBEAT_ID -> heartbeat
         SYS_STATUS_ID -> sysStatus
+        ATTITUDE_ID -> attitude
+        GLOBAL_POSITION_INT_ID -> globalPositionInt
         SERVO_OUTPUT_RAW_ID -> servoOutputRaw
+        VFR_HUD_ID -> vfrHud
         POWER_STATUS_ID -> powerStatus
         COMMAND_LONG_ID -> commandLong
         COMMAND_ACK_ID -> commandAck
