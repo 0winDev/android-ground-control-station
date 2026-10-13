@@ -3,7 +3,9 @@ package com.owindev.gcs.core.mavlink
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Attitude
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
+import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
+import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
 
@@ -37,7 +39,47 @@ object MavlinkDecoder {
     private const val MAVLINK_VERSION_OFFSET = 8
 
     private const val SYS_STATUS_ID = 1
+
+    // SYS_STATUS wire layout: the three uint32 sensor bitmaps, the nine 16-bit fields, battery_remaining
+    // (int8), then the three uint32 extensions. The size sort moves battery_remaining after the 16-bit fields.
+    private const val SYS_SENSORS_PRESENT_OFFSET = 0
+    private const val SYS_SENSORS_ENABLED_OFFSET = 4
+    private const val SYS_SENSORS_HEALTH_OFFSET = 8
+    private const val SYS_LOAD_OFFSET = 12
+    private const val SYS_VOLTAGE_BATTERY_OFFSET = 14
+    private const val SYS_CURRENT_BATTERY_OFFSET = 16
+    private const val SYS_DROP_RATE_COMM_OFFSET = 18
+    private const val SYS_ERRORS_COMM_OFFSET = 20
+    private const val SYS_ERRORS_COUNT1_OFFSET = 22
+    private const val SYS_ERRORS_COUNT2_OFFSET = 24
+    private const val SYS_ERRORS_COUNT3_OFFSET = 26
+    private const val SYS_ERRORS_COUNT4_OFFSET = 28
+    private const val SYS_BATTERY_REMAINING_OFFSET = 30
+    private const val SYS_SENSORS_PRESENT_EXTENDED_OFFSET = 31
+    private const val SYS_SENSORS_ENABLED_EXTENDED_OFFSET = 35
+    private const val SYS_SENSORS_HEALTH_EXTENDED_OFFSET = 39
+
     private const val GPS_RAW_INT_ID = 24
+
+    // GPS_RAW_INT wire layout: time_usec (uint64), the three int32s, the four uint16s, fix_type and
+    // satellites_visible (uint8), then the extensions in XML order: alt_ellipsoid (int32), the four uint32
+    // accuracies and yaw (uint16). The size sort moves fix_type after the 16-bit fields.
+    private const val GPS_TIME_USEC_OFFSET = 0
+    private const val GPS_LAT_OFFSET = 8
+    private const val GPS_LON_OFFSET = 12
+    private const val GPS_ALT_OFFSET = 16
+    private const val GPS_EPH_OFFSET = 20
+    private const val GPS_EPV_OFFSET = 22
+    private const val GPS_VEL_OFFSET = 24
+    private const val GPS_COG_OFFSET = 26
+    private const val GPS_FIX_TYPE_OFFSET = 28
+    private const val GPS_SATELLITES_VISIBLE_OFFSET = 29
+    private const val GPS_ALT_ELLIPSOID_OFFSET = 30
+    private const val GPS_H_ACC_OFFSET = 34
+    private const val GPS_V_ACC_OFFSET = 38
+    private const val GPS_VEL_ACC_OFFSET = 42
+    private const val GPS_HDG_ACC_OFFSET = 46
+    private const val GPS_YAW_OFFSET = 50
 
     private const val ATTITUDE_ID = 30
 
@@ -91,8 +133,8 @@ object MavlinkDecoder {
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
         return when (frame.messageId) {
             HEARTBEAT_ID -> heartbeat(frame.payload)
-            SYS_STATUS_ID -> TODO("#38: decode SYS_STATUS")
-            GPS_RAW_INT_ID -> TODO("#38: decode GPS_RAW_INT")
+            SYS_STATUS_ID -> sysStatus(frame.payload)
+            GPS_RAW_INT_ID -> gpsRawInt(frame.payload)
             ATTITUDE_ID -> attitude(frame.payload)
             GLOBAL_POSITION_INT_ID -> globalPositionInt(frame.payload)
             VFR_HUD_ID -> vfrHud(frame.payload)
@@ -108,6 +150,44 @@ object MavlinkDecoder {
         customMode = payload.uint32(CUSTOM_MODE_OFFSET),
         systemStatus = payload.uint8(SYSTEM_STATUS_OFFSET),
         mavlinkVersion = payload.uint8(MAVLINK_VERSION_OFFSET),
+    )
+
+    private fun sysStatus(payload: ByteArray) = SysStatus(
+        onboardControlSensorsPresent = payload.uint32(SYS_SENSORS_PRESENT_OFFSET),
+        onboardControlSensorsEnabled = payload.uint32(SYS_SENSORS_ENABLED_OFFSET),
+        onboardControlSensorsHealth = payload.uint32(SYS_SENSORS_HEALTH_OFFSET),
+        load = payload.uint16(SYS_LOAD_OFFSET),
+        voltageBattery = payload.uint16(SYS_VOLTAGE_BATTERY_OFFSET),
+        currentBattery = payload.int16(SYS_CURRENT_BATTERY_OFFSET),
+        batteryRemaining = payload.int8(SYS_BATTERY_REMAINING_OFFSET),
+        dropRateComm = payload.uint16(SYS_DROP_RATE_COMM_OFFSET),
+        errorsComm = payload.uint16(SYS_ERRORS_COMM_OFFSET),
+        errorsCount1 = payload.uint16(SYS_ERRORS_COUNT1_OFFSET),
+        errorsCount2 = payload.uint16(SYS_ERRORS_COUNT2_OFFSET),
+        errorsCount3 = payload.uint16(SYS_ERRORS_COUNT3_OFFSET),
+        errorsCount4 = payload.uint16(SYS_ERRORS_COUNT4_OFFSET),
+        onboardControlSensorsPresentExtended = payload.uint32(SYS_SENSORS_PRESENT_EXTENDED_OFFSET),
+        onboardControlSensorsEnabledExtended = payload.uint32(SYS_SENSORS_ENABLED_EXTENDED_OFFSET),
+        onboardControlSensorsHealthExtended = payload.uint32(SYS_SENSORS_HEALTH_EXTENDED_OFFSET),
+    )
+
+    private fun gpsRawInt(payload: ByteArray) = GpsRawInt(
+        timeUsec = payload.uint64(GPS_TIME_USEC_OFFSET),
+        fixType = payload.uint8(GPS_FIX_TYPE_OFFSET),
+        lat = payload.int32(GPS_LAT_OFFSET),
+        lon = payload.int32(GPS_LON_OFFSET),
+        alt = payload.int32(GPS_ALT_OFFSET),
+        eph = payload.uint16(GPS_EPH_OFFSET),
+        epv = payload.uint16(GPS_EPV_OFFSET),
+        vel = payload.uint16(GPS_VEL_OFFSET),
+        cog = payload.uint16(GPS_COG_OFFSET),
+        satellitesVisible = payload.uint8(GPS_SATELLITES_VISIBLE_OFFSET),
+        altEllipsoid = payload.int32(GPS_ALT_ELLIPSOID_OFFSET),
+        hAcc = payload.uint32(GPS_H_ACC_OFFSET),
+        vAcc = payload.uint32(GPS_V_ACC_OFFSET),
+        velAcc = payload.uint32(GPS_VEL_ACC_OFFSET),
+        hdgAcc = payload.uint32(GPS_HDG_ACC_OFFSET),
+        yaw = payload.uint16(GPS_YAW_OFFSET),
     )
 
     private fun attitude(payload: ByteArray) = Attitude(

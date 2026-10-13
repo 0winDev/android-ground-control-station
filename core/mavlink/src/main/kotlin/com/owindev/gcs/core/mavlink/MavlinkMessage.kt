@@ -163,7 +163,38 @@ sealed interface MavlinkMessage {
         val climb: Float,
     ) : MavlinkMessage
 
-    // Stub for #38: specified by MavlinkDecoderTest, implemented next.
+    /**
+     * SYS_STATUS (id 1), as defined in https://mavlink.io/en/messages/common.html#SYS_STATUS: "Sensor and
+     * subsystem status information."
+     *
+     * Raw fields in the units of the definition; converting them is up to `:data:vehicle`. Field descriptions
+     * quote `common.xml` on `mavlink/mavlink` master. The battery fields are "ambiguous on multi-battery
+     * systems"; the definition recommends BATTERY_STATUS instead.
+     *
+     * The three `*Extended` fields are MAVLink 2 extensions. ArduCopter sends them as 0, so they are always
+     * truncated and read as 0 here (the wire rule).
+     *
+     * @property onboardControlSensorsPresent `MAV_SYS_STATUS_SENSOR` bitmap: "Value of 0: not present. Value
+     * of 1: present." A uint32 (hence [Long]).
+     * @property onboardControlSensorsEnabled the same bitmap: "Value of 0: not enabled. Value of 1: enabled."
+     * @property onboardControlSensorsHealth the same bitmap: "Value of 0: error. Value of 1: healthy."
+     * @property load "Maximum usage in percent of the mainloop time" in d% (0–1000).
+     * @property voltageBattery "Battery voltage" in mV, a uint16; "UINT16_MAX: Voltage not sent by autopilot".
+     * @property currentBattery "Battery current" in cA, an int16; "-1: Current not sent by autopilot".
+     * @property batteryRemaining "Battery energy remaining" in %, an int8; "-1: Battery remaining energy not
+     * sent by autopilot".
+     * @property dropRateComm "Communication drop rate" in c%, "dropped packets on all links".
+     * @property errorsComm "Communication errors (UART, I2C, SPI, CAN)".
+     * @property errorsCount1 "Autopilot-specific errors".
+     * @property errorsCount2 "Autopilot-specific errors".
+     * @property errorsCount3 "Autopilot-specific errors".
+     * @property errorsCount4 "Autopilot-specific errors".
+     * @property onboardControlSensorsPresentExtended `MAV_SYS_STATUS_SENSOR_EXTENDED` bitmap, as
+     * [onboardControlSensorsPresent].
+     * @property onboardControlSensorsEnabledExtended the same, as [onboardControlSensorsEnabled].
+     * @property onboardControlSensorsHealthExtended the same, as [onboardControlSensorsHealth].
+     */
+    // One property per field of the message definition; grouping them would hide that mapping.
     @Suppress("LongParameterList")
     data class SysStatus(
         val onboardControlSensorsPresent: Long,
@@ -184,7 +215,41 @@ sealed interface MavlinkMessage {
         val onboardControlSensorsHealthExtended: Long,
     ) : MavlinkMessage
 
-    // Stub for #38: specified by MavlinkDecoderTest, implemented next.
+    /**
+     * GPS_RAW_INT (id 24), as defined in https://mavlink.io/en/messages/common.html#GPS_RAW_INT: "The global
+     * position, as returned by the Global Positioning System (GPS). This is NOT the global position estimate
+     * of the system, but rather a RAW sensor value." The estimate is [GlobalPositionInt].
+     *
+     * Raw fields in the units of the definition; converting them is up to `:data:vehicle`. Field descriptions
+     * quote `common.xml` on `mavlink/mavlink` master.
+     *
+     * Every field after [satellitesVisible] is a MAVLink 2 extension: a sender may omit or truncate them, and
+     * then they read as 0 (the wire rule). Only for [yaw] does 0 mean "not provided"; a 0 accuracy is not a
+     * perfect one.
+     *
+     * @property timeUsec "Timestamp (UNIX Epoch time or time since system boot)" in µs, a uint64 read as a
+     * [Long]; "the receiving end can infer timestamp format ... by checking for the magnitude of the number".
+     * @property fixType "GPS fix type", a `GPS_FIX_TYPE`.
+     * @property lat "Latitude (WGS84, EGM96 ellipsoid)" in degE7.
+     * @property lon "Longitude (WGS84, EGM96 ellipsoid)" in degE7.
+     * @property alt "Altitude (MSL). Positive for up." in mm.
+     * @property eph "GPS HDOP horizontal dilution of position (unitless * 100). If unknown, set to:
+     * UINT16_MAX".
+     * @property epv "GPS VDOP vertical dilution of position (unitless * 100). If unknown, set to: UINT16_MAX".
+     * @property vel "GPS ground speed" in cm/s; "If unknown, set to: UINT16_MAX".
+     * @property cog "Course over ground (NOT heading, but direction of movement)" in cdeg; "If unknown, set
+     * to: UINT16_MAX".
+     * @property satellitesVisible "Number of satellites visible. If unknown, set to UINT8_MAX".
+     * @property altEllipsoid "Altitude (above WGS84, EGM96 ellipsoid). Positive for up." in mm.
+     * @property hAcc "Position uncertainty" in mm, a uint32 (hence [Long]).
+     * @property vAcc "Altitude uncertainty" in mm, a uint32.
+     * @property velAcc "Speed uncertainty" in mm/s, a uint32.
+     * @property hdgAcc "Heading / track uncertainty" in degE5, a uint32.
+     * @property yaw "Yaw in earth frame from north" in cdeg: "Use 0 if this GPS does not provide yaw. Use
+     * UINT16_MAX if this GPS is configured to provide yaw and is currently unable to provide it. Use 36000
+     * for north."
+     */
+    // One property per field of the message definition; grouping them would hide that mapping.
     @Suppress("LongParameterList")
     data class GpsRawInt(
         val timeUsec: Long,
