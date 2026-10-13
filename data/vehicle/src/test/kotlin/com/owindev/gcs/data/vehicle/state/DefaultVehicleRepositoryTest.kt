@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.state
 
 import android.util.Log
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -16,6 +17,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
 import io.mockk.CapturingSlot
 import io.mockk.coEvery
@@ -75,22 +77,15 @@ class DefaultVehicleRepositoryTest {
     private val transport: UdpTransport = mockk()
     private val telemetryRequester: TelemetryRequester = mockk()
     private val telemetryTargets: CapturingSlot<Flow<TelemetryTarget?>> = slot()
+    private val telemetryStore = TelemetryStore()
 
     private lateinit var repository: DefaultVehicleRepository
 
     @BeforeEach
     fun setUp() {
         coEvery { transport.send(any(), any()) } returns SendResult.Sent
-        coEvery { telemetryRequester.run(capture(telemetryTargets)) } coAnswers { awaitCancellation() }
-        val session = LinkSession(transport = transport, scope = testScope.backgroundScope)
-        repository = DefaultVehicleRepository(
-            session = session,
-            timeSource = testScope.testScheduler.timeSource,
-            rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
-            telemetryRequester = telemetryRequester,
-            scope = testScope.backgroundScope,
-        )
+        coEvery { telemetryRequester.run(capture(telemetryTargets), any()) } coAnswers { awaitCancellation() }
+        repository = testScope.repositoryOn(transport, telemetryRequester, telemetryStore)
     }
 
     @AfterEach
@@ -387,14 +382,7 @@ class DefaultVehicleRepositoryTest {
     @Test
     fun `GIVEN a custom timeout WHEN the vehicle goes silent THEN is LOST after that timeout`() = testScope.runTest {
         every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
-        val custom = DefaultVehicleRepository(
-            session = LinkSession(transport = transport, scope = backgroundScope),
-            timeSource = testScheduler.timeSource,
-            rule = LinkLossRule(timeout = CUSTOM_TIMEOUT),
-            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
-            telemetryRequester = telemetryRequester,
-            scope = backgroundScope,
-        )
+        val custom = repositoryOn(transport, telemetryRequester, telemetryStore, rule = LinkLossRule(CUSTOM_TIMEOUT))
 
         val result = custom.vehicles.first { it.anyLost() }
 
@@ -580,14 +568,7 @@ class DefaultVehicleRepositoryTest {
             val sent = recordSends()
             val deviceClock = TestTimeSource()
             every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
-            val sleepy = DefaultVehicleRepository(
-                session = LinkSession(transport = transport, scope = backgroundScope),
-                timeSource = deviceClock,
-                rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
-                telemetryRequester = telemetryRequester,
-                scope = backgroundScope,
-            )
+            val sleepy = repositoryOn(transport, telemetryRequester, telemetryStore, timeSource = deviceClock)
             sleepy.vehicles.launchIn(backgroundScope)
             delay(ONE_AND_A_HALF_SECONDS)
             // The device slept: its clock moved past the timeout while coroutine time (the watchdog's
@@ -616,12 +597,11 @@ class DefaultVehicleRepositoryTest {
                 GAP to DISARMED_STABILIZE,
                 afterwards = { emitAll(heartbeatEverySecond(DISARMED_STABILIZE)) },
             )
-            val failing = DefaultVehicleRepository(
-                session = LinkSession(transport = transport, scope = backgroundScope),
+            val failing = repositoryOn(
+                transport,
+                telemetryRequester,
+                telemetryStore,
                 timeSource = FailsOnSecondMark(testScheduler.timeSource),
-                rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
-                telemetryRequester = telemetryRequester,
                 scope = appScope,
             )
             failing.vehicles.launchIn(backgroundScope)
@@ -651,12 +631,12 @@ class DefaultVehicleRepositoryTest {
                 GAP to DISARMED_STABILIZE,
                 WELL_PAST_TIMEOUT to DISARMED_GUIDED,
             )
-            val failing = DefaultVehicleRepository(
-                session = LinkSession(transport = transport, scope = backgroundScope),
-                timeSource = testScheduler.timeSource,
+            val failing = repositoryOn(
+                transport,
+                telemetryRequester,
+                telemetryStore,
                 rule = failingRule,
                 heartbeatSender = idleSender,
-                telemetryRequester = telemetryRequester,
                 scope = appScope,
             )
             failing.vehicles.launchIn(backgroundScope)
@@ -760,14 +740,14 @@ class DefaultVehicleRepositoryTest {
             every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
                 .onCompletion { closedAt = start.elapsedNow().inWholeMilliseconds }
             val session = LinkSession(transport = transport, scope = backgroundScope)
-            val requesting = DefaultVehicleRepository(
+            val requester = TelemetryRequester(
+                sender = GcsMessageSender(transport),
                 session = session,
+                store = telemetryStore,
+                rule = StalenessRule(),
                 timeSource = testScheduler.timeSource,
-                rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
-                telemetryRequester = TelemetryRequester(GcsMessageSender(transport), session),
-                scope = backgroundScope,
             )
+            val requesting = repositoryOn(transport, requester, telemetryStore, session = session)
             val observer = requesting.vehicles.launchIn(backgroundScope)
             delay(OBSERVED_BRIEFLY)
             observer.cancel()
@@ -796,6 +776,28 @@ class DefaultVehicleRepositoryTest {
         return sent
     }
 }
+
+/** The repository under test on [transport], in this scope's virtual time; each test passes only what it changes. */
+// Mirrors the repository's constructor, one parameter each.
+@Suppress("LongParameterList")
+private fun TestScope.repositoryOn(
+    transport: UdpTransport,
+    telemetryRequester: TelemetryRequester,
+    telemetryStore: TelemetryStore,
+    session: LinkSession = LinkSession(transport = transport, scope = backgroundScope),
+    timeSource: TimeSource.WithComparableMarks = testScheduler.timeSource,
+    rule: LinkLossRule = LinkLossRule(),
+    heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+    scope: CoroutineScope = backgroundScope,
+) = DefaultVehicleRepository(
+    session = session,
+    timeSource = timeSource,
+    rule = rule,
+    heartbeatSender = heartbeatSender,
+    telemetryRequester = telemetryRequester,
+    telemetryStore = telemetryStore,
+    scope = scope,
+)
 
 private const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
 private const val DISARMED_GUIDED = "heartbeat/disarmed-guided.bin"
