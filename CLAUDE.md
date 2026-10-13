@@ -224,3 +224,6 @@ Add one line per closed issue: what surprised us and what to do differently.
   HEARTBEAT in `minimal.xml`: search every include before saying a message is missing. Truncation cuts bytes, not
   fields (throttle 65 = `41 00` gives LEN 19), so take expected LENs from pymavlink, never by hand. Adding messages
   to the table changes tests that borrowed one as "unknown": pick an unknown example the roadmap will never decode.
+- #38 Battery and GPS: an old fixture is not always what its folder suggests (`truncated/sys_status.bin` is a boot frame
+  with no battery reading, from outside `session.tlog`): decode every fixture you reuse with pymavlink first. Read each
+  field's `invalid` attribute in the XML, not only the issue: GPS_RAW_INT `yaw` has two "unknown" values (0 and UINT16_MAX).
