@@ -163,6 +163,48 @@ sealed interface MavlinkMessage {
         val climb: Float,
     ) : MavlinkMessage
 
+    // Stub for #38: specified by MavlinkDecoderTest, implemented next.
+    @Suppress("LongParameterList")
+    data class SysStatus(
+        val onboardControlSensorsPresent: Long,
+        val onboardControlSensorsEnabled: Long,
+        val onboardControlSensorsHealth: Long,
+        val load: Int,
+        val voltageBattery: Int,
+        val currentBattery: Int,
+        val batteryRemaining: Int,
+        val dropRateComm: Int,
+        val errorsComm: Int,
+        val errorsCount1: Int,
+        val errorsCount2: Int,
+        val errorsCount3: Int,
+        val errorsCount4: Int,
+        val onboardControlSensorsPresentExtended: Long,
+        val onboardControlSensorsEnabledExtended: Long,
+        val onboardControlSensorsHealthExtended: Long,
+    ) : MavlinkMessage
+
+    // Stub for #38: specified by MavlinkDecoderTest, implemented next.
+    @Suppress("LongParameterList")
+    data class GpsRawInt(
+        val timeUsec: Long,
+        val fixType: Int,
+        val lat: Int,
+        val lon: Int,
+        val alt: Int,
+        val eph: Int,
+        val epv: Int,
+        val vel: Int,
+        val cog: Int,
+        val satellitesVisible: Int,
+        val altEllipsoid: Int,
+        val hAcc: Long,
+        val vAcc: Long,
+        val velAcc: Long,
+        val hdgAcc: Long,
+        val yaw: Int,
+    ) : MavlinkMessage
+
     /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.

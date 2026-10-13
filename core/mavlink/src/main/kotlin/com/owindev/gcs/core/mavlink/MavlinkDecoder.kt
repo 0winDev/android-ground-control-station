@@ -36,6 +36,9 @@ object MavlinkDecoder {
     private const val SYSTEM_STATUS_OFFSET = 7
     private const val MAVLINK_VERSION_OFFSET = 8
 
+    private const val SYS_STATUS_ID = 1
+    private const val GPS_RAW_INT_ID = 24
+
     private const val ATTITUDE_ID = 30
 
     // ATTITUDE wire layout: time_boot_ms (uint32), then the six floats in XML order (all 4 bytes).
@@ -88,6 +91,8 @@ object MavlinkDecoder {
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
         return when (frame.messageId) {
             HEARTBEAT_ID -> heartbeat(frame.payload)
+            SYS_STATUS_ID -> TODO("#38: decode SYS_STATUS")
+            GPS_RAW_INT_ID -> TODO("#38: decode GPS_RAW_INT")
             ATTITUDE_ID -> attitude(frame.payload)
             GLOBAL_POSITION_INT_ID -> globalPositionInt(frame.payload)
             VFR_HUD_ID -> vfrHud(frame.payload)

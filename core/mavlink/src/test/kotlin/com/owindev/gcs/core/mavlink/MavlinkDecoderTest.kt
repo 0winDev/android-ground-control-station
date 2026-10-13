@@ -4,7 +4,9 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.Attitude
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
+import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
+import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
 import com.owindev.gcs.core.testing.readFixture
@@ -65,7 +67,6 @@ class MavlinkDecoderTest {
     @Tag("REQ-013")
     @ParameterizedTest(name = "{0}")
     @CsvSource(
-        "truncated/sys_status.bin, 1, 43",
         "truncated/power_status.bin, 125, 6",
         "truncated/servo_output_raw.bin, 36, 37",
         "command/set-message-interval.bin, 76, 33",
@@ -93,13 +94,162 @@ class MavlinkDecoderTest {
     }
 
     @Tag("REQ-013")
+    @Tag("REQ-025")
     @Test
-    fun `GIVEN the truncated SYS_STATUS WHEN decoding THEN its three extension fields are restored as zeros`() {
-        val fixture = readFixture(SYS_STATUS)
+    fun `GIVEN a real SITL SYS_STATUS WHEN decoding THEN it has the fields pymavlink decodes and zero extensions`() {
+        val frame = parsedFrame(SYS_STATUS)
 
-        val result = decoder.decode(parsedFrame(SYS_STATUS))
+        val result = decoder.decode(frame)
 
-        result shouldBeEqualTo Undecoded(SYS_STATUS_ID, wirePayload(fixture) + ByteArray(SYS_STATUS_EXTENSION_BYTES))
+        result shouldBeEqualTo SysStatus(
+            onboardControlSensorsPresent = SITL_SENSORS_PRESENT,
+            onboardControlSensorsEnabled = SITL_SENSORS_ENABLED,
+            onboardControlSensorsHealth = SITL_SENSORS_HEALTH,
+            load = 0,
+            voltageBattery = 12_600,
+            currentBattery = 0,
+            batteryRemaining = 100,
+            dropRateComm = 0,
+            errorsComm = 0,
+            errorsCount1 = 0,
+            errorsCount2 = 0,
+            errorsCount3 = 0,
+            errorsCount4 = 0,
+            onboardControlSensorsPresentExtended = 0,
+            onboardControlSensorsEnabledExtended = 0,
+            onboardControlSensorsHealthExtended = 0,
+        )
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN the real boot SYS_STATUS without a battery reading WHEN decoding THEN current and remaining are -1`() {
+        val frame = parsedFrame(BOOT_SYS_STATUS)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo bootSysStatus(voltageBattery = 0)
+    }
+
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN a SYS_STATUS with an unknown voltage WHEN decoding THEN voltage_battery stays UINT16_MAX`() {
+        val frame = parsedFrame(SYS_STATUS_UNKNOWN_BATTERY)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo bootSysStatus(voltageBattery = UINT16_MAX)
+    }
+
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN a SYS_STATUS with a distinct value in every field WHEN decoding THEN each lands in its field`() {
+        val frame = parsedFrame(SYS_STATUS_EDGES)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo SysStatus(
+            onboardControlSensorsPresent = BOOT_SENSORS_PRESENT,
+            onboardControlSensorsEnabled = BOOT_SENSORS_ENABLED,
+            onboardControlSensorsHealth = BOOT_SENSORS_HEALTH,
+            load = 500,
+            voltageBattery = 11_100,
+            currentBattery = 1_550,
+            batteryRemaining = 42,
+            dropRateComm = 250,
+            errorsComm = 1,
+            errorsCount1 = 2,
+            errorsCount2 = 3,
+            errorsCount3 = 4,
+            errorsCount4 = 5,
+            onboardControlSensorsPresentExtended = 0x0102_0304L,
+            onboardControlSensorsEnabledExtended = 0x0506_0708L,
+            onboardControlSensorsHealthExtended = 0x89AB_CDEFL,
+        )
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN a real SITL GPS_RAW_INT cut inside v_acc WHEN decoding THEN it has the fields pymavlink decodes`() {
+        val frame = parsedFrame(GPS_RAW_INT)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo GpsRawInt(
+            timeUsec = SITL_GPS_TIME_USEC,
+            fixType = GPS_FIX_TYPE_RTK_FIXED,
+            lat = SITL_GPS_LAT,
+            lon = SITL_GPS_LON,
+            alt = SITL_GPS_ALT,
+            eph = 121,
+            epv = 200,
+            vel = 0,
+            cog = 0,
+            satellitesVisible = 10,
+            altEllipsoid = 587_150,
+            hAcc = 300,
+            vAcc = 300,
+            velAcc = 0,
+            hdgAcc = 0,
+            yaw = 0,
+        )
+    }
+
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN a GPS_RAW_INT with a distinct value in every field WHEN decoding THEN each lands in its field`() {
+        val frame = parsedFrame(GPS_RAW_INT_EDGES)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo GpsRawInt(
+            timeUsec = 0x0123_4567_89AB_CDEFL,
+            fixType = GPS_FIX_TYPE_3D_FIX,
+            lat = SITL_GPS_LAT,
+            lon = SITL_GPS_LON,
+            alt = -12_345,
+            eph = 150,
+            epv = 250,
+            vel = 1_234,
+            cog = 35_999,
+            satellitesVisible = 12,
+            altEllipsoid = -23_456,
+            hAcc = 0x89AB_CDEFL,
+            vAcc = 400,
+            velAcc = 50,
+            hdgAcc = 12_345,
+            yaw = 36_000,
+        )
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN a GPS_RAW_INT with every unknown value and no extensions WHEN decoding THEN the sentinels hold`() {
+        val frame = parsedFrame(GPS_RAW_INT_UNKNOWN)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo GpsRawInt(
+            timeUsec = SITL_GPS_TIME_USEC,
+            fixType = GPS_FIX_TYPE_NO_GPS,
+            lat = SITL_GPS_LAT,
+            lon = SITL_GPS_LON,
+            alt = SITL_GPS_ALT,
+            eph = UINT16_MAX,
+            epv = UINT16_MAX,
+            vel = UINT16_MAX,
+            cog = UINT16_MAX,
+            satellitesVisible = UINT8_MAX,
+            altEllipsoid = 0,
+            hAcc = 0,
+            vAcc = 0,
+            velAcc = 0,
+            hdgAcc = 0,
+            yaw = 0,
+        )
     }
 
     @Tag("REQ-013")
@@ -335,6 +485,7 @@ class MavlinkDecoderTest {
     @Tag("REQ-013")
     @Tag("REQ-015")
     @Tag("REQ-024")
+    @Tag("REQ-025")
     @Test
     fun `GIVEN the SITL session WHEN parsing and decoding THEN each table message comes out as pymavlink counts`() {
         val parser = MavlinkParser(MavlinkMessages)
@@ -371,6 +522,8 @@ class MavlinkDecoderTest {
 
     private fun MavlinkMessage.kind(): String = when (this) {
         is Heartbeat -> "HEARTBEAT"
+        is SysStatus -> "SYS_STATUS"
+        is GpsRawInt -> "GPS_RAW_INT"
         is Attitude -> "ATTITUDE"
         is GlobalPositionInt -> "GLOBAL_POSITION_INT"
         is VfrHud -> "VFR_HUD"
@@ -383,7 +536,13 @@ class MavlinkDecoderTest {
         const val MAX_CUSTOM_MODE = "derived/heartbeat-max-custom-mode.bin"
         const val EXTRA_BYTE = "derived/heartbeat-extra-byte.bin"
         const val POWER_STATUS = "truncated/power_status.bin"
-        const val SYS_STATUS = "truncated/sys_status.bin"
+        const val SYS_STATUS = "telemetry/sys-status.bin"
+        const val BOOT_SYS_STATUS = "truncated/sys_status.bin"
+        const val SYS_STATUS_EDGES = "derived/sys-status-edges.bin"
+        const val SYS_STATUS_UNKNOWN_BATTERY = "derived/sys-status-unknown-battery.bin"
+        const val GPS_RAW_INT = "telemetry/gps-raw-int.bin"
+        const val GPS_RAW_INT_EDGES = "derived/gps-raw-int-edges.bin"
+        const val GPS_RAW_INT_UNKNOWN = "derived/gps-raw-int-unknown.bin"
         const val SCALED_PRESSURE = "unknown/scaled-pressure.bin"
         const val ATTITUDE = "telemetry/attitude.bin"
         const val ATTITUDE_EDGES = "derived/attitude-edges.bin"
@@ -415,15 +574,28 @@ class MavlinkDecoderTest {
         const val SITL_ALT_MSL = 587.13f
         const val LARGE_TIME_BOOT_MS = 4_000_000_000L
         const val UINT16_MAX = 65_535
-        const val SYS_STATUS_ID = 1
+        const val UINT8_MAX = 255
         const val HEARTBEAT_ID = 0
 
-        // onboard_control_sensors_present/enabled/health_extended: three uint32 extensions, 0 in pymavlink.
-        const val SYS_STATUS_EXTENSION_BYTES = 12
+        // Field values of the SYS_STATUS and GPS_RAW_INT fixtures as pymavlink decodes them (see the fixtures
+        // README). GPS_RAW_INT's raw position differs from GLOBAL_POSITION_INT's filtered one.
+        const val SITL_SENSORS_PRESENT = 1_399_979_055L
+        const val SITL_SENSORS_ENABLED = 1_382_128_687L
+        const val SITL_SENSORS_HEALTH = 1_467_063_343L
+        const val BOOT_SENSORS_PRESENT = 1_395_784_719L
+        const val BOOT_SENSORS_ENABLED = 1_375_837_199L
+        const val BOOT_SENSORS_HEALTH = 1_158_781_963L
+        const val SITL_GPS_TIME_USEC = 396_763_000L
+        const val SITL_GPS_LAT = -353_633_515
+        const val SITL_GPS_LON = 1_491_652_412
+        const val SITL_GPS_ALT = 587_150
+        const val GPS_FIX_TYPE_NO_GPS = 0
+        const val GPS_FIX_TYPE_3D_FIX = 3
+        const val GPS_FIX_TYPE_RTK_FIXED = 6
         const val FUZZ_FRAMES = 10_000
         const val MAX_PAYLOAD = 255
         const val MAX_MESSAGE_ID = 0xFF_FFFF
-        val FUZZ_IDS = listOf(0, 1, 30, 33, 36, 74, 76, 77, 125)
+        val FUZZ_IDS = listOf(0, 1, 24, 30, 33, 36, 74, 76, 77, 125)
         const val SCALED_PRESSURE_ID = 29
         const val QUADROTOR = 2
         const val ARDUPILOTMEGA = 3
@@ -431,7 +603,7 @@ class MavlinkDecoderTest {
         const val MAVLINK_VERSION = 3
         const val DISARMED_STABILIZE_BASE_MODE = 81
         const val MAX_UINT32 = 4_294_967_295L
-        const val SESSION_UNKNOWN = 3_935L
+        const val SESSION_UNKNOWN = 3_610L
         const val SESSION_MAVLINK1_BYTES = 82L
         const val HEADER_LENGTH = 10
         const val LEN_INDEX = 1
@@ -443,10 +615,11 @@ class MavlinkDecoderTest {
         // "msgid/restored length", so every one of them is checked to be zero-filled to its full length.
         val sessionCounts = sortedMapOf(
             "HEARTBEAT" to 133,
+            "SYS_STATUS" to 325,
+            "GPS_RAW_INT" to 325,
             "ATTITUDE" to 260,
             "GLOBAL_POSITION_INT" to 130,
             "VFR_HUD" to 260,
-            "1/43" to 325,
             "36/37" to 130,
             "125/6" to 325,
             "76/33" to 11,
@@ -463,6 +636,27 @@ class MavlinkDecoderTest {
             customMode = customMode,
             systemStatus = STANDBY,
             mavlinkVersion = MAVLINK_VERSION,
+        )
+
+        // The boot SYS_STATUS: no battery reading yet, so current_battery and battery_remaining are -1
+        // ("unknown"); everything but the sensors is 0.
+        fun bootSysStatus(voltageBattery: Int) = SysStatus(
+            onboardControlSensorsPresent = BOOT_SENSORS_PRESENT,
+            onboardControlSensorsEnabled = BOOT_SENSORS_ENABLED,
+            onboardControlSensorsHealth = BOOT_SENSORS_HEALTH,
+            load = 0,
+            voltageBattery = voltageBattery,
+            currentBattery = -1,
+            batteryRemaining = -1,
+            dropRateComm = 0,
+            errorsComm = 0,
+            errorsCount1 = 0,
+            errorsCount2 = 0,
+            errorsCount3 = 0,
+            errorsCount4 = 0,
+            onboardControlSensorsPresentExtended = 0,
+            onboardControlSensorsEnabledExtended = 0,
+            onboardControlSensorsHealthExtended = 0,
         )
 
         fun sitlVfrHud(throttle: Int, climb: Float) = VfrHud(

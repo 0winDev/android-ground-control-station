@@ -112,7 +112,7 @@ class HeartbeatMapperTest {
     @Tag("REQ-016")
     @Test
     fun `GIVEN a message that is not a HEARTBEAT WHEN mapping it THEN is not a vehicle state`() {
-        val received = received(MavlinkMessage.Undecoded(messageId = SYS_STATUS_ID, payload = ByteArray(0)))
+        val received = received(MavlinkMessage.Undecoded(messageId = SCALED_PRESSURE_ID, payload = ByteArray(0)))
 
         val result = mapper.vehicleStateOf(received)
 
@@ -133,7 +133,9 @@ private const val MAV_AUTOPILOT_INVALID = 8
 private const val MAV_AUTOPILOT_PX4 = 12
 private const val MAV_STATE_STANDBY = 3
 private const val MAVLINK_VERSION = 3
-private const val SYS_STATUS_ID = 1
+
+// A message the codec never decodes, as in the codec tests; SYS_STATUS is decoded since #38.
+private const val SCALED_PRESSURE_ID = 29
 private const val GUIDED = 4L
 
 // base_mode of the real SITL captures (core/mavlink/src/test/resources/README.md): 217 adds SAFETY_ARMED (128).

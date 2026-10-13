@@ -24,10 +24,12 @@ class MavlinkMessagesTest {
     @Tag("REQ-013")
     @Tag("REQ-022")
     @Tag("REQ-024")
+    @Tag("REQ-025")
     @ParameterizedTest(name = "msgid {0}")
     @CsvSource(
         "0, 50, 9",
         "1, 124, 43",
+        "24, 24, 52",
         "30, 39, 28",
         "33, 104, 28",
         "36, 222, 37",
