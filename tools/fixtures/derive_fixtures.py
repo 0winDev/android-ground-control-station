@@ -79,6 +79,23 @@ Writes:
                                                 relative_alt, vx and vz, and hdg UINT16_MAX (unknown)
   <out>/derived/vfr-hud-edges.bin               the VFR_HUD re-packed by pymavlink with a negative climb and
                                                 throttle 65: only its zero high byte is truncated (LEN 19)
+  <out>/telemetry/gps-raw-int.bin               the first real GPS_RAW_INT (not derived) of the session: v_acc
+                                                300 (2c 01 00 00) is cut inside, LEN 40
+  <out>/telemetry/sys-status.bin                the first real SYS_STATUS of the session with a battery reading
+                                                (12600 mV, 100 %); the zero extensions are truncated, LEN 31.
+                                                truncated/sys_status.bin, read too, is an earlier one from boot
+                                                with voltage_battery 0 and the other two battery fields -1
+  <out>/derived/sys-status-edges.bin           truncated/sys_status.bin re-packed by pymavlink with a
+                                                distinct value in every field, the extensions included (LEN 43)
+  <out>/derived/sys-status-unknown-battery.bin  the same SYS_STATUS with voltage_battery UINT16_MAX and
+                                                current_battery and battery_remaining -1 ("unknown"); the zero
+                                                extensions are truncated, LEN 31
+  <out>/derived/gps-raw-int-edges.bin           the GPS_RAW_INT re-packed by pymavlink with a distinct value in
+                                                every field, time_usec and h_acc beyond the signed ranges,
+                                                negative altitudes and yaw 36000 (north), LEN 52
+  <out>/derived/gps-raw-int-unknown.bin         the GPS_RAW_INT with eph, epv, vel, cog UINT16_MAX,
+                                                satellites_visible UINT8_MAX, fix_type NO_GPS and every
+                                                extension 0: truncated to the 30 base bytes
 
 checks each output with pymavlink before writing it, prints the decoded fields of the telemetry fixtures
 (floats as the shortest decimal text that is the same float32) and the session counts the tests expect.
@@ -127,6 +144,7 @@ TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_GLOBAL_POSITION_INT: "global_position_int",
     common.MAVLINK_MSG_ID_VFR_HUD: "vfr_hud",
     common.MAVLINK_MSG_ID_SYS_STATUS: "sys_status",
+    common.MAVLINK_MSG_ID_GPS_RAW_INT: "gps_raw_int",
     common.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW: "servo_output_raw",
     common.MAVLINK_MSG_ID_POWER_STATUS: "power_status",
     common.MAVLINK_MSG_ID_COMMAND_LONG: "command_long",
@@ -177,6 +195,63 @@ FULL_GLOBAL_POSITION_INT_LENGTH = 28
 VFR_HUD_EDGES_LENGTH = 19  # throttle 65 is 41 00: its zero high byte, last on the wire, is truncated
 TRUNCATED_VFR_HUD_LENGTH = 18  # throttle (uint16) 0, last on the wire, is truncated
 FLOAT32_DIGITS = 9  # enough significant digits to round-trip any float32
+SYS_STATUS = "truncated/sys_status.bin"
+# A distinct value in every field (a swapped offset shows), health_extended above Int.MAX_VALUE so a uint32
+# read as a signed Int would come out negative. Not a real sensor set.
+SYS_STATUS_EDGES = {
+    "load": 500,
+    "voltage_battery": 11100,
+    "current_battery": 1550,
+    "battery_remaining": 42,
+    "drop_rate_comm": 250,
+    "errors_comm": 1,
+    "errors_count1": 2,
+    "errors_count2": 3,
+    "errors_count3": 4,
+    "errors_count4": 5,
+    "onboard_control_sensors_present_extended": 0x0102_0304,
+    "onboard_control_sensors_enabled_extended": 0x0506_0708,
+    "onboard_control_sensors_health_extended": 0x89AB_CDEF,
+}
+# "If unknown, set to" values of common.xml: UINT16_MAX and -1.
+SYS_STATUS_UNKNOWN_BATTERY = {"voltage_battery": 0xFFFF, "current_battery": -1, "battery_remaining": -1}
+FULL_SYS_STATUS_LENGTH = 43
+TRUNCATED_SYS_STATUS_LENGTH = 31  # the three zero uint32 extensions are truncated
+# A distinct value in every field; time_usec has 8 distinct bytes and h_acc is above Int.MAX_VALUE.
+GPS_RAW_INT_EDGES = {
+    "time_usec": 0x0123_4567_89AB_CDEF,
+    "fix_type": 3,  # GPS_FIX_TYPE_3D_FIX
+    "alt": -12345,
+    "eph": 150,
+    "epv": 250,
+    "vel": 1234,
+    "cog": 35999,
+    "satellites_visible": 12,
+    "alt_ellipsoid": -23456,
+    "h_acc": 0x89AB_CDEF,
+    "v_acc": 400,
+    "vel_acc": 50,
+    "hdg_acc": 12345,
+    "yaw": 36000,  # "use 36000 for north" (common.xml), since 0 means unknown
+}
+# The "invalid" values of common.xml for every field that has one; yaw 0 is its own "unknown".
+GPS_RAW_INT_UNKNOWN = {
+    "fix_type": 0,  # GPS_FIX_TYPE_NO_GPS
+    "eph": 0xFFFF,
+    "epv": 0xFFFF,
+    "vel": 0xFFFF,
+    "cog": 0xFFFF,
+    "satellites_visible": 0xFF,
+    "alt_ellipsoid": 0,
+    "h_acc": 0,
+    "v_acc": 0,
+    "vel_acc": 0,
+    "hdg_acc": 0,
+    "yaw": 0,
+}
+FULL_GPS_RAW_INT_LENGTH = 52
+TRUNCATED_GPS_RAW_INT_LENGTH = 40  # v_acc 300 (2c 01 00 00) loses its two zero high bytes with what follows
+GPS_RAW_INT_BASE_LENGTH = 30
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -415,6 +490,9 @@ def main() -> None:
     attitude = session_frame(session, "ATTITUDE", lambda m: True)
     position = session_frame(session, "GLOBAL_POSITION_INT", lambda m: m.vy < 0)
     vfr_hud = session_frame(session, "VFR_HUD", lambda m: True)
+    gps_raw_int = session_frame(session, "GPS_RAW_INT", lambda m: True)
+    sys_status = (args.out / SYS_STATUS).read_bytes()
+    battery = session_frame(session, "SYS_STATUS", lambda m: m.voltage_battery != 0)
 
     outputs = {
         derived_dir / "heartbeat-signed.bin": signed(source),
@@ -475,6 +553,12 @@ def main() -> None:
             position, time_boot_ms=LARGE_TIME_BOOT_MS, **POSITION_EDGES
         ),
         derived_dir / "vfr-hud-edges.bin": with_message_fields(vfr_hud, climb=VFR_HUD_CLIMB, throttle=VFR_HUD_THROTTLE),
+        telemetry_dir / "gps-raw-int.bin": gps_raw_int,
+        telemetry_dir / "sys-status.bin": battery,
+        derived_dir / "sys-status-edges.bin": with_message_fields(sys_status, **SYS_STATUS_EDGES),
+        derived_dir / "sys-status-unknown-battery.bin": with_message_fields(sys_status, **SYS_STATUS_UNKNOWN_BATTERY),
+        derived_dir / "gps-raw-int-edges.bin": with_message_fields(gps_raw_int, **GPS_RAW_INT_EDGES),
+        derived_dir / "gps-raw-int-unknown.bin": with_message_fields(gps_raw_int, **GPS_RAW_INT_UNKNOWN),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -534,6 +618,20 @@ def main() -> None:
     assert vfr_hud_edges[1] == VFR_HUD_EDGES_LENGTH and decode(vfr_hud_edges).throttle == VFR_HUD_THROTTLE
     assert decode(vfr_hud_edges).climb == VFR_HUD_CLIMB
 
+    assert sys_status[1] == TRUNCATED_SYS_STATUS_LENGTH and battery[1] == TRUNCATED_SYS_STATUS_LENGTH
+    assert decode(sys_status).current_battery == -1 and decode(sys_status).battery_remaining == -1
+    for name, fields, length in (
+        ("sys-status-edges.bin", SYS_STATUS_EDGES, FULL_SYS_STATUS_LENGTH),
+        ("sys-status-unknown-battery.bin", SYS_STATUS_UNKNOWN_BATTERY, TRUNCATED_SYS_STATUS_LENGTH),
+        ("gps-raw-int-edges.bin", GPS_RAW_INT_EDGES, FULL_GPS_RAW_INT_LENGTH),
+        ("gps-raw-int-unknown.bin", GPS_RAW_INT_UNKNOWN, GPS_RAW_INT_BASE_LENGTH),
+    ):
+        frame = outputs[derived_dir / name]
+        assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
+        assert all(getattr(decode(frame), field) == value for field, value in fields.items()), name
+    assert gps_raw_int[1] == TRUNCATED_GPS_RAW_INT_LENGTH and decode(gps_raw_int).v_acc != 0
+    assert decode(outputs[derived_dir / "gps-raw-int-unknown.bin"]).lat == decode(gps_raw_int).lat
+
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
         path.write_bytes(frame)
@@ -547,8 +645,16 @@ def main() -> None:
         derived_dir / "attitude-edges.bin",
         derived_dir / "global-position-int-edges.bin",
         derived_dir / "vfr-hud-edges.bin",
+        args.out / SYS_STATUS,
+        telemetry_dir / "sys-status.bin",
+        telemetry_dir / "gps-raw-int.bin",
+        derived_dir / "sys-status-edges.bin",
+        derived_dir / "sys-status-unknown-battery.bin",
+        derived_dir / "gps-raw-int-edges.bin",
+        derived_dir / "gps-raw-int-unknown.bin",
     ):
-        print(f"{path.relative_to(args.out).as_posix()}: seq {outputs[path][4]}, {fields_text(outputs[path])}")
+        frame = outputs.get(path) or path.read_bytes()
+        print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")
     print()
     print(f"session counts (pymavlink): {session_counts(args.out / SESSION)}")
 
