@@ -45,9 +45,11 @@ pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and m
 | ATTITUDE (30) | `common.xml` | 39 |
 | GLOBAL_POSITION_INT (33) | `standard.xml` | 104 |
 | VFR_HUD (74) | `common.xml` | 20 |
+| GPS_RAW_INT (24) | `common.xml` | 24 |
 
-The last three were also computed with `mavparse` from `common.xml` and `standard.xml` on `mavlink/mavlink`
-master (#37): same CRC_EXTRA, full length and wire order.
+ATTITUDE, GLOBAL_POSITION_INT and VFR_HUD were also computed with `mavparse` from `common.xml` and
+`standard.xml` on `mavlink/mavlink` master (#37), and SYS_STATUS and GPS_RAW_INT from `common.xml` on master
+(#38): same CRC_EXTRA, full length and wire order.
 
 With these values, pymavlink's `x25crc` over bytes 1 to 10 + LEN of each `.bin`, then CRC_EXTRA, equals
 the frame's checksum bytes for the seven `heartbeat/` and `truncated/` fixtures and for every COMMAND and
@@ -174,9 +176,9 @@ unknown/scaled-pressure.bin             fd 0e 00 00 3b 01 01 1d 00 00 e9 0f 06 0
 `derived/session-stream.bin` as a parser input (counts from pymavlink, printed by `derive_fixtures.py`): 5,524 frames, 5,522 MAVLink 2 frames (all incompat `0x00`, 39 message
 IDs including ArduPilot-dialect ones), 133 of them HEARTBEAT, plus 2 MAVLink 1 frames (`0xFE`, COMMAND_LONG, 41 bytes each, no `0xFD` inside). With a
 lookup that knows only HEARTBEAT, the other 5,389 MAVLink 2 frames are unknown message IDs.
-With the full message table (#10, #35, #37): 133 HEARTBEAT, 325 SYS_STATUS, 260 ATTITUDE, 130
-GLOBAL_POSITION_INT, 130 SERVO_OUTPUT_RAW, 260 VFR_HUD, 325 POWER_STATUS, 11 COMMAND_LONG and 13
-COMMAND_ACK frames are known, and the other 3,935 MAVLink 2 frames are unknown message IDs.
+With the full message table (#10, #35, #37, #38): 133 HEARTBEAT, 325 SYS_STATUS, 325 GPS_RAW_INT, 260
+ATTITUDE, 130 GLOBAL_POSITION_INT, 130 SERVO_OUTPUT_RAW, 260 VFR_HUD, 325 POWER_STATUS, 11 COMMAND_LONG and
+13 COMMAND_ACK frames are known, and the other 3,610 MAVLink 2 frames are unknown message IDs.
 
 ## `command/` and the COMMAND fixtures in `derived/` (#35)
 
@@ -282,4 +284,71 @@ derived/global-position-int-edges.bin   fd 1c 00 00 35 01 01 21 00 00 00 28 6b e
                                         c7 cf ff ff 0c fe ff ff d4 fe d2 04 6a ff ff ff 90 05
 derived/vfr-hud-edges.bin               fd 13 00 00 2b 01 01 4a 00 00 01 90 c3 3c 00 8f c3 3c 52 c8 12 44
                                         00 00 20 c0 67 01 41 b7 c8
+```
+
+## SYS_STATUS and GPS_RAW_INT (#38)
+
+SYS_STATUS (1) and GPS_RAW_INT (24), both in `common.xml`. `heartbeat/session.tlog` holds 325 of each from
+ArduCopter, all MAVLink 2 and all truncated the same way, so no new capture was needed: every SYS_STATUS has
+LEN 31 (the three zero extensions cut) and every GPS_RAW_INT LEN 40 (cut inside `v_acc`). In the session the
+battery always reads 12600 mV, 0 cA, 100 %; the only real "unknown" battery is `truncated/sys_status.bin`,
+taken at boot from the original log (#5). The `derived/` frames are re-packed **by pymavlink 2.4.50** from
+the real ones (same seq, system and component). Regenerate with `py tools/fixtures/derive_fixtures.py`.
+
+Wire layout (offsets from `mavparse`, the same on pymavlink 2.4.50 and on `mavlink/mavlink` master):
+
+- SYS_STATUS, LEN 31 without extensions, full LEN 43: `onboard_control_sensors_present`, `_enabled`,
+  `_health` (uint32 bitmaps, 0, 4, 8), `load` (uint16 d%, 12), `voltage_battery` (uint16 mV, 14),
+  `current_battery` (**int16** cA, 16), `drop_rate_comm` (uint16 c%, 18), `errors_comm` (20),
+  `errors_count1`…`4` (22–28), `battery_remaining` (**int8** %, 30); then the extensions
+  `onboard_control_sensors_present_extended`, `_enabled_extended`, `_health_extended` (uint32, 31, 35, 39).
+  The size sort moves `battery_remaining` after the 16-bit fields.
+- GPS_RAW_INT, LEN 30 without extensions, full LEN 52: `time_usec` (**uint64** µs, 0), `lat`, `lon`
+  (int32 degE7, 8, 12), `alt` (int32 mm MSL, 16), `eph`, `epv` (uint16, 20, 22), `vel` (uint16 cm/s, 24),
+  `cog` (uint16 cdeg, 26), `fix_type` (uint8 `GPS_FIX_TYPE`, 28), `satellites_visible` (uint8, 29); then
+  the extensions in XML order: `alt_ellipsoid` (int32 mm, 30), `h_acc`, `v_acc` (uint32 mm, 34, 38),
+  `vel_acc` (uint32 mm/s, 42), `hdg_acc` (uint32 degE5, 46), `yaw` (uint16 cdeg, 50).
+
+"Unknown" values from `common.xml`: `voltage_battery` UINT16_MAX, `current_battery` and `battery_remaining`
+-1; `eph`, `epv`, `vel`, `cog` UINT16_MAX, `satellites_visible` UINT8_MAX; `yaw` 0 when the GPS does not
+provide yaw and UINT16_MAX when it should but cannot ("use 36000 for north"). Zero-fill restores a truncated
+field as 0: for `yaw` that reads as "not provided", but a restored 0 accuracy or `alt_ellipsoid` is not a
+real value, so the data layer must not trust extension fields the sender did not put on the wire.
+
+| File | How it was made | Fields (pymavlink) | Used for |
+|---|---|---|---|
+| `telemetry/sys-status.bin` | The first real SYS_STATUS (seq 34) of the session with a battery reading | present 1399979055, enabled 1382128687, health 1467063343, load 0, voltage_battery 12600, current_battery 0, battery_remaining 100, drop_rate_comm, errors 0; extensions 0. LEN 31 | Decoder: a real SYS_STATUS, extensions zero-filled (REQ-013, REQ-025) |
+| `truncated/sys_status.bin` | Real, from #5 (see `truncated/`) | voltage_battery 0, current_battery -1, battery_remaining -1 (`ff ff`, `ff`). LEN 31 | Decoder: real "unknown" battery values come out signed (REQ-025) |
+| `telemetry/gps-raw-int.bin` | The first real GPS_RAW_INT (seq 39) of the session | time_usec 396763000, fix_type 6, lat -353633515, lon 1491652412, alt 587150, eph 121, epv 200, vel 0, cog 0, satellites_visible 10, alt_ellipsoid 587150, h_acc 300, v_acc 300, vel_acc 0, hdg_acc 0, yaw 0. LEN **40**: `v_acc` 300 is `2c 01 00 00`, so its two zero high bytes are cut with everything after it | Decoder: a real GPS_RAW_INT with extensions, one cut inside a field (REQ-013, REQ-025) |
+| `derived/sys-status-edges.bin` | `truncated/sys_status.bin` re-packed with a distinct value in every field | sensors as the real one, load 500, voltage_battery 11100, current_battery 1550, battery_remaining 42, drop_rate_comm 250, errors_comm 1, errors_count1…4 2, 3, 4, 5, present_extended `0x01020304`, enabled_extended `0x05060708`, health_extended `0x89ABCDEF` (2309737967). LEN 43 | Decoder: a swapped offset shows; a uint32 above `Int.MAX_VALUE` stays positive |
+| `derived/sys-status-unknown-battery.bin` | The same SYS_STATUS with `voltage_battery` UINT16_MAX and the other two battery fields -1 | voltage_battery 65535, current_battery -1, battery_remaining -1, the rest as the real one. LEN 31 | Decoder: the unknown voltage stays 65535, never -1 (REQ-025) |
+| `derived/gps-raw-int-edges.bin` | The GPS_RAW_INT re-packed with a distinct value in every field | time_usec `0x0123456789ABCDEF` (81985529216486895), fix_type 3, lat and lon as the real one, alt -12345, eph 150, epv 250, vel 1234, cog 35999, satellites_visible 12, alt_ellipsoid -23456, h_acc `0x89ABCDEF` (2309737967), v_acc 400, vel_acc 50, hdg_acc 12345, yaw 36000. LEN 52 | Decoder: uint64 byte order, int32 sign, uint32 above `Int.MAX_VALUE`, every extension offset |
+| `derived/gps-raw-int-unknown.bin` | The GPS_RAW_INT with every "unknown" value and the extensions 0 | time_usec, lat, lon, alt as the real one, fix_type 0 (`GPS_FIX_TYPE_NO_GPS`), eph, epv, vel, cog 65535, satellites_visible 255, extensions 0. LEN **30**: exactly the base fields | Decoder: unsigned sentinels stay positive; extensions restored as 0 (REQ-013, REQ-025) |
+| `derived/sys-status-battery-remaining-min.bin` | `telemetry/sys-status.bin` re-packed with `battery_remaining` -128 | as the real one, battery_remaining -128 (`80`). LEN 31 | Decoder: the int8 is sign-extended, not read as 128 or special-cased on `ff` |
+| `derived/gps-raw-int-time-2-63.bin` | `telemetry/gps-raw-int.bin` re-packed with `time_usec` 2⁶³ | as the real one, time_usec 9223372036854775808 (`00 00 00 00 00 00 00 80`). LEN 40 | Decoder: the documented limit, a uint64 of 2⁶³ or more comes out as a negative `Long` (here `Long.MIN_VALUE`) |
+
+Raw bytes:
+
+```
+telemetry/sys-status.bin                fd 1f 00 00 22 01 01 01 00 00 2f fc 71 53 2f 9c 61 52 2f 9c 71 57
+                                        00 00 38 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 64 80 91
+telemetry/gps-raw-int.bin               fd 28 00 00 27 01 01 18 00 00 78 1f a6 17 00 00 00 00 15 fb eb ea
+                                        3c cf e8 58 8e f5 08 00 79 00 c8 00 00 00 00 00 06 0a 8e f5 08 00
+                                        2c 01 00 00 2c 01 f6 c2
+derived/sys-status-edges.bin            fd 2b 00 00 15 01 01 01 00 00 0f fc 31 53 0f 9c 01 52 0b 9c 11 45
+                                        f4 01 5c 2b 0e 06 fa 00 01 00 02 00 03 00 04 00 05 00 2a 04 03 02
+                                        01 08 07 06 05 ef cd ab 89 14 ee
+derived/sys-status-unknown-battery.bin  fd 1f 00 00 15 01 01 01 00 00 0f fc 31 53 0f 9c 01 52 0b 9c 11 45
+                                        00 00 ff ff ff ff 00 00 00 00 00 00 00 00 00 00 00 00 ff 5d d8
+derived/gps-raw-int-edges.bin           fd 34 00 00 27 01 01 18 00 00 ef cd ab 89 67 45 23 01 15 fb eb ea
+                                        3c cf e8 58 c7 cf ff ff 96 00 fa 00 d2 04 9f 8c 03 0c 60 a4 ff ff
+                                        ef cd ab 89 90 01 00 00 32 00 00 00 39 30 00 00 a0 8c c9 22
+derived/gps-raw-int-unknown.bin         fd 1e 00 00 27 01 01 18 00 00 78 1f a6 17 00 00 00 00 15 fb eb ea
+                                        3c cf e8 58 8e f5 08 00 ff ff ff ff ff ff ff ff 00 ff a8 97
+derived/sys-status-battery-remaining-min.bin
+                                        fd 1f 00 00 22 01 01 01 00 00 2f fc 71 53 2f 9c 61 52 2f 9c 71 57
+                                        00 00 38 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 79 1f
+derived/gps-raw-int-time-2-63.bin       fd 28 00 00 27 01 01 18 00 00 00 00 00 00 00 00 00 80 15 fb eb ea
+                                        3c cf e8 58 8e f5 08 00 79 00 c8 00 00 00 00 00 06 0a 8e f5 08 00
+                                        2c 01 00 00 2c 01 60 2f
 ```
