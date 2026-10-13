@@ -48,12 +48,6 @@ object MavlinkDecoder {
     private const val ACK_TARGET_SYSTEM_OFFSET = 8
     private const val ACK_TARGET_COMPONENT_OFFSET = 9
 
-    private const val UINT16_BYTES = 2
-    private const val INT32_BYTES = 4
-    private const val UINT32_BYTES = 4
-    private const val BYTE_MASK = 0xFF
-    private const val UINT32_MASK = 0xFFFF_FFFFL
-
     fun decode(frame: MavlinkFrame): MavlinkMessage {
         val fullLength = MavlinkMessages.fullLengthOf(frame.messageId)
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
@@ -84,24 +78,4 @@ object MavlinkDecoder {
         targetSystem = payload.uint8(ACK_TARGET_SYSTEM_OFFSET),
         targetComponent = payload.uint8(ACK_TARGET_COMPONENT_OFFSET),
     )
-
-    /** A byte past the end of a truncated payload reads as zero, which restores it without copying. */
-    private fun ByteArray.uint8(offset: Int): Int = if (offset < size) this[offset].toInt() and BYTE_MASK else 0
-
-    private fun ByteArray.uint16(offset: Int): Int = littleEndian(offset, UINT16_BYTES)
-
-    /** Little-endian int32: Kotlin's [Int] is the same two's-complement 32 bits, so the sign comes for free. */
-    private fun ByteArray.int32(offset: Int): Int = littleEndian(offset, INT32_BYTES)
-
-    /** Little-endian uint32, returned as a [Long] so values above `Int.MAX_VALUE` stay positive. */
-    private fun ByteArray.uint32(offset: Int): Long = littleEndian(offset, UINT32_BYTES).toLong() and UINT32_MASK
-
-    /** The [bytes] bytes at [offset], least significant first, as the low bits of an [Int]. */
-    private fun ByteArray.littleEndian(offset: Int, bytes: Int): Int {
-        var value = 0
-        for (index in bytes - 1 downTo 0) {
-            value = (value shl Byte.SIZE_BITS) or uint8(offset + index)
-        }
-        return value
-    }
 }
