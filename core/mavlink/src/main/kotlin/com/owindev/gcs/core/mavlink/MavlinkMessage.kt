@@ -213,7 +213,23 @@ sealed interface MavlinkMessage {
         val onboardControlSensorsPresentExtended: Long,
         val onboardControlSensorsEnabledExtended: Long,
         val onboardControlSensorsHealthExtended: Long,
-    ) : MavlinkMessage
+    ) : MavlinkMessage {
+
+        /**
+         * The `invalid` values of `common.xml` (master): what the sender puts when it has no reading. The codec
+         * keeps them as sent; deciding what they mean is up to `:data:vehicle`.
+         */
+        companion object {
+            /** [voltageBattery]: "UINT16_MAX: Voltage not sent by autopilot". */
+            const val VOLTAGE_BATTERY_UNKNOWN = 0xFFFF
+
+            /** [currentBattery]: "-1: Current not sent by autopilot". */
+            const val CURRENT_BATTERY_UNKNOWN = -1
+
+            /** [batteryRemaining]: "-1: Battery remaining energy not sent by autopilot". */
+            const val BATTERY_REMAINING_UNKNOWN = -1
+        }
+    }
 
     /**
      * GPS_RAW_INT (id 24), as defined in https://mavlink.io/en/messages/common.html#GPS_RAW_INT: "The global
@@ -269,7 +285,41 @@ sealed interface MavlinkMessage {
         val velAcc: Long,
         val hdgAcc: Long,
         val yaw: Int,
-    ) : MavlinkMessage
+    ) : MavlinkMessage {
+
+        /**
+         * The `invalid` values of `common.xml` (master) and the other special values it gives for [yaw]. The
+         * codec keeps them as sent; deciding what they mean is up to `:data:vehicle`.
+         */
+        companion object {
+            /** [eph]: "If unknown, set to: UINT16_MAX". */
+            const val EPH_UNKNOWN = 0xFFFF
+
+            /** [epv]: "If unknown, set to: UINT16_MAX". */
+            const val EPV_UNKNOWN = 0xFFFF
+
+            /** [vel]: "If unknown, set to: UINT16_MAX". */
+            const val VEL_UNKNOWN = 0xFFFF
+
+            /** [cog]: "If unknown, set to: UINT16_MAX". */
+            const val COG_UNKNOWN = 0xFFFF
+
+            /** [satellitesVisible]: "If unknown, set to UINT8_MAX". */
+            const val SATELLITES_VISIBLE_UNKNOWN = 0xFF
+
+            /** [yaw]: "Use 0 if this GPS does not provide yaw"; also what zero-fill restores. */
+            const val YAW_NOT_PROVIDED = 0
+
+            /**
+             * [yaw]: "Use UINT16_MAX if this GPS is configured to provide yaw and is currently unable to provide
+             * it".
+             */
+            const val YAW_UNAVAILABLE = 0xFFFF
+
+            /** [yaw]: "Use 36000 for north", since 0 already means [YAW_NOT_PROVIDED]. */
+            const val YAW_NORTH = 36_000
+        }
+    }
 
     /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
