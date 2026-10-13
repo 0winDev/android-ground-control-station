@@ -101,24 +101,17 @@ class MavlinkDecoderTest {
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo SysStatus(
-            onboardControlSensorsPresent = SITL_SENSORS_PRESENT,
-            onboardControlSensorsEnabled = SITL_SENSORS_ENABLED,
-            onboardControlSensorsHealth = SITL_SENSORS_HEALTH,
-            load = 0,
-            voltageBattery = 12_600,
-            currentBattery = 0,
-            batteryRemaining = 100,
-            dropRateComm = 0,
-            errorsComm = 0,
-            errorsCount1 = 0,
-            errorsCount2 = 0,
-            errorsCount3 = 0,
-            errorsCount4 = 0,
-            onboardControlSensorsPresentExtended = 0,
-            onboardControlSensorsEnabledExtended = 0,
-            onboardControlSensorsHealthExtended = 0,
-        )
+        result shouldBeEqualTo sitlSysStatus
+    }
+
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN a SYS_STATUS with battery_remaining -128 WHEN decoding THEN the int8 is sign-extended`() {
+        val frame = parsedFrame(SYS_STATUS_BATTERY_REMAINING_MIN)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo sitlSysStatus.copy(batteryRemaining = INT8_MIN)
     }
 
     @Tag("REQ-013")
@@ -177,24 +170,17 @@ class MavlinkDecoderTest {
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo GpsRawInt(
-            timeUsec = SITL_GPS_TIME_USEC,
-            fixType = GPS_FIX_TYPE_RTK_FIXED,
-            lat = SITL_GPS_LAT,
-            lon = SITL_GPS_LON,
-            alt = SITL_GPS_ALT,
-            eph = 121,
-            epv = 200,
-            vel = 0,
-            cog = 0,
-            satellitesVisible = 10,
-            altEllipsoid = 587_150,
-            hAcc = 300,
-            vAcc = 300,
-            velAcc = 0,
-            hdgAcc = 0,
-            yaw = 0,
-        )
+        result shouldBeEqualTo sitlGpsRawInt
+    }
+
+    @Tag("REQ-025")
+    @Test
+    fun `GIVEN a GPS_RAW_INT with time_usec 2^63 WHEN decoding THEN it comes out negative as documented`() {
+        val frame = parsedFrame(GPS_RAW_INT_TIME_2_63)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo sitlGpsRawInt.copy(timeUsec = Long.MIN_VALUE)
     }
 
     @Tag("REQ-025")
@@ -543,6 +529,8 @@ class MavlinkDecoderTest {
         const val GPS_RAW_INT = "telemetry/gps-raw-int.bin"
         const val GPS_RAW_INT_EDGES = "derived/gps-raw-int-edges.bin"
         const val GPS_RAW_INT_UNKNOWN = "derived/gps-raw-int-unknown.bin"
+        const val SYS_STATUS_BATTERY_REMAINING_MIN = "derived/sys-status-battery-remaining-min.bin"
+        const val GPS_RAW_INT_TIME_2_63 = "derived/gps-raw-int-time-2-63.bin"
         const val SCALED_PRESSURE = "unknown/scaled-pressure.bin"
         const val ATTITUDE = "telemetry/attitude.bin"
         const val ATTITUDE_EDGES = "derived/attitude-edges.bin"
@@ -575,6 +563,7 @@ class MavlinkDecoderTest {
         const val LARGE_TIME_BOOT_MS = 4_000_000_000L
         const val UINT16_MAX = 65_535
         const val UINT8_MAX = 255
+        const val INT8_MIN = -128
         const val HEARTBEAT_ID = 0
 
         // Field values of the SYS_STATUS and GPS_RAW_INT fixtures as pymavlink decodes them (see the fixtures
@@ -636,6 +625,46 @@ class MavlinkDecoderTest {
             customMode = customMode,
             systemStatus = STANDBY,
             mavlinkVersion = MAVLINK_VERSION,
+        )
+
+        // telemetry/sys-status.bin as pymavlink decodes it: the first one with a battery reading.
+        val sitlSysStatus = SysStatus(
+            onboardControlSensorsPresent = SITL_SENSORS_PRESENT,
+            onboardControlSensorsEnabled = SITL_SENSORS_ENABLED,
+            onboardControlSensorsHealth = SITL_SENSORS_HEALTH,
+            load = 0,
+            voltageBattery = 12_600,
+            currentBattery = 0,
+            batteryRemaining = 100,
+            dropRateComm = 0,
+            errorsComm = 0,
+            errorsCount1 = 0,
+            errorsCount2 = 0,
+            errorsCount3 = 0,
+            errorsCount4 = 0,
+            onboardControlSensorsPresentExtended = 0,
+            onboardControlSensorsEnabledExtended = 0,
+            onboardControlSensorsHealthExtended = 0,
+        )
+
+        // telemetry/gps-raw-int.bin as pymavlink decodes it: cut inside v_acc, so the rest reads 0.
+        val sitlGpsRawInt = GpsRawInt(
+            timeUsec = SITL_GPS_TIME_USEC,
+            fixType = GPS_FIX_TYPE_RTK_FIXED,
+            lat = SITL_GPS_LAT,
+            lon = SITL_GPS_LON,
+            alt = SITL_GPS_ALT,
+            eph = 121,
+            epv = 200,
+            vel = 0,
+            cog = 0,
+            satellitesVisible = 10,
+            altEllipsoid = 587_150,
+            hAcc = 300,
+            vAcc = 300,
+            velAcc = 0,
+            hdgAcc = 0,
+            yaw = 0,
         )
 
         // The boot SYS_STATUS: no battery reading yet, so current_battery and battery_remaining are -1
