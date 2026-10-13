@@ -14,11 +14,17 @@ internal fun ByteArray.uint8(offset: Int): Int = if (offset < size) this[offset]
 
 internal fun ByteArray.uint16(offset: Int): Int = littleEndian(offset, UINT16_BYTES)
 
+/** Little-endian int16: the 16 bits as a [Short] extend the sign into the [Int]. */
+internal fun ByteArray.int16(offset: Int): Int = littleEndian(offset, UINT16_BYTES).toShort().toInt()
+
 /** Little-endian int32: Kotlin's [Int] is the same two's-complement 32 bits, so the sign comes for free. */
 internal fun ByteArray.int32(offset: Int): Int = littleEndian(offset, INT32_BYTES)
 
 /** Little-endian uint32, returned as a [Long] so values above `Int.MAX_VALUE` stay positive. */
 internal fun ByteArray.uint32(offset: Int): Long = littleEndian(offset, UINT32_BYTES).toLong() and UINT32_MASK
+
+/** Little-endian IEEE-754 single-precision float: its 32 bits read as an int32, then reinterpreted. */
+internal fun ByteArray.float(offset: Int): Float = Float.fromBits(int32(offset))
 
 /** The [bytes] bytes at [offset], least significant first, as the low bits of an [Int]. */
 private fun ByteArray.littleEndian(offset: Int, bytes: Int): Int {
