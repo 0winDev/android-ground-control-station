@@ -324,6 +324,8 @@ real value, so the data layer must not trust extension fields the sender did not
 | `derived/sys-status-unknown-battery.bin` | The same SYS_STATUS with `voltage_battery` UINT16_MAX and the other two battery fields -1 | voltage_battery 65535, current_battery -1, battery_remaining -1, the rest as the real one. LEN 31 | Decoder: the unknown voltage stays 65535, never -1 (REQ-025) |
 | `derived/gps-raw-int-edges.bin` | The GPS_RAW_INT re-packed with a distinct value in every field | time_usec `0x0123456789ABCDEF` (81985529216486895), fix_type 3, lat and lon as the real one, alt -12345, eph 150, epv 250, vel 1234, cog 35999, satellites_visible 12, alt_ellipsoid -23456, h_acc `0x89ABCDEF` (2309737967), v_acc 400, vel_acc 50, hdg_acc 12345, yaw 36000. LEN 52 | Decoder: uint64 byte order, int32 sign, uint32 above `Int.MAX_VALUE`, every extension offset |
 | `derived/gps-raw-int-unknown.bin` | The GPS_RAW_INT with every "unknown" value and the extensions 0 | time_usec, lat, lon, alt as the real one, fix_type 0 (`GPS_FIX_TYPE_NO_GPS`), eph, epv, vel, cog 65535, satellites_visible 255, extensions 0. LEN **30**: exactly the base fields | Decoder: unsigned sentinels stay positive; extensions restored as 0 (REQ-013, REQ-025) |
+| `derived/sys-status-battery-remaining-min.bin` | `telemetry/sys-status.bin` re-packed with `battery_remaining` -128 | as the real one, battery_remaining -128 (`80`). LEN 31 | Decoder: the int8 is sign-extended, not read as 128 or special-cased on `ff` |
+| `derived/gps-raw-int-time-2-63.bin` | `telemetry/gps-raw-int.bin` re-packed with `time_usec` 2⁶³ | as the real one, time_usec 9223372036854775808 (`00 00 00 00 00 00 00 80`). LEN 40 | Decoder: the documented limit, a uint64 of 2⁶³ or more comes out as a negative `Long` (here `Long.MIN_VALUE`) |
 
 Raw bytes:
 
@@ -343,4 +345,10 @@ derived/gps-raw-int-edges.bin           fd 34 00 00 27 01 01 18 00 00 ef cd ab 8
                                         ef cd ab 89 90 01 00 00 32 00 00 00 39 30 00 00 a0 8c c9 22
 derived/gps-raw-int-unknown.bin         fd 1e 00 00 27 01 01 18 00 00 78 1f a6 17 00 00 00 00 15 fb eb ea
                                         3c cf e8 58 8e f5 08 00 ff ff ff ff ff ff ff ff 00 ff a8 97
+derived/sys-status-battery-remaining-min.bin
+                                        fd 1f 00 00 22 01 01 01 00 00 2f fc 71 53 2f 9c 61 52 2f 9c 71 57
+                                        00 00 38 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 79 1f
+derived/gps-raw-int-time-2-63.bin       fd 28 00 00 27 01 01 18 00 00 00 00 00 00 00 00 00 80 15 fb eb ea
+                                        3c cf e8 58 8e f5 08 00 79 00 c8 00 00 00 00 00 06 0a 8e f5 08 00
+                                        2c 01 00 00 2c 01 60 2f
 ```

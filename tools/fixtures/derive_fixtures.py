@@ -96,6 +96,11 @@ Writes:
   <out>/derived/gps-raw-int-unknown.bin         the GPS_RAW_INT with eph, epv, vel, cog UINT16_MAX,
                                                 satellites_visible UINT8_MAX, fix_type NO_GPS and every
                                                 extension 0: truncated to the 30 base bytes
+  <out>/derived/sys-status-battery-remaining-min.bin
+                                                telemetry/sys-status.bin re-packed by pymavlink with
+                                                battery_remaining -128 (0x80), the lowest int8
+  <out>/derived/gps-raw-int-time-2-63.bin       telemetry/gps-raw-int.bin re-packed by pymavlink with time_usec
+                                                2^63 (0x8000000000000000): out of a Long's range
 
 checks each output with pymavlink before writing it, prints the decoded fields of the telemetry fixtures
 (floats as the shortest decimal text that is the same float32) and the session counts the tests expect.
@@ -252,6 +257,8 @@ GPS_RAW_INT_UNKNOWN = {
 FULL_GPS_RAW_INT_LENGTH = 52
 TRUNCATED_GPS_RAW_INT_LENGTH = 40  # v_acc 300 (2c 01 00 00) loses its two zero high bytes with what follows
 GPS_RAW_INT_BASE_LENGTH = 30
+INT8_MIN = -128  # 0x80: only a sign-extending read gives -128, not 128
+TIME_USEC_2_63 = 2**63  # the smallest uint64 a Kotlin Long cannot hold
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -559,6 +566,8 @@ def main() -> None:
         derived_dir / "sys-status-unknown-battery.bin": with_message_fields(sys_status, **SYS_STATUS_UNKNOWN_BATTERY),
         derived_dir / "gps-raw-int-edges.bin": with_message_fields(gps_raw_int, **GPS_RAW_INT_EDGES),
         derived_dir / "gps-raw-int-unknown.bin": with_message_fields(gps_raw_int, **GPS_RAW_INT_UNKNOWN),
+        derived_dir / "sys-status-battery-remaining-min.bin": with_message_fields(battery, battery_remaining=INT8_MIN),
+        derived_dir / "gps-raw-int-time-2-63.bin": with_message_fields(gps_raw_int, time_usec=TIME_USEC_2_63),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -625,6 +634,8 @@ def main() -> None:
         ("sys-status-unknown-battery.bin", SYS_STATUS_UNKNOWN_BATTERY, TRUNCATED_SYS_STATUS_LENGTH),
         ("gps-raw-int-edges.bin", GPS_RAW_INT_EDGES, FULL_GPS_RAW_INT_LENGTH),
         ("gps-raw-int-unknown.bin", GPS_RAW_INT_UNKNOWN, GPS_RAW_INT_BASE_LENGTH),
+        ("sys-status-battery-remaining-min.bin", {"battery_remaining": INT8_MIN}, TRUNCATED_SYS_STATUS_LENGTH),
+        ("gps-raw-int-time-2-63.bin", {"time_usec": TIME_USEC_2_63}, TRUNCATED_GPS_RAW_INT_LENGTH),
     ):
         frame = outputs[derived_dir / name]
         assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
@@ -652,6 +663,8 @@ def main() -> None:
         derived_dir / "sys-status-unknown-battery.bin",
         derived_dir / "gps-raw-int-edges.bin",
         derived_dir / "gps-raw-int-unknown.bin",
+        derived_dir / "sys-status-battery-remaining-min.bin",
+        derived_dir / "gps-raw-int-time-2-63.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")
