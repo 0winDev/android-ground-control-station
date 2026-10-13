@@ -1,11 +1,14 @@
 package com.owindev.gcs.data.vehicle.di
 
 import com.owindev.gcs.core.domain.link.LinkRepository
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
+import com.owindev.gcs.data.vehicle.telemetry.DefaultTelemetryRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -27,6 +30,9 @@ abstract class VehicleDataModule {
     @Binds
     internal abstract fun bindVehicleRepository(impl: DefaultVehicleRepository): VehicleRepository
 
+    @Binds
+    internal abstract fun bindTelemetryRepository(impl: DefaultTelemetryRepository): TelemetryRepository
+
     companion object {
 
         /** One transport for the whole app: there is one vehicle link. */
@@ -47,5 +53,9 @@ abstract class VehicleDataModule {
         /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
         @Provides
         fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
+
+        /** The staleness thresholds decided in #39 (REQ-026); change them here. */
+        @Provides
+        fun provideStalenessRule(): StalenessRule = StalenessRule()
     }
 }

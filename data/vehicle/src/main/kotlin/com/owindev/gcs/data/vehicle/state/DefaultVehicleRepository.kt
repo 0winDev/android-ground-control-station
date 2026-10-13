@@ -11,6 +11,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
 import java.net.InetSocketAddress
 import javax.inject.Inject
@@ -31,7 +32,6 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -42,7 +42,8 @@ import kotlinx.coroutines.launch
  *
  * Four jobs in the application scope, all started on first use:
  * - the **listener** collects HEARTBEATs only while [vehicles] is observed (plus [LINK_STOP_TIMEOUT]),
- *   so the socket is not kept open for nobody;
+ *   so the socket is not kept open for nobody. It also keeps every vehicle's telemetry in the
+ *   [TelemetryStore] (REQ-026), marked on arrival with the same clock as the HEARTBEATs;
  * - the **watchdog** owns the map and the per-vehicle timers, and runs for as long as the app does. A
  *   vehicle therefore goes [VehicleLink.LOST] on time even when nobody observes it, when the transport
  *   fails or when the message flow ends: it can never be left [VehicleLink.CONNECTED] without HEARTBEATs,
@@ -71,6 +72,8 @@ import kotlinx.coroutines.launch
  * vehicle's age is right after waking. Timers use coroutine `delay`, which pauses during sleep, so the
  * LOST transition itself can lag by up to one timeout after the device wakes.
  */
+// One collaborator per job above, plus the store the listener fills; grouping them would only hide that.
+@Suppress("LongParameterList")
 @Singleton
 internal class DefaultVehicleRepository @Inject constructor(
     private val session: LinkSession,
@@ -78,6 +81,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val rule: LinkLossRule,
     private val heartbeatSender: GcsHeartbeatSender,
     private val telemetryRequester: TelemetryRequester,
+    private val telemetryStore: TelemetryStore,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository {
 
@@ -96,11 +100,15 @@ internal class DefaultVehicleRepository @Inject constructor(
     @Volatile
     private var addresses: Map<SystemId, InetSocketAddress> = emptyMap()
 
+    /** Whether the listener holds the link open right now; written only by the listener. */
+    @Volatile
+    private var listening = false
+
     override val vehicles: StateFlow<Map<SystemId, Vehicle>> by lazy {
         scope.launch { watch() }
         scope.launch { listenWhileObserved() }
         scope.launch { heartbeatSender.run(::activeAddressWhileConnected) }
-        scope.launch { telemetryRequester.run(activeLinkChanges.receiveAsFlow()) }
+        scope.launch { telemetryRequester.run(activeLinkChanges.receiveAsFlow(), ::activeHeardNow) }
         mutableVehicles.asStateFlow()
     }
 
@@ -115,15 +123,16 @@ internal class DefaultVehicleRepository @Inject constructor(
             .command(mutableVehicles.subscriptionCount)
             .distinctUntilChanged()
             .collectLatest { command ->
-                if (command == SharingCommand.START) {
-                    session.messages
-                        .mapNotNull { received ->
-                            HeartbeatMapper.vehicleStateOf(received)?.let { state ->
-                                // Marked on arrival, not when the watchdog gets to it.
-                                Event.Heard(state, timeSource.markNow(), received.sender)
-                            }
+                listening = command == SharingCommand.START
+                if (listening) {
+                    session.messages.collect { received ->
+                        // Marked on arrival, not when the watchdog gets to it.
+                        val at = timeSource.markNow()
+                        telemetryStore.record(received, at)
+                        HeartbeatMapper.vehicleStateOf(received)?.let { state ->
+                            events.send(Event.Heard(state, at, received.sender))
                         }
-                        .collect { heard -> events.send(heard) }
+                    }
                 }
             }
     }
@@ -218,6 +227,14 @@ internal class DefaultVehicleRepository @Inject constructor(
             rule.linkAfter(vehicle.lastHeartbeat.elapsedNow()) == VehicleLink.CONNECTED
         return if (connected) addresses[systemId] else null
     }
+
+    /**
+     * Whether the active vehicle is heard right now: the link is listened to and the vehicle is CONNECTED by
+     * the same double check as [activeAddressWhileConnected]. The telemetry job asks before requesting a
+     * silent stream again, so it never opens the socket again for nobody nor speaks to a vehicle the device
+     * slept away from.
+     */
+    private fun activeHeardNow(): Boolean = listening && activeAddressWhileConnected() != null
 
     private sealed interface Event {
         data class Heard(val state: VehicleState, val at: ComparableTimeMark, val sender: InetSocketAddress) : Event

@@ -227,3 +227,8 @@ Add one line per closed issue: what surprised us and what to do differently.
 - #38 Battery and GPS: an old fixture is not always what its folder suggests (`truncated/sys_status.bin` is a boot frame
   with no battery reading, from outside `session.tlog`): decode every fixture you reuse with pymavlink first. Read each
   field's `invalid` attribute in the XML, not only the issue: GPS_RAW_INT `yaw` has two "unknown" values (0 and UINT16_MAX).
+- #39 Telemetry age: anything that waits for an answer subscribes to the shared `messages` and reopens a closed socket, so
+  gate every background send on "the link is listened to", not only on CONNECTED. The XML is not the whole story:
+  ArduPilot sends `voltage_battery` 0, not UINT16_MAX, without a battery monitor. Mission Planner's SITL updated itself
+  to V4.7.2 official, and the emulator's clock ran 7 s behind the host: query AUTOPILOT_VERSION every session and match
+  logcat to the relay log by events, not timestamps.

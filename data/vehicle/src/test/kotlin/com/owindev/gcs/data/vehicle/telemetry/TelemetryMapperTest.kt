@@ -1,0 +1,352 @@
+package com.owindev.gcs.data.vehicle.telemetry
+
+import com.owindev.gcs.core.domain.telemetry.AirData
+import com.owindev.gcs.core.domain.telemetry.Attitude
+import com.owindev.gcs.core.domain.telemetry.Battery
+import com.owindev.gcs.core.domain.telemetry.GlobalPosition
+import com.owindev.gcs.core.domain.telemetry.GpsFixType
+import com.owindev.gcs.core.domain.telemetry.GpsStatus
+import com.owindev.gcs.core.domain.telemetry.Telemetry
+import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.mavlink.MavlinkDecoder
+import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.core.mavlink.MavlinkMessages
+import com.owindev.gcs.core.mavlink.MavlinkParser
+import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import kotlin.time.TestTimeSource
+import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldBeNull
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
+
+/**
+ * Real and pymavlink-derived frames (`src/test/resources/README.md`). Expected values are the raw values
+ * pymavlink decodes, converted by hand: degE7 / 10⁷, mm / 1000, cm and c% / 100, mV / 1000, cA / 100, and
+ * radians × 180 / π as Python's `math.degrees` gives it.
+ */
+@Tag("REQ-026")
+class TelemetryMapperTest {
+
+    private lateinit var mapper: TelemetryMapper
+
+    @BeforeEach
+    fun setUp() {
+        mapper = TelemetryMapper
+    }
+
+    @Test
+    fun `GIVEN a real GLOBAL_POSITION_INT WHEN mapping it THEN is in degrees, metres and metres per second`() {
+        val received = receivedFixture(GLOBAL_POSITION_INT)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result shouldBeEqualTo Telemetry(
+            position = Timed(
+                GlobalPosition(
+                    latitude = -35.3633514,
+                    longitude = 149.1652411,
+                    altitudeMsl = 587.13,
+                    altitudeAboveHome = -0.013,
+                    velocityNorth = 0.01,
+                    velocityEast = -0.01,
+                    velocityDown = 0.0,
+                    heading = 359.35,
+                ),
+                RECEIVED_AT,
+            ),
+        )
+    }
+
+    @Test
+    fun `GIVEN a GLOBAL_POSITION_INT with an unknown heading WHEN mapping it THEN has no heading`() {
+        val received = receivedFixture(GLOBAL_POSITION_INT_EDGES)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.position?.value shouldBeEqualTo GlobalPosition(
+            latitude = -35.3633514,
+            longitude = 149.1652411,
+            altitudeMsl = -12.345,
+            altitudeAboveHome = -0.5,
+            velocityNorth = -3.0,
+            velocityEast = 12.34,
+            velocityDown = -1.5,
+            heading = null,
+        )
+    }
+
+    @Test
+    fun `GIVEN a real ATTITUDE WHEN mapping it THEN is in degrees`() {
+        val received = receivedFixture(ATTITUDE)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result shouldBeEqualTo Telemetry(
+            attitude = Timed(
+                Attitude(roll = -0.06018896765758124, pitch = -0.07352510544512286, yaw = -0.6512406614749974),
+                RECEIVED_AT,
+            ),
+        )
+    }
+
+    @Test
+    fun `GIVEN an ATTITUDE with yaw near minus pi WHEN mapping it THEN is near minus 180 degrees`() {
+        val received = receivedFixture(ATTITUDE_EDGES)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.attitude?.value shouldBeEqualTo Attitude(
+            roll = 28.64788975654116,
+            pitch = -14.32394487827058,
+            yaw = -180.00000500895632,
+        )
+    }
+
+    @Test
+    fun `GIVEN a real truncated VFR_HUD WHEN mapping it THEN is the air data with throttle 0`() {
+        val received = receivedFixture(VFR_HUD)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result shouldBeEqualTo Telemetry(
+            airData = Timed(
+                AirData(
+                    airspeed = 0.0238723773509264,
+                    groundspeed = 0.023871898651123047,
+                    climbRate = -0.00015098023868631572,
+                    throttle = 0,
+                ),
+                RECEIVED_AT,
+            ),
+        )
+    }
+
+    @Test
+    fun `GIVEN a VFR_HUD while descending WHEN mapping it THEN the climb rate is negative`() {
+        val received = receivedFixture(VFR_HUD_EDGES)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.airData?.value shouldBeEqualTo AirData(
+            airspeed = 0.0238723773509264,
+            groundspeed = 0.023871898651123047,
+            climbRate = -2.5,
+            throttle = 65,
+        )
+    }
+
+    @Test
+    fun `GIVEN a real SYS_STATUS WHEN mapping it THEN is the battery in volts, amperes and percent`() {
+        val received = receivedFixture(SYS_STATUS)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result shouldBeEqualTo Telemetry(
+            battery = Timed(Battery(voltage = 12.6, current = 0.0, remaining = 100), RECEIVED_AT),
+        )
+    }
+
+    @Test
+    fun `GIVEN a SYS_STATUS with a distinct battery reading WHEN mapping it THEN is converted`() {
+        val received = receivedFixture(SYS_STATUS_EDGES)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.battery?.value shouldBeEqualTo Battery(voltage = 11.1, current = 15.5, remaining = 42)
+    }
+
+    @Test
+    fun `GIVEN a SYS_STATUS with every battery reading unknown WHEN mapping it THEN has no reading`() {
+        val received = receivedFixture(SYS_STATUS_UNKNOWN_BATTERY)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.battery?.value shouldBeEqualTo NO_BATTERY_READING
+    }
+
+    @Test
+    fun `GIVEN the real boot SYS_STATUS with 0 mV WHEN mapping it THEN has no reading, not 0 V`() {
+        val received = receivedFixture(SYS_STATUS_BOOT)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.battery?.value shouldBeEqualTo NO_BATTERY_READING
+    }
+
+    @Test
+    fun `GIVEN a SYS_STATUS with a remaining energy of -128 WHEN mapping it THEN has no remaining energy`() {
+        val received = receivedFixture(SYS_STATUS_REMAINING_MIN)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.battery?.value shouldBeEqualTo Battery(voltage = 12.6, current = 0.0, remaining = null)
+    }
+
+    @Test
+    fun `GIVEN a real GPS_RAW_INT WHEN mapping it THEN is the fix with its accuracy in metres and no yaw`() {
+        val received = receivedFixture(GPS_RAW_INT)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result shouldBeEqualTo Telemetry(
+            gps = Timed(
+                GpsStatus(
+                    fixType = GpsFixType.RtkFixed,
+                    satellitesVisible = 10,
+                    hdop = 1.21,
+                    vdop = 2.0,
+                    groundSpeed = 0.0,
+                    courseOverGround = 0.0,
+                    horizontalAccuracy = 0.3,
+                    verticalAccuracy = 0.3,
+                    yaw = null,
+                ),
+                RECEIVED_AT,
+            ),
+        )
+    }
+
+    @Test
+    fun `GIVEN a GPS_RAW_INT with a distinct value in every field WHEN mapping it THEN yaw north is 0 degrees`() {
+        val received = receivedFixture(GPS_RAW_INT_EDGES)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.gps?.value shouldBeEqualTo GpsStatus(
+            fixType = GpsFixType.Fix3d,
+            satellitesVisible = 12,
+            hdop = 1.5,
+            vdop = 2.5,
+            groundSpeed = 12.34,
+            courseOverGround = 359.99,
+            horizontalAccuracy = 2309737.967,
+            verticalAccuracy = 0.4,
+            yaw = 0.0,
+        )
+    }
+
+    @Test
+    fun `GIVEN a GPS_RAW_INT with every value unknown and extensions zero-filled WHEN mapping it THEN is all null`() {
+        val received = receivedFixture(GPS_RAW_INT_UNKNOWN)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.gps?.value shouldBeEqualTo GpsStatus(
+            fixType = GpsFixType.NoGps,
+            satellitesVisible = null,
+            hdop = null,
+            vdop = null,
+            groundSpeed = null,
+            courseOverGround = null,
+            horizontalAccuracy = null,
+            verticalAccuracy = null,
+            yaw = null,
+        )
+    }
+
+    @Test
+    fun `GIVEN a GPS_RAW_INT configured for yaw but unable to provide it WHEN mapping it THEN has no yaw`() {
+        val received = received(gpsRawInt(yaw = MavlinkMessage.GpsRawInt.YAW_UNAVAILABLE))
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.gps?.value?.yaw.shouldBeNull()
+    }
+
+    @Test
+    fun `GIVEN a GPS_RAW_INT with a fix type GPS_FIX_TYPE does not define WHEN mapping it THEN keeps its number`() {
+        val received = received(gpsRawInt(fixType = UNDEFINED_FIX_TYPE))
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.gps?.value?.fixType shouldBeEqualTo GpsFixType.Unknown(UNDEFINED_FIX_TYPE)
+    }
+
+    @Test
+    fun `GIVEN telemetry with other parts WHEN mapping a message THEN only its own part changes`() {
+        val telemetry = Telemetry(battery = Timed(NO_BATTERY_READING, EARLIER))
+
+        val result = mapper.update(telemetry, receivedFixture(ATTITUDE), RECEIVED_AT)
+
+        result?.battery shouldBeEqualTo Timed(NO_BATTERY_READING, EARLIER)
+    }
+
+    @Test
+    fun `GIVEN telemetry from another component of the vehicle WHEN mapping it THEN is not the vehicle's`() {
+        val received = receivedFixture(ATTITUDE).copy(componentId = MAV_COMP_ID_GIMBAL)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result.shouldBeNull()
+    }
+
+    @Test
+    fun `GIVEN a message that is not telemetry WHEN mapping it THEN is not telemetry`() {
+        val received = receivedFixture(HEARTBEAT)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result.shouldBeNull()
+    }
+
+    private fun receivedFixture(path: String): ReceivedMessage {
+        val frame = MavlinkParser(MavlinkMessages).parse(readFixture(path)).single()
+        return ReceivedMessage(frame.systemId, frame.componentId, MavlinkDecoder.decode(frame), SENDER)
+    }
+}
+
+private const val GLOBAL_POSITION_INT = "telemetry/global-position-int.bin"
+private const val GLOBAL_POSITION_INT_EDGES = "derived/global-position-int-edges.bin"
+private const val ATTITUDE = "telemetry/attitude.bin"
+private const val ATTITUDE_EDGES = "derived/attitude-edges.bin"
+private const val VFR_HUD = "telemetry/vfr-hud.bin"
+private const val VFR_HUD_EDGES = "derived/vfr-hud-edges.bin"
+private const val SYS_STATUS = "telemetry/sys-status.bin"
+private const val SYS_STATUS_EDGES = "derived/sys-status-edges.bin"
+private const val SYS_STATUS_UNKNOWN_BATTERY = "derived/sys-status-unknown-battery.bin"
+private const val SYS_STATUS_BOOT = "truncated/sys_status.bin"
+private const val SYS_STATUS_REMAINING_MIN = "derived/sys-status-battery-remaining-min.bin"
+private const val GPS_RAW_INT = "telemetry/gps-raw-int.bin"
+private const val GPS_RAW_INT_EDGES = "derived/gps-raw-int-edges.bin"
+private const val GPS_RAW_INT_UNKNOWN = "derived/gps-raw-int-unknown.bin"
+private const val HEARTBEAT = "heartbeat/disarmed-stabilize.bin"
+
+private const val SYSTEM_ID = 1
+private const val MAV_COMP_ID_AUTOPILOT1 = 1
+private const val MAV_COMP_ID_GIMBAL = 154
+
+/** `GPS_FIX_TYPE` ends at 8 (`GPS_FIX_TYPE_PPP`) in `common.xml`. */
+private const val UNDEFINED_FIX_TYPE = 9
+
+private val SENDER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_551)
+
+private val CLOCK = TestTimeSource()
+private val EARLIER = CLOCK.markNow()
+private val RECEIVED_AT = CLOCK.markNow()
+
+private val NO_BATTERY_READING = Battery(voltage = null, current = null, remaining = null)
+
+private fun received(message: MavlinkMessage) = ReceivedMessage(SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, message, SENDER)
+
+private fun gpsRawInt(fixType: Int = 3, yaw: Int = 0) = MavlinkMessage.GpsRawInt(
+    timeUsec = 396_763_000,
+    fixType = fixType,
+    lat = -353_633_515,
+    lon = 1_491_652_412,
+    alt = 587_150,
+    eph = 121,
+    epv = 200,
+    vel = 0,
+    cog = 0,
+    satellitesVisible = 10,
+    altEllipsoid = 587_150,
+    hAcc = 300,
+    vAcc = 300,
+    velAcc = 0,
+    hdgAcc = 0,
+    yaw = yaw,
+)

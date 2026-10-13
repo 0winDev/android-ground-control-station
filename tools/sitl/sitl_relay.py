@@ -10,9 +10,14 @@ Telemetry streams (#36): every --rates-every seconds it logs the rate at which t
 the app requests (counted on the SITL side, so even while the downlink is cut), and it logs every
 COMMAND_LONG from the app with the vehicle's COMMAND_ACK and how long the answer took.
 
-Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), q = quit.
-With --background (no terminal; on Windows NUL even claims to be one): create the file
-<log>.downlink-off to cut the downlink and delete it to restore it; stop the process to quit.
+Stopping a stream (#39): s = ask the vehicle, on this relay's channel (the app's), to stop sending ATTITUDE
+(MAV_CMD_SET_MESSAGE_INTERVAL with interval -1, "disable" in common.xml). ArduPilot keeps rates per channel
+(#36), so the app stops receiving it and should request it again; the RATES lines show it come back.
+
+Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), s = stop ATTITUDE,
+q = quit. With --background (no terminal; on Windows NUL even claims to be one): create the file
+<log>.downlink-off to cut the downlink and delete it to restore it; create <log>.stop-attitude to stop
+ATTITUDE once (the relay deletes it); stop the process to quit.
 
 pymavlink is the reference decoder here and only a tool dependency (py -m pip install --user pymavlink).
 
@@ -33,6 +38,12 @@ from pymavlink import mavutil
 from pymavlink.dialects.v20 import common
 
 CONTROL_POLL_S = 0.2
+# common.xml: MAV_CMD_SET_MESSAGE_INTERVAL (511), param1 message ID, param2 interval in us, -1 to disable.
+MAV_CMD_SET_MESSAGE_INTERVAL = 511
+DISABLE_INTERVAL = -1
+ATTITUDE_ID = 30
+VEHICLE_SYSTEM_ID = 1
+MAV_COMP_ID_AUTOPILOT1 = 1
 # The streams the app requests (data/vehicle/.../telemetry/TelemetryStream.kt), by pymavlink type name.
 REQUESTED = ("ATTITUDE", "GLOBAL_POSITION_INT", "VFR_HUD", "GPS_RAW_INT", "SYS_STATUS")
 counts = {name: 0 for name in REQUESTED}
@@ -162,15 +173,32 @@ def main() -> None:
             key = line.strip().lower()
             if key == "d":
                 set_downlink(not downlink_on.is_set())
+            elif key == "s":
+                stop_stream(sitl, ATTITUDE_ID)
             elif key == "q":
                 break
     else:
         control = args.log + ".downlink-off"
+        stop_attitude = args.log + ".stop-attitude"
         log(f"background: create {control} to cut the downlink, delete it to restore it")
+        log(f"background: create {stop_attitude} to stop ATTITUDE once")
         while True:
             set_downlink(not os.path.exists(control))
+            if os.path.exists(stop_attitude):
+                os.remove(stop_attitude)
+                stop_stream(sitl, ATTITUDE_ID)
             time.sleep(CONTROL_POLL_S)
     stop.set()
+
+
+def stop_stream(sitl, message_id: int) -> None:
+    """Asks the vehicle to stop sending [message_id] on this channel, as if its stream had been lost."""
+    commands_sent[MAV_CMD_SET_MESSAGE_INTERVAL] = time.monotonic()
+    sitl.mav.command_long_send(
+        VEHICLE_SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+        message_id, DISABLE_INTERVAL, 0, 0, 0, 0, 0,
+    )
+    log(f"STREAM {message_id} STOPPED by the relay (the app should request it again once it is stale, 0.5 s, and at least 5 s after its last request)")
 
 
 def set_downlink(on: bool) -> None:
