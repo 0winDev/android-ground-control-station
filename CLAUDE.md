@@ -220,3 +220,7 @@ Add one line per closed issue: what surprised us and what to do differently.
   never reach the relay's 5763; measure a baseline on the app's own channel. A trigger derived from StateFlows
   can conflate LOST → CONNECTED into nothing; let the single writer send each transition through a Channel. In
   virtual time, a timeout and an answer due at the same instant race: keep test timings off each other's edges.
+- #37 Telemetry decoding: GLOBAL_POSITION_INT now lives in `standard.xml` on master (included by `common.xml`), like
+  HEARTBEAT in `minimal.xml`: search every include before saying a message is missing. Truncation cuts bytes, not
+  fields (throttle 65 = `41 00` gives LEN 19), so take expected LENs from pymavlink, never by hand. Adding messages
+  to the table changes tests that borrowed one as "unknown": pick an unknown example the roadmap will never decode.
