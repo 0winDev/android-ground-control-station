@@ -61,7 +61,7 @@ private val POSITION = GlobalPosition(
 )
 private val ATTITUDE = Attitude(roll = 1.0, pitch = 2.0, yaw = 3.0)
 private val AIR_DATA = AirData(airspeed = 1.0, groundspeed = 2.0, climbRate = 3.0, throttle = 4)
-private val BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100)
+private val BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
 private val GPS = GpsStatus(
     fixType = GpsFixType.RtkFixed,
     satellitesVisible = 10,

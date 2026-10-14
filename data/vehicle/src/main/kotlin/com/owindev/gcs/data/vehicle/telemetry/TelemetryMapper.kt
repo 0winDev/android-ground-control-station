@@ -49,13 +49,15 @@ internal object TelemetryMapper {
     private const val GPS_FIX_TYPE_PPP = 8
 
     /**
-     * ArduPilot sends `voltage_battery` 0, not the UINT16_MAX the definition gives, when it has no battery
-     * monitor: `AP_BattMonitor::gcs_voltage` returns 0 without a driver (https://github.com/ArduPilot/ardupilot,
-     * `libraries/AP_BattMonitor/AP_BattMonitor.cpp` at commit 7af20c9f), as the real boot frame in
-     * `truncated/sys_status.bin` shows. A powered autopilot never reads 0 V on its own battery, so 0 means no
-     * reading (ADR 0003: autopilot-specific, kept here).
+     * `MAV_SYS_STATUS_SENSOR_BATTERY` (`common.xml`). ArduPilot always sets it in `onboard_control_sensors_present`,
+     * sets it in `_enabled` only when it has a battery monitor, and in `_health` only while the monitor is healthy
+     * and its battery failsafe has not triggered (https://github.com/ArduPilot/ardupilot,
+     * `libraries/GCS_MAVLink/GCS.cpp` at commit 0922bced). Without a monitor, or before it has a reading, it sends
+     * `voltage_battery` 0 rather than the UINT16_MAX the definition gives (`AP_BattMonitor::gcs_voltage`), as the
+     * real boot frame in `truncated/sys_status.bin` shows: so 0 mV only counts as 0 V from an enabled, healthy
+     * monitor (ADR 0003: autopilot-specific, kept here).
      */
-    private const val ARDUPILOT_NO_BATTERY_MONITOR_MV = 0
+    private const val MAV_SYS_STATUS_SENSOR_BATTERY = 0x0200_0000L
 
     /**
      * Extension fields a sender omits or truncates read as 0 (#35, #38), so a 0 accuracy is no reading, not a
@@ -103,14 +105,20 @@ internal object TelemetryMapper {
         throttle = throttle,
     )
 
-    private fun SysStatus.toBattery() = Battery(
-        voltage = voltageBattery
-            .takeUnless { it == SysStatus.VOLTAGE_BATTERY_UNKNOWN || it == ARDUPILOT_NO_BATTERY_MONITOR_MV }
-            ?.let { it / MILLI },
-        current = currentBattery.takeUnless { it == SysStatus.CURRENT_BATTERY_UNKNOWN }?.let { it / CENTI },
-        // -1 is the documented "not sent"; any other value outside 0–100 is no percentage either.
-        remaining = batteryRemaining.takeIf { it in 0..PERCENT_MAX },
-    )
+    private fun SysStatus.toBattery(): Battery {
+        val monitored = onboardControlSensorsEnabled and MAV_SYS_STATUS_SENSOR_BATTERY != 0L
+        val healthy = onboardControlSensorsHealth and MAV_SYS_STATUS_SENSOR_BATTERY != 0L
+        return Battery(
+            voltage = voltageBattery
+                .takeIf { monitored && healthy && it != SysStatus.VOLTAGE_BATTERY_UNKNOWN }
+                ?.let { it / MILLI },
+            current = currentBattery.takeUnless { it == SysStatus.CURRENT_BATTERY_UNKNOWN }?.let { it / CENTI },
+            // -1 is the documented "not sent"; any other value outside 0–100 is no percentage either.
+            remaining = batteryRemaining.takeIf { it in 0..PERCENT_MAX },
+            monitored = monitored,
+            healthy = healthy,
+        )
+    }
 
     private fun GpsRawInt.toGpsStatus() = GpsStatus(
         fixType = gpsFixTypeOf(fixType),

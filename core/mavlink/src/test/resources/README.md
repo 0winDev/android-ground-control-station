@@ -292,8 +292,11 @@ SYS_STATUS (1) and GPS_RAW_INT (24), both in `common.xml`. `heartbeat/session.tl
 ArduCopter, all MAVLink 2 and all truncated the same way, so no new capture was needed: every SYS_STATUS has
 LEN 31 (the three zero extensions cut) and every GPS_RAW_INT LEN 40 (cut inside `v_acc`). In the session the
 battery always reads 12600 mV, 0 cA, 100 %; the only real "unknown" battery is `truncated/sys_status.bin`,
-taken at boot from the original log (#5). The `derived/` frames are re-packed **by pymavlink 2.4.50** from
-the real ones (same seq, system and component). Regenerate with `py tools/fixtures/derive_fixtures.py`.
+taken at boot from the original log (#5), with the battery bit enabled but not healthy. ArduPilot always sets
+`MAV_SYS_STATUS_SENSOR_BATTERY` in `_present`; only `_enabled` says whether a monitor is configured, and
+`_health` is clear while the monitor is unhealthy or in failsafe (`libraries/GCS_MAVLink/GCS.cpp`, #41). The
+`derived/` frames are re-packed **by pymavlink 2.4.50** from the real ones (same seq, system and component).
+Regenerate with `py tools/fixtures/derive_fixtures.py`.
 
 Wire layout (offsets from `mavparse`, the same on pymavlink 2.4.50 and on `mavlink/mavlink` master):
 
@@ -326,6 +329,9 @@ real value, so the data layer must not trust extension fields the sender did not
 | `derived/gps-raw-int-unknown.bin` | The GPS_RAW_INT with every "unknown" value and the extensions 0 | time_usec, lat, lon, alt as the real one, fix_type 0 (`GPS_FIX_TYPE_NO_GPS`), eph, epv, vel, cog 65535, satellites_visible 255, extensions 0. LEN **30**: exactly the base fields | Decoder: unsigned sentinels stay positive; extensions restored as 0 (REQ-013, REQ-025) |
 | `derived/sys-status-battery-remaining-min.bin` | `telemetry/sys-status.bin` re-packed with `battery_remaining` -128 | as the real one, battery_remaining -128 (`80`). LEN 31 | Decoder: the int8 is sign-extended, not read as 128 or special-cased on `ff` |
 | `derived/gps-raw-int-time-2-63.bin` | `telemetry/gps-raw-int.bin` re-packed with `time_usec` 2⁶³ | as the real one, time_usec 9223372036854775808 (`00 00 00 00 00 00 00 80`). LEN 40 | Decoder: the documented limit, a uint64 of 2⁶³ or more comes out as a negative `Long` (here `Long.MIN_VALUE`) |
+| `derived/sys-status-battery-zero-volts.bin` | `telemetry/sys-status.bin` re-packed with `voltage_battery` 0 (#41) | as the real one, voltage_battery 0; the battery bit (`MAV_SYS_STATUS_SENSOR_BATTERY`, `0x2000000`) set in present, enabled and health. LEN 31 | Mapper: a healthy, enabled monitor reading 0 V is a 0 V reading |
+| `derived/sys-status-no-battery-monitor.bin` | `telemetry/sys-status.bin` re-packed without the battery bit in `_enabled`, `voltage_battery` 0 and the other two battery fields -1 (#41) | enabled 1348574255, voltage_battery 0, current_battery -1, battery_remaining -1, the rest as the real one. LEN 31 | Mapper: ArduPilot without a battery monitor, no reading |
+| `derived/sys-status-battery-unhealthy.bin` | `telemetry/sys-status.bin` re-packed without the battery bit in `_health` (#41) | health 1433508911, the rest as the real one. LEN 31 | Mapper: an unhealthy monitor or a battery failsafe, voltage not trusted |
 
 Raw bytes:
 
@@ -351,4 +357,13 @@ derived/sys-status-battery-remaining-min.bin
 derived/gps-raw-int-time-2-63.bin       fd 28 00 00 27 01 01 18 00 00 00 00 00 00 00 00 00 80 15 fb eb ea
                                         3c cf e8 58 8e f5 08 00 79 00 c8 00 00 00 00 00 06 0a 8e f5 08 00
                                         2c 01 00 00 2c 01 60 2f
+derived/sys-status-battery-zero-volts.bin
+                                        fd 1f 00 00 22 01 01 01 00 00 2f fc 71 53 2f 9c 61 52 2f 9c 71 57
+                                        00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 64 63 74
+derived/sys-status-no-battery-monitor.bin
+                                        fd 1f 00 00 22 01 01 01 00 00 2f fc 71 53 2f 9c 61 50 2f 9c 71 57
+                                        00 00 00 00 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 ff 36 d1
+derived/sys-status-battery-unhealthy.bin
+                                        fd 1f 00 00 22 01 01 01 00 00 2f fc 71 53 2f 9c 61 52 2f 9c 71 55
+                                        00 00 38 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 64 58 ff
 ```

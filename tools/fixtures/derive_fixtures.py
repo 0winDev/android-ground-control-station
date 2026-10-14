@@ -101,6 +101,17 @@ Writes:
                                                 battery_remaining -128 (0x80), the lowest int8
   <out>/derived/gps-raw-int-time-2-63.bin       telemetry/gps-raw-int.bin re-packed by pymavlink with time_usec
                                                 2^63 (0x8000000000000000): out of a Long's range
+  <out>/derived/sys-status-battery-zero-volts.bin
+                                                telemetry/sys-status.bin re-packed by pymavlink with
+                                                voltage_battery 0: a healthy, enabled monitor reading 0 V
+  <out>/derived/sys-status-no-battery-monitor.bin
+                                                telemetry/sys-status.bin re-packed by pymavlink without the
+                                                battery bit in onboard_control_sensors_enabled, voltage_battery
+                                                0 and the other two battery fields -1: ArduPilot with no monitor
+  <out>/derived/sys-status-battery-unhealthy.bin
+                                                telemetry/sys-status.bin re-packed by pymavlink without the
+                                                battery bit in onboard_control_sensors_health: an unhealthy
+                                                monitor or a battery failsafe
 
 checks each output with pymavlink before writing it, prints the decoded fields of the telemetry fixtures
 (floats as the shortest decimal text that is the same float32) and the session counts the tests expect.
@@ -259,6 +270,9 @@ TRUNCATED_GPS_RAW_INT_LENGTH = 40  # v_acc 300 (2c 01 00 00) loses its two zero 
 GPS_RAW_INT_BASE_LENGTH = 30
 INT8_MIN = -128  # 0x80: only a sign-extending read gives -128, not 128
 TIME_USEC_2_63 = 2**63  # the smallest uint64 a Kotlin Long cannot hold
+# MAV_SYS_STATUS_SENSOR_BATTERY (common.xml). ArduPilot always sets it in _present; _enabled only with a
+# battery monitor, _health only while the monitor is healthy and not in failsafe (GCS.cpp, AP_BATTERY_ENABLED).
+MAV_SYS_STATUS_SENSOR_BATTERY = 0x0200_0000
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -500,6 +514,16 @@ def main() -> None:
     gps_raw_int = session_frame(session, "GPS_RAW_INT", lambda m: True)
     sys_status = (args.out / SYS_STATUS).read_bytes()
     battery = session_frame(session, "SYS_STATUS", lambda m: m.voltage_battery != 0)
+    battery_msg = decode(battery)
+    no_monitor = {
+        "onboard_control_sensors_enabled": battery_msg.onboard_control_sensors_enabled & ~MAV_SYS_STATUS_SENSOR_BATTERY,
+        "voltage_battery": 0,
+        "current_battery": -1,
+        "battery_remaining": -1,
+    }
+    unhealthy = {
+        "onboard_control_sensors_health": battery_msg.onboard_control_sensors_health & ~MAV_SYS_STATUS_SENSOR_BATTERY,
+    }
 
     outputs = {
         derived_dir / "heartbeat-signed.bin": signed(source),
@@ -568,6 +592,9 @@ def main() -> None:
         derived_dir / "gps-raw-int-unknown.bin": with_message_fields(gps_raw_int, **GPS_RAW_INT_UNKNOWN),
         derived_dir / "sys-status-battery-remaining-min.bin": with_message_fields(battery, battery_remaining=INT8_MIN),
         derived_dir / "gps-raw-int-time-2-63.bin": with_message_fields(gps_raw_int, time_usec=TIME_USEC_2_63),
+        derived_dir / "sys-status-battery-zero-volts.bin": with_message_fields(battery, voltage_battery=0),
+        derived_dir / "sys-status-no-battery-monitor.bin": with_message_fields(battery, **no_monitor),
+        derived_dir / "sys-status-battery-unhealthy.bin": with_message_fields(battery, **unhealthy),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -636,12 +663,17 @@ def main() -> None:
         ("gps-raw-int-unknown.bin", GPS_RAW_INT_UNKNOWN, GPS_RAW_INT_BASE_LENGTH),
         ("sys-status-battery-remaining-min.bin", {"battery_remaining": INT8_MIN}, TRUNCATED_SYS_STATUS_LENGTH),
         ("gps-raw-int-time-2-63.bin", {"time_usec": TIME_USEC_2_63}, TRUNCATED_GPS_RAW_INT_LENGTH),
+        ("sys-status-battery-zero-volts.bin", {"voltage_battery": 0}, TRUNCATED_SYS_STATUS_LENGTH),
+        ("sys-status-no-battery-monitor.bin", no_monitor, TRUNCATED_SYS_STATUS_LENGTH),
+        ("sys-status-battery-unhealthy.bin", unhealthy, TRUNCATED_SYS_STATUS_LENGTH),
     ):
         frame = outputs[derived_dir / name]
         assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
         assert all(getattr(decode(frame), field) == value for field, value in fields.items()), name
     assert gps_raw_int[1] == TRUNCATED_GPS_RAW_INT_LENGTH and decode(gps_raw_int).v_acc != 0
     assert decode(outputs[derived_dir / "gps-raw-int-unknown.bin"]).lat == decode(gps_raw_int).lat
+    for flags in ("present", "enabled", "health"):
+        assert getattr(battery_msg, f"onboard_control_sensors_{flags}") & MAV_SYS_STATUS_SENSOR_BATTERY, flags
 
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
@@ -665,6 +697,9 @@ def main() -> None:
         derived_dir / "gps-raw-int-unknown.bin",
         derived_dir / "sys-status-battery-remaining-min.bin",
         derived_dir / "gps-raw-int-time-2-63.bin",
+        derived_dir / "sys-status-battery-zero-volts.bin",
+        derived_dir / "sys-status-no-battery-monitor.bin",
+        derived_dir / "sys-status-battery-unhealthy.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")

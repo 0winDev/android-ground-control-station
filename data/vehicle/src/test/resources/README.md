@@ -19,7 +19,8 @@ their provenance (ArduCopter V4.7.2-beta1 SITL, 2026-10-08), raw bytes and refer
 
 Byte-identical copies of the telemetry fixtures in `core/mavlink/src/test/resources/` (#37, #38), where the
 provenance of each one is documented. Decoded again with pymavlink 2.4.50 before copying them; the raw values
-below are what it gives, and the mapper tests convert them by hand.
+below are what it gives, and the mapper tests convert them by hand. The battery bit is
+`MAV_SYS_STATUS_SENSOR_BATTERY` (`0x2000000`) in `onboard_control_sensors_enabled` and `_health`.
 
 | File | Origin | Raw values (pymavlink) | Used for |
 |---|---|---|---|
@@ -29,11 +30,14 @@ below are what it gives, and the mapper tests convert them by hand.
 | `derived/attitude-edges.bin` | derived | roll 0.5, pitch -0.25, yaw -3.1415927 | yaw near -180° |
 | `telemetry/vfr-hud.bin` | real | airspeed 0.023872377, groundspeed 0.023871899, throttle 0 (truncated), climb -0.00015098024 | air data |
 | `derived/vfr-hud-edges.bin` | derived | throttle 65, climb -2.5 | throttle and a descent |
-| `telemetry/sys-status.bin` | real | voltage_battery 12600, current_battery 0, battery_remaining 100 | battery converted |
-| `derived/sys-status-edges.bin` | derived | voltage_battery 11100, current_battery 1550, battery_remaining 42 | battery converted |
-| `derived/sys-status-unknown-battery.bin` | derived | voltage_battery 65535, current_battery -1, battery_remaining -1 | every battery reading unknown |
+| `telemetry/sys-status.bin` | real | voltage_battery 12600, current_battery 0, battery_remaining 100; battery bit enabled and healthy | battery converted |
+| `derived/sys-status-edges.bin` | derived | voltage_battery 11100, current_battery 1550, battery_remaining 42; battery bit enabled, not healthy | current and remaining converted, voltage not trusted |
+| `derived/sys-status-unknown-battery.bin` | derived | voltage_battery 65535, current_battery -1, battery_remaining -1; battery bit enabled, not healthy | every battery reading unknown |
 | `derived/sys-status-battery-remaining-min.bin` | derived | battery_remaining -128 | a remaining energy outside 0–100 |
-| `truncated/sys_status.bin` | real (boot, no battery monitor yet) | voltage_battery 0, current_battery -1, battery_remaining -1 | ArduPilot's 0 mV "no battery" |
+| `truncated/sys_status.bin` | real (boot) | voltage_battery 0, current_battery -1, battery_remaining -1; battery bit enabled, not healthy | a monitor with no reading yet: no voltage, not 0 V |
+| `derived/sys-status-battery-zero-volts.bin` | derived (#41) | voltage_battery 0; battery bit enabled and healthy | a healthy monitor reading 0 V |
+| `derived/sys-status-no-battery-monitor.bin` | derived (#41) | battery bit not enabled, voltage_battery 0, current_battery -1, battery_remaining -1 | no battery monitor |
+| `derived/sys-status-battery-unhealthy.bin` | derived (#41) | battery bit enabled, not healthy; the rest as `telemetry/sys-status.bin` | unhealthy monitor or battery failsafe |
 | `telemetry/gps-raw-int.bin` | real | fix_type 6, eph 121, epv 200, vel 0, cog 0, satellites_visible 10, h_acc 300, v_acc 300, yaw 0 | GPS converted; yaw not provided |
 | `derived/gps-raw-int-edges.bin` | derived | fix_type 3, eph 150, epv 250, vel 1234, cog 35999, satellites_visible 12, h_acc 2309737967, v_acc 400, yaw 36000 | uint32 accuracy; yaw north |
 | `derived/gps-raw-int-unknown.bin` | derived | fix_type 0, eph, epv, vel, cog 65535, satellites_visible 255, extensions 0 | every GPS reading unknown |

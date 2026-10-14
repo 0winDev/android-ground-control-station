@@ -146,17 +146,23 @@ class TelemetryMapperTest {
         val result = mapper.update(Telemetry(), received, RECEIVED_AT)
 
         result shouldBeEqualTo Telemetry(
-            battery = Timed(Battery(voltage = 12.6, current = 0.0, remaining = 100), RECEIVED_AT),
+            battery = Timed(FULL_BATTERY, RECEIVED_AT),
         )
     }
 
     @Test
-    fun `GIVEN a SYS_STATUS with a distinct battery reading WHEN mapping it THEN is converted`() {
+    fun `GIVEN a SYS_STATUS with distinct readings from an unhealthy monitor WHEN mapping it THEN has no voltage`() {
         val received = receivedFixture(SYS_STATUS_EDGES)
 
         val result = mapper.update(Telemetry(), received, RECEIVED_AT)
 
-        result?.battery?.value shouldBeEqualTo Battery(voltage = 11.1, current = 15.5, remaining = 42)
+        result?.battery?.value shouldBeEqualTo Battery(
+            voltage = null,
+            current = 15.5,
+            remaining = 42,
+            monitored = true,
+            healthy = false,
+        )
     }
 
     @Test
@@ -165,16 +171,49 @@ class TelemetryMapperTest {
 
         val result = mapper.update(Telemetry(), received, RECEIVED_AT)
 
-        result?.battery?.value shouldBeEqualTo NO_BATTERY_READING
+        result?.battery?.value shouldBeEqualTo UNHEALTHY_WITHOUT_READING
     }
 
     @Test
-    fun `GIVEN the real boot SYS_STATUS with 0 mV WHEN mapping it THEN has no reading, not 0 V`() {
+    fun `GIVEN the real boot SYS_STATUS, 0 mV and not yet healthy WHEN mapping it THEN has no voltage, not 0 V`() {
         val received = receivedFixture(SYS_STATUS_BOOT)
 
         val result = mapper.update(Telemetry(), received, RECEIVED_AT)
 
-        result?.battery?.value shouldBeEqualTo NO_BATTERY_READING
+        result?.battery?.value shouldBeEqualTo UNHEALTHY_WITHOUT_READING
+    }
+
+    @Test
+    fun `GIVEN a SYS_STATUS with 0 mV from a healthy monitor WHEN mapping it THEN reads 0 V`() {
+        val received = receivedFixture(SYS_STATUS_ZERO_VOLTS)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(voltage = 0.0)
+    }
+
+    @Test
+    fun `GIVEN a SYS_STATUS without a battery monitor WHEN mapping it THEN is not monitored and has no reading`() {
+        val received = receivedFixture(SYS_STATUS_NO_MONITOR)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.battery?.value shouldBeEqualTo Battery(
+            voltage = null,
+            current = null,
+            remaining = null,
+            monitored = false,
+            healthy = true,
+        )
+    }
+
+    @Test
+    fun `GIVEN a SYS_STATUS from an unhealthy monitor WHEN mapping it THEN is unhealthy and has no voltage`() {
+        val received = receivedFixture(SYS_STATUS_UNHEALTHY)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(voltage = null, healthy = false)
     }
 
     @Test
@@ -183,7 +222,7 @@ class TelemetryMapperTest {
 
         val result = mapper.update(Telemetry(), received, RECEIVED_AT)
 
-        result?.battery?.value shouldBeEqualTo Battery(voltage = 12.6, current = 0.0, remaining = null)
+        result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(remaining = null)
     }
 
     @Test
@@ -268,11 +307,11 @@ class TelemetryMapperTest {
 
     @Test
     fun `GIVEN telemetry with other parts WHEN mapping a message THEN only its own part changes`() {
-        val telemetry = Telemetry(battery = Timed(NO_BATTERY_READING, EARLIER))
+        val telemetry = Telemetry(battery = Timed(UNHEALTHY_WITHOUT_READING, EARLIER))
 
         val result = mapper.update(telemetry, receivedFixture(ATTITUDE), RECEIVED_AT)
 
-        result?.battery shouldBeEqualTo Timed(NO_BATTERY_READING, EARLIER)
+        result?.battery shouldBeEqualTo Timed(UNHEALTHY_WITHOUT_READING, EARLIER)
     }
 
     @Test
@@ -310,6 +349,9 @@ private const val SYS_STATUS_EDGES = "derived/sys-status-edges.bin"
 private const val SYS_STATUS_UNKNOWN_BATTERY = "derived/sys-status-unknown-battery.bin"
 private const val SYS_STATUS_BOOT = "truncated/sys_status.bin"
 private const val SYS_STATUS_REMAINING_MIN = "derived/sys-status-battery-remaining-min.bin"
+private const val SYS_STATUS_ZERO_VOLTS = "derived/sys-status-battery-zero-volts.bin"
+private const val SYS_STATUS_NO_MONITOR = "derived/sys-status-no-battery-monitor.bin"
+private const val SYS_STATUS_UNHEALTHY = "derived/sys-status-battery-unhealthy.bin"
 private const val GPS_RAW_INT = "telemetry/gps-raw-int.bin"
 private const val GPS_RAW_INT_EDGES = "derived/gps-raw-int-edges.bin"
 private const val GPS_RAW_INT_UNKNOWN = "derived/gps-raw-int-unknown.bin"
@@ -328,7 +370,16 @@ private val CLOCK = TestTimeSource()
 private val EARLIER = CLOCK.markNow()
 private val RECEIVED_AT = CLOCK.markNow()
 
-private val NO_BATTERY_READING = Battery(voltage = null, current = null, remaining = null)
+private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
+
+/** The battery bit enabled but not healthy, as at boot before the monitor has a reading. */
+private val UNHEALTHY_WITHOUT_READING = Battery(
+    voltage = null,
+    current = null,
+    remaining = null,
+    monitored = true,
+    healthy = false,
+)
 
 private fun received(message: MavlinkMessage) = ReceivedMessage(SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, message, SENDER)
 
