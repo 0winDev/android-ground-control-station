@@ -40,7 +40,7 @@ and are done **test-first**:
 3. The `mavlink-reviewer` agent reviews it against the official MAVLink specification.
 4. The owner reviews every line; nothing is merged that the owner cannot explain line by line.
 
-Red tests only live on the feature branch; the PR is opened as a **draft** until CI is green.
+Red tests only live on the feature branch; `main`'s protection only lets a PR merge once CI is green.
 
 ## 3. Branch
 
