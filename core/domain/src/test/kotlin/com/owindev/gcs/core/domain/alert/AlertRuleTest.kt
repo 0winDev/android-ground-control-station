@@ -13,6 +13,7 @@ import kotlin.time.TestTimeSource
 import kotlin.time.TimeMark
 import org.amshove.kluent.invoking
 import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldBeNull
 import org.amshove.kluent.shouldThrow
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -201,6 +202,28 @@ class AlertRuleTest {
         val result = rule.evaluate(NONE, telemetry(battery(remaining = 100)).copy(attitude = attitude))
 
         result shouldBeEqualTo listOf(STALE)
+    }
+
+    @Test
+    fun `GIVEN values received at different times WHEN asking when to evaluate again THEN is the next to go stale`() {
+        val battery = Timed(battery(remaining = 100), clock.markNow())
+        clock += 400.milliseconds
+        val attitude = Timed(ATTITUDE, clock.markNow())
+        clock += 300.milliseconds
+
+        val result = rule.untilNextStale(Telemetry(attitude = attitude, battery = battery))
+
+        result shouldBeEqualTo 200.milliseconds
+    }
+
+    @Test
+    fun `GIVEN only stale or missing telemetry WHEN asking when to evaluate again THEN there is no need to`() {
+        val attitude = Timed(ATTITUDE, clock.markNow())
+        clock += ATTITUDE_STALE_AFTER
+
+        val result = rule.untilNextStale(Telemetry(attitude = attitude))
+
+        result.shouldBeNull()
     }
 
     @Test

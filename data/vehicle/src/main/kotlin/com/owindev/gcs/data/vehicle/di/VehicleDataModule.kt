@@ -1,11 +1,14 @@
 package com.owindev.gcs.data.vehicle.di
 
+import com.owindev.gcs.core.domain.alert.AlertRepository
+import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import com.owindev.gcs.data.vehicle.telemetry.DefaultTelemetryRepository
@@ -33,6 +36,9 @@ abstract class VehicleDataModule {
     @Binds
     internal abstract fun bindTelemetryRepository(impl: DefaultTelemetryRepository): TelemetryRepository
 
+    @Binds
+    internal abstract fun bindAlertRepository(impl: DefaultAlertRepository): AlertRepository
+
     companion object {
 
         /** One transport for the whole app: there is one vehicle link. */
@@ -57,5 +63,9 @@ abstract class VehicleDataModule {
         /** The staleness thresholds decided in #39 (REQ-026); change them here. */
         @Provides
         fun provideStalenessRule(): StalenessRule = StalenessRule()
+
+        /** The battery thresholds decided in #41 (REQ-028), judging staleness as the rest of the app does. */
+        @Provides
+        fun provideAlertRule(staleness: StalenessRule): AlertRule = AlertRule(staleness)
     }
 }

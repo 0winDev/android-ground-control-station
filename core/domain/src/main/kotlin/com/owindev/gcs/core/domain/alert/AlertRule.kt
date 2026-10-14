@@ -7,6 +7,7 @@ import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.Timed
+import kotlin.time.Duration
 
 /**
  * Which alerts are active for the active vehicle's [Telemetry] (REQ-028).
@@ -33,6 +34,16 @@ class AlertRule(
         val raised = (active - wasActive).map(::ActiveAlert)
         return (raised + kept).sortedByDescending { it.alert.level }
     }
+
+    /**
+     * How long until a value of [telemetry] goes stale: the alerts must be evaluated again then, even if nothing
+     * new arrives, or a value that stopped arriving would never raise [Alert.TelemetryStale]. `null` when no value
+     * is fresh, so nothing will change until something arrives.
+     */
+    fun untilNextStale(telemetry: Telemetry): Duration? = TelemetryKind.entries
+        .mapNotNull { kind -> telemetry[kind]?.let { staleness.thresholdOf(kind) - it.receivedAt.elapsedNow() } }
+        .filter { it > Duration.ZERO }
+        .minOrNull()
 
     /** [active] with [alert] acknowledged, unless it is an emergency: an emergency is never acknowledged. */
     fun acknowledge(active: List<ActiveAlert>, alert: Alert): List<ActiveAlert> = active.map {
