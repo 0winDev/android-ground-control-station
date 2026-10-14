@@ -232,3 +232,6 @@ Add one line per closed issue: what surprised us and what to do differently.
   ArduPilot sends `voltage_battery` 0, not UINT16_MAX, without a battery monitor. Mission Planner's SITL updated itself
   to V4.7.2 official, and the emulator's clock ran 7 s behind the host: query AUTOPILOT_VERSION every session and match
   logcat to the relay log by events, not timestamps.
+- #31 Flapping link: a StateFlow conflates a status that is set and replaced in the same instant, so tests check statuses
+  by type or by time, never by `take(n)`. A state held to avoid flicker needs a time limit, or a silent socket keeps it
+  forever (found by `safety-reviewer`).
