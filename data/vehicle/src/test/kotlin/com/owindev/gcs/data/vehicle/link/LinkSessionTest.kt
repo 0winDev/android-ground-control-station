@@ -183,6 +183,30 @@ class LinkSessionTest {
 
     @Tag("REQ-019")
     @Test
+    fun `GIVEN a recovering link WHEN a reopened socket stays silent THEN goes back to Failed after the stable time`() =
+        testScope.runTest {
+            val failure = SocketException()
+            val statuses = mutableListOf<Pair<Long, LinkStatus>>()
+            val start = testScheduler.timeSource.markNow()
+            datagramsAnswering(
+                deliversThenFails(readFixture(DISARMED_STABILIZE), SocketException()),
+                deliversThenFails(readFixture(DISARMED_STABILIZE), failure),
+                openWith(null),
+            )
+            backgroundScope.launch {
+                session.whileOpen(session.status).collect { statuses += start.elapsedNow().inWholeMilliseconds to it }
+            }
+
+            delay(LONG_WAIT)
+
+            statuses.takeLast(2) shouldBeEqualTo listOf(
+                FLAPPED_AT_MILLIS to LinkStatus.Recovering(datagrams = 2),
+                FLAPPED_AT_MILLIS + STABLE_MILLIS to LinkStatus.Failed(failure),
+            )
+        }
+
+    @Tag("REQ-019")
+    @Test
     fun `GIVEN a recovering link WHEN a reopened socket fails with no datagram THEN goes back to Failed`() =
         testScope.runTest {
             val failure = SocketException()
@@ -397,6 +421,10 @@ private const val UNTIL_STABLE_DATAGRAMS = 5
 
 /** Each socket works for 0.1 s: attempts 0.1 s plus 1, 2, 4, 5 and 5 s apart, never back to 1 s. */
 private const val UNTIL_SIXTH_FLAPPING_ATTEMPT = 18_000L
+
+/** The second socket opens at 1.1 s, delivers its datagram and fails at 1.2 s. */
+private const val FLAPPED_AT_MILLIS = 1_200L
+private const val STABLE_MILLIS = 10_000L
 private const val LONG_WAIT = 60_000L
 private val LATE_WAIT = 1.seconds
 
