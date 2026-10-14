@@ -2,6 +2,7 @@ package com.owindev.gcs.data.vehicle.link
 
 import android.util.Log
 import com.owindev.gcs.core.domain.link.LinkTraffic
+import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
@@ -38,7 +39,11 @@ class DefaultLinkRepositoryTest {
 
     @BeforeEach
     fun setUp() {
-        val session = LinkSession(transport = transport, scope = testScope.backgroundScope)
+        val session = LinkSession(
+            transport = transport,
+            scope = testScope.backgroundScope,
+            timeSource = testScope.testScheduler.timeSource,
+        )
         repository = DefaultLinkRepository(session = session, scope = testScope.backgroundScope)
     }
 
@@ -66,6 +71,27 @@ class DefaultLinkRepositoryTest {
 
         result shouldBeEqualTo listOf(receiving(0), LinkTraffic.Unavailable(port = PORT))
     }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the port is taken while reopening WHEN observing the traffic THEN becomes UnavailableRetrying`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            every { transport.port } returns PORT
+            every { transport.datagrams() } returnsMany listOf(
+                failingWith(SocketException()),
+                failingWith(BindException()),
+            )
+
+            val result = repository.traffic.take(3).toList()
+
+            result shouldBeEqualTo listOf(
+                receiving(0),
+                LinkTraffic.Failed,
+                LinkTraffic.UnavailableRetrying(port = PORT),
+            )
+        }
 
     @Test
     fun `GIVEN an unexpected socket error WHEN observing the traffic THEN becomes Failed`() = testScope.runTest {
@@ -96,17 +122,39 @@ class DefaultLinkRepositoryTest {
 
     @Tag("REQ-019")
     @Test
-    fun `GIVEN the socket fails and then works WHEN observing the traffic THEN goes Failed and back to Receiving`() =
+    fun `GIVEN the socket fails and then works WHEN observing the traffic THEN goes Failed and then Recovering`() =
         testScope.runTest {
             mockkStatic(Log::class)
             every { Log.w(any(), any<String>(), any()) } returns 0
-            every { Log.i(any(), any()) } returns 0
             every { transport.port } returns PORT
             every { transport.datagrams() } returnsMany listOf(failingWith(SocketException()), datagramsArriving(1))
 
             val result = repository.traffic.take(3).toList()
 
-            result shouldBeEqualTo listOf(receiving(0), LinkTraffic.Failed, receiving(1))
+            result shouldBeEqualTo listOf(receiving(0), LinkTraffic.Failed, recovering(1))
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the reopened link stays up WHEN observing the traffic THEN goes back to Receiving`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            every { Log.i(any(), any()) } returns 0
+            every { transport.port } returns PORT
+            every { transport.datagrams() } returnsMany listOf(failingWith(SocketException()), stableDatagrams())
+
+            val result = repository.traffic.take(7).toList()
+
+            result shouldBeEqualTo listOf(
+                receiving(0),
+                LinkTraffic.Failed,
+                recovering(1),
+                recovering(2),
+                recovering(3),
+                recovering(4),
+                receiving(5),
+            )
         }
 
     @Tag("REQ-019")
@@ -117,12 +165,33 @@ class DefaultLinkRepositoryTest {
             every { Log.w(any(), any<String>(), any()) } returns 0
             every { Log.i(any(), any()) } returns 0
             every { transport.port } returns PORT
-            every { transport.datagrams() } returnsMany listOf(failingWith(SocketException()), datagramsArriving(2))
+            every { transport.datagrams() } returnsMany listOf(failingWith(SocketException()), stableDatagrams())
 
-            repository.traffic.take(4).toList()
+            repository.traffic.take(7).toList()
 
             verifyOnce {
                 Log.i(any(), "Vehicle link reopened")
+            }
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a socket that fails after each datagram WHEN observed for long THEN logs one failure and no recovery`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            every { Log.i(any(), any()) } returns 0
+            every { transport.port } returns PORT
+            every { transport.datagrams() } answers { datagramThenFailure() }
+            repository.traffic.launchIn(backgroundScope)
+
+            delay(LONG_WAIT)
+
+            verifyOnce {
+                Log.w(any(), any<String>(), any())
+            }
+            verifyNever {
+                Log.i(any(), any())
             }
         }
 
@@ -173,6 +242,8 @@ private val DATAGRAM = Datagram(byteArrayOf(0xFD.toByte()), InetSocketAddress(In
 
 private fun receiving(datagrams: Long): LinkTraffic = LinkTraffic.Receiving(port = PORT, datagrams = datagrams)
 
+private fun recovering(datagrams: Long): LinkTraffic = LinkTraffic.Recovering(port = PORT, datagrams = datagrams)
+
 /** Spaced in virtual time so that every count reaches the observer instead of being conflated. */
 private fun datagramsArriving(count: Int): Flow<Datagram> = flow {
     repeat(count) {
@@ -182,6 +253,30 @@ private fun datagramsArriving(count: Int): Flow<Datagram> = flow {
     // The socket stays open with nothing more arriving; a flow that ends would be reopened (REQ-019).
     awaitCancellation()
 }
+
+/**
+ * Five datagrams 3 s apart, then open with nothing more: the fifth comes 12 s after the first, past the stable
+ * time, and the fourth 9 s after it, short of it.
+ */
+private fun stableDatagrams(): Flow<Datagram> = flow {
+    repeat(STABLE_DATAGRAMS) {
+        delay(STABLE_PERIOD_MILLIS)
+        emit(DATAGRAM)
+    }
+    awaitCancellation()
+}
+
+private const val STABLE_DATAGRAMS = 5
+private const val STABLE_PERIOD_MILLIS = 3_000L
+
+/** One datagram and then a failure, as a flapping socket. */
+private fun datagramThenFailure(): Flow<Datagram> = flow {
+    delay(GAP_MILLIS)
+    emit(DATAGRAM)
+    throw SocketException()
+}
+
+private const val LONG_WAIT = 60_000L
 
 /** Attempts at 0, 1, 3, 7 and 12 s. */
 private const val SEVERAL_ATTEMPTS = 12_500L

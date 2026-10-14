@@ -6,8 +6,20 @@ sealed interface LinkTraffic {
     /** Listening on [port]; [datagrams] have arrived since the link was opened. */
     data class Receiving(val port: Int, val datagrams: Long) : LinkTraffic
 
-    /** The link could not listen on [port] because it is already in use (e.g. by another app). */
+    /**
+     * Receiving again on [port] after the link failed, but not for long enough to call it recovered: the link
+     * may still be flapping. [datagrams] as in [Receiving].
+     */
+    data class Recovering(val port: Int, val datagrams: Long) : LinkTraffic
+
+    /**
+     * The link could not listen on [port] when it opened because it is already in use (e.g. by another app).
+     * Not retried: the operator has to free the port.
+     */
     data class Unavailable(val port: Int) : LinkTraffic
+
+    /** [port] was taken while the link was being reopened after a failure; the link keeps retrying. */
+    data class UnavailableRetrying(val port: Int) : LinkTraffic
 
     /** The link stopped because of an unexpected I/O error. */
     data object Failed : LinkTraffic

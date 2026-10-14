@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
@@ -46,7 +47,11 @@ class LinkSessionTest {
 
     @BeforeEach
     fun setUp() {
-        session = LinkSession(transport = transport, scope = testScope.backgroundScope)
+        session = LinkSession(
+            transport = transport,
+            scope = testScope.backgroundScope,
+            timeSource = testScope.testScheduler.timeSource,
+        )
     }
 
     @Test
@@ -111,7 +116,7 @@ class LinkSessionTest {
 
     @Tag("REQ-019")
     @Test
-    fun `GIVEN the socket fails while observed WHEN it reopens and works THEN the status goes Failed then Running`() =
+    fun `GIVEN the socket fails while observed WHEN it reopens and works THEN goes Failed then Recovering`() =
         testScope.runTest {
             val failure = SocketException()
             datagramsAnswering(failingWith(failure), openWith(readFixture(DISARMED_STABILIZE)))
@@ -121,7 +126,103 @@ class LinkSessionTest {
             result shouldBeEqualTo listOf(
                 LinkStatus.Running(datagrams = 0),
                 LinkStatus.Failed(failure),
-                LinkStatus.Running(datagrams = 1),
+                LinkStatus.Recovering(datagrams = 1),
+            )
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a reopened socket WHEN it keeps working for the stable time THEN the status goes back to Running`() =
+        testScope.runTest {
+            val failure = SocketException()
+            datagramsAnswering(
+                failingWith(failure),
+                deliversEvery(readFixture(DISARMED_STABILIZE), STABLE_PERIOD_MILLIS, times = UNTIL_STABLE_DATAGRAMS),
+            )
+
+            val result = session.whileOpen(session.status).take(7).toList()
+
+            result shouldBeEqualTo listOf(
+                LinkStatus.Running(datagrams = 0),
+                LinkStatus.Failed(failure),
+                LinkStatus.Recovering(datagrams = 1),
+                LinkStatus.Recovering(datagrams = 2),
+                LinkStatus.Recovering(datagrams = 3),
+                LinkStatus.Recovering(datagrams = 4),
+                LinkStatus.Running(datagrams = 5),
+            )
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a socket that fails after each datagram WHEN observed for long THEN it stays Recovering`() =
+        testScope.runTest {
+            val failure = SocketException()
+            val statuses = mutableListOf<LinkStatus>()
+            datagramsAnswering(deliversThenFails(readFixture(DISARMED_STABILIZE), failure))
+            backgroundScope.launch { session.whileOpen(session.status).toList(statuses) }
+
+            delay(LONG_WAIT)
+
+            statuses.takeWhile { it !is LinkStatus.Recovering }.last() shouldBeEqualTo LinkStatus.Failed(failure)
+            statuses.dropWhile { it !is LinkStatus.Recovering }.map { it::class }.distinct() shouldBeEqualTo
+                listOf(LinkStatus.Recovering::class)
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a socket that fails after each datagram WHEN observed THEN the backoff keeps growing`() =
+        testScope.runTest {
+            val calls = datagramsAnswering(deliversThenFails(readFixture(DISARMED_STABILIZE), SocketException()))
+            session.messages.launchIn(backgroundScope)
+
+            delay(UNTIL_SIXTH_FLAPPING_ATTEMPT)
+
+            calls shouldBeEqualTo listOf(0L, 1_100L, 3_200L, 7_300L, 12_400L, 17_500L)
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a recovering link WHEN a reopened socket stays silent THEN goes back to Failed after the stable time`() =
+        testScope.runTest {
+            val failure = SocketException()
+            val statuses = mutableListOf<Pair<Long, LinkStatus>>()
+            val start = testScheduler.timeSource.markNow()
+            datagramsAnswering(
+                deliversThenFails(readFixture(DISARMED_STABILIZE), SocketException()),
+                deliversThenFails(readFixture(DISARMED_STABILIZE), failure),
+                openWith(null),
+            )
+            backgroundScope.launch {
+                session.whileOpen(session.status).collect { statuses += start.elapsedNow().inWholeMilliseconds to it }
+            }
+
+            delay(LONG_WAIT)
+
+            statuses.takeLast(2) shouldBeEqualTo listOf(
+                FLAPPED_AT_MILLIS to LinkStatus.Recovering(datagrams = 2),
+                FLAPPED_AT_MILLIS + STABLE_MILLIS to LinkStatus.Failed(failure),
+            )
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a recovering link WHEN a reopened socket fails with no datagram THEN goes back to Failed`() =
+        testScope.runTest {
+            val failure = SocketException()
+            val statuses = mutableListOf<LinkStatus>()
+            datagramsAnswering(
+                deliversThenFails(readFixture(DISARMED_STABILIZE), SocketException()),
+                deliversThenFails(readFixture(DISARMED_STABILIZE), SocketException()),
+                failingWith(failure),
+            )
+            backgroundScope.launch { session.whileOpen(session.status).toList(statuses) }
+
+            delay(UNTIL_SIXTH_FLAPPING_ATTEMPT)
+
+            statuses.takeLast(2) shouldBeEqualTo listOf(
+                LinkStatus.Recovering(datagrams = 2),
+                LinkStatus.Failed(failure),
             )
         }
 
@@ -143,14 +244,19 @@ class LinkSessionTest {
         testScope.runTest {
             val calls = datagramsAnswering(
                 failingWith(SocketException()),
-                deliversThenFails(readFixture(DISARMED_STABILIZE), SocketException()),
+                deliversEvery(
+                    readFixture(DISARMED_STABILIZE),
+                    STABLE_PERIOD_MILLIS,
+                    times = UNTIL_STABLE_DATAGRAMS,
+                    thenFailure = SocketException(),
+                ),
                 failingWith(SocketException()),
             )
             session.messages.launchIn(backgroundScope)
 
             delay(UNTIL_THIRD_ATTEMPT)
 
-            calls shouldBeEqualTo listOf(0L, RETRY_FIRST_MILLIS, RETRY_FIRST_MILLIS + GAP_MILLIS + RETRY_FIRST_MILLIS)
+            calls shouldBeEqualTo listOf(0L, RETRY_FIRST_MILLIS, 17_000L)
         }
 
     @Tag("REQ-019")
@@ -169,24 +275,25 @@ class LinkSessionTest {
 
     @Tag("REQ-019")
     @Test
-    fun `GIVEN the port is taken while reopening WHEN it frees THEN the link reopens and runs`() = testScope.runTest {
-        val failure = SocketException()
-        val calls = datagramsAnswering(
-            failingWith(failure),
-            failingWith(BindException()),
-            openWith(readFixture(DISARMED_STABILIZE)),
-        )
+    fun `GIVEN the port is taken while reopening WHEN it frees THEN retrying is reported and the link reopens`() =
+        testScope.runTest {
+            val failure = SocketException()
+            val calls = datagramsAnswering(
+                failingWith(failure),
+                failingWith(BindException()),
+                openWith(readFixture(DISARMED_STABILIZE)),
+            )
 
-        val result = session.whileOpen(session.status).take(4).toList()
+            val result = session.whileOpen(session.status).take(4).toList()
 
-        result shouldBeEqualTo listOf(
-            LinkStatus.Running(datagrams = 0),
-            LinkStatus.Failed(failure),
-            LinkStatus.Unavailable,
-            LinkStatus.Running(datagrams = 1),
-        )
-        calls shouldBeEqualTo listOf(0L, 1_000L, 3_000L)
-    }
+            result shouldBeEqualTo listOf(
+                LinkStatus.Running(datagrams = 0),
+                LinkStatus.Failed(failure),
+                LinkStatus.UnavailableRetrying,
+                LinkStatus.Recovering(datagrams = 1),
+            )
+            calls shouldBeEqualTo listOf(0L, 1_000L, 3_000L)
+        }
 
     @Tag("REQ-019")
     @Test
@@ -197,7 +304,7 @@ class LinkSessionTest {
             val result = session.whileOpen(session.status).take(3).toList()
 
             result[1] shouldBeInstanceOf LinkStatus.Failed::class
-            result[2] shouldBeEqualTo LinkStatus.Running(datagrams = 1)
+            result[2] shouldBeEqualTo LinkStatus.Recovering(datagrams = 1)
             calls shouldBeEqualTo listOf(0L, RETRY_FIRST_MILLIS)
         }
 
@@ -226,7 +333,11 @@ class LinkSessionTest {
                     CoroutineExceptionHandler { _, crash -> crashes += crash },
             )
             val calls = datagramsAnswering(failingWith(IllegalStateException()))
-            LinkSession(transport = transport, scope = appScope).messages.launchIn(backgroundScope)
+            LinkSession(
+                transport = transport,
+                scope = appScope,
+                timeSource = testScheduler.timeSource,
+            ).messages.launchIn(backgroundScope)
 
             delay(LONG_WAIT)
 
@@ -298,8 +409,22 @@ private const val RETRY_FIRST_MILLIS = 1_000L
 /** Attempts at 0, 1, 3, 7, 12 and 17 s: 1, 2 and 4 s of backoff, then 5 s each time. */
 private const val UNTIL_SIXTH_ATTEMPT = 17_500L
 
-/** Failure at 0, reopened at 1 s, one datagram and a failure at 1.1 s, reopened 1 s later (not 2 s). */
-private const val UNTIL_THIRD_ATTEMPT = 2_500L
+/**
+ * Failure at 0 and reopened at 1 s; datagrams at 4, 7, 10, 13 and 16 s, recovered at 16 s (12 s after the first,
+ * well past the stable time) and a failure; reopened 1 s later, at 17 s, not 2 s later.
+ */
+private const val UNTIL_THIRD_ATTEMPT = 17_500L
+
+/** Datagrams this far apart reach the stable time with the fifth: 9 s after the first is short, 12 s is past it. */
+private const val STABLE_PERIOD_MILLIS = 3_000L
+private const val UNTIL_STABLE_DATAGRAMS = 5
+
+/** Each socket works for 0.1 s: attempts 0.1 s plus 1, 2, 4, 5 and 5 s apart, never back to 1 s. */
+private const val UNTIL_SIXTH_FLAPPING_ATTEMPT = 18_000L
+
+/** The second socket opens at 1.1 s, delivers its datagram and fails at 1.2 s. */
+private const val FLAPPED_AT_MILLIS = 1_200L
+private const val STABLE_MILLIS = 10_000L
 private const val LONG_WAIT = 60_000L
 private val LATE_WAIT = 1.seconds
 
@@ -326,6 +451,24 @@ private fun openWith(datagram: ByteArray?): Flow<Datagram> = flow {
 }
 
 private fun failingWith(failure: Throwable): Flow<Datagram> = flow { throw failure }
+
+/**
+ * Delivers [datagram] [times] times, [periodMillis] apart, and then fails with [thenFailure], or stays open with
+ * nothing more arriving if there is none.
+ */
+private fun deliversEvery(
+    datagram: ByteArray,
+    periodMillis: Long,
+    times: Int,
+    thenFailure: Throwable? = null,
+): Flow<Datagram> = flow {
+    repeat(times) {
+        delay(periodMillis)
+        emit(Datagram(datagram, VEHICLE_ADDRESS))
+    }
+    if (thenFailure != null) throw thenFailure
+    awaitCancellation()
+}
 
 /** Delivers [datagram] once and then fails with [failure], as a socket that breaks after working. */
 private fun deliversThenFails(datagram: ByteArray, failure: Throwable): Flow<Datagram> = flow {

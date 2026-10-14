@@ -56,6 +56,7 @@ private fun LinkChip(state: HudUiState) {
         is HudUiState.WaitingForVehicle -> stringResource(id = R.string.hud_link_waiting) to GcsTheme.colors.advisory
 
         is HudUiState.PortUnavailable,
+        is HudUiState.PortUnavailableRetrying,
         HudUiState.LinkError,
         -> stringResource(id = R.string.hud_link_failed) to GcsTheme.colors.emergency
 

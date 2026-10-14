@@ -47,7 +47,16 @@ private fun LinkContent(state: HudUiState, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         StatusBar(state = state)
-        if (state is HudUiState.Connected) OtherVehiclesBanner(systemIds = state.otherVehicles)
+        when (state) {
+            is HudUiState.Connected -> {
+                UnstableLinkBanner(linkUnstable = state.linkUnstable)
+                OtherVehiclesBanner(systemIds = state.otherVehicles)
+            }
+
+            is HudUiState.WaitingForVehicle -> UnstableLinkBanner(linkUnstable = state.linkUnstable)
+
+            else -> Unit
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -69,6 +78,13 @@ private fun LinkContent(state: HudUiState, modifier: Modifier = Modifier) {
 
                 is HudUiState.PortUnavailable -> Text(
                     text = stringResource(id = R.string.hud_port_unavailable, state.port),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = GcsTheme.colors.caution,
+                    textAlign = TextAlign.Center,
+                )
+
+                is HudUiState.PortUnavailableRetrying -> Text(
+                    text = stringResource(id = R.string.hud_port_unavailable_retrying, state.port),
                     style = MaterialTheme.typography.bodyLarge,
                     color = GcsTheme.colors.caution,
                     textAlign = TextAlign.Center,
@@ -130,6 +146,22 @@ private fun HudContentConnectedPreview() {
                 port = 14550,
                 datagramCount = 1234,
                 otherVehicles = listOf(2),
+            ),
+        )
+    }
+}
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun HudContentConnectedUnstablePreview() {
+    GcsTheme {
+        HudContent(
+            state = HudUiState.Connected(
+                vehicle = PreviewArmed,
+                port = 14550,
+                datagramCount = 1234,
+                otherVehicles = emptyList(),
+                linkUnstable = true,
             ),
         )
     }
