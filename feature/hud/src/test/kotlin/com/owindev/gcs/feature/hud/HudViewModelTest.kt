@@ -82,6 +82,38 @@ class HudViewModelTest {
         }
     }
 
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the port was taken while reopening WHEN observing the state THEN shows it is retrying`() = runTest {
+        turbineScope {
+            traffic.value = LinkTraffic.UnavailableRetrying(port = PORT)
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            result.expectMostRecentItem() shouldBeEqualTo HudUiState.PortUnavailableRetrying(port = PORT)
+        }
+    }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the port was taken while reopening after the vehicle was lost WHEN observing THEN LinkLost says so`() =
+        runTest {
+            turbineScope {
+                traffic.value = LinkTraffic.UnavailableRetrying(port = PORT)
+                activeSystemId.value = SYSTEM_1
+                vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = TIMEOUT))
+
+                val result = viewModel.state.testIn(backgroundScope)
+
+                result.expectMostRecentItem() shouldBeEqualTo HudUiState.LinkLost(
+                    lastKnown = GUIDED_ARMED_1,
+                    sinceLastHeartbeat = TIMEOUT,
+                    otherVehicles = emptyList(),
+                    localFault = LocalLinkFault.PortUnavailableRetrying(port = PORT),
+                )
+            }
+        }
+
     @Tag("REQ-005")
     @Test
     fun `GIVEN the link failed WHEN observing the state THEN shows LinkError`() = runTest {

@@ -45,6 +45,7 @@ internal class DefaultLinkRepository @Inject constructor(
         is LinkStatus.Running -> LinkTraffic.Receiving(port = session.port, datagrams = datagrams)
         is LinkStatus.Recovering -> LinkTraffic.Recovering(port = session.port, datagrams = datagrams)
         LinkStatus.Unavailable -> LinkTraffic.Unavailable(port = session.port)
+        LinkStatus.UnavailableRetrying -> LinkTraffic.UnavailableRetrying(port = session.port)
         is LinkStatus.Failed -> LinkTraffic.Failed
     }
 

@@ -251,24 +251,25 @@ class LinkSessionTest {
 
     @Tag("REQ-019")
     @Test
-    fun `GIVEN the port is taken while reopening WHEN it frees THEN the link reopens and runs`() = testScope.runTest {
-        val failure = SocketException()
-        val calls = datagramsAnswering(
-            failingWith(failure),
-            failingWith(BindException()),
-            openWith(readFixture(DISARMED_STABILIZE)),
-        )
+    fun `GIVEN the port is taken while reopening WHEN it frees THEN retrying is reported and the link reopens`() =
+        testScope.runTest {
+            val failure = SocketException()
+            val calls = datagramsAnswering(
+                failingWith(failure),
+                failingWith(BindException()),
+                openWith(readFixture(DISARMED_STABILIZE)),
+            )
 
-        val result = session.whileOpen(session.status).take(4).toList()
+            val result = session.whileOpen(session.status).take(4).toList()
 
-        result shouldBeEqualTo listOf(
-            LinkStatus.Running(datagrams = 0),
-            LinkStatus.Failed(failure),
-            LinkStatus.Unavailable,
-            LinkStatus.Recovering(datagrams = 1),
-        )
-        calls shouldBeEqualTo listOf(0L, 1_000L, 3_000L)
-    }
+            result shouldBeEqualTo listOf(
+                LinkStatus.Running(datagrams = 0),
+                LinkStatus.Failed(failure),
+                LinkStatus.UnavailableRetrying,
+                LinkStatus.Recovering(datagrams = 1),
+            )
+            calls shouldBeEqualTo listOf(0L, 1_000L, 3_000L)
+        }
 
     @Tag("REQ-019")
     @Test

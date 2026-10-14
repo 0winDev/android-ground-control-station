@@ -44,6 +44,9 @@ sealed interface HudUiState {
 
     data class PortUnavailable(val port: Int) : HudUiState
 
+    /** [port] was taken while reopening the link; unlike [PortUnavailable], the link keeps retrying. */
+    data class PortUnavailableRetrying(val port: Int) : HudUiState
+
     data object LinkError : HudUiState
 }
 
@@ -54,6 +57,8 @@ data class VehicleStatus(val systemId: Int, val flightMode: FlightMode, val arme
 sealed interface LocalLinkFault {
 
     data class PortUnavailable(val port: Int) : LocalLinkFault
+
+    data class PortUnavailableRetrying(val port: Int) : LocalLinkFault
 
     data object Failed : LocalLinkFault
 

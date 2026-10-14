@@ -67,7 +67,7 @@ internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
  * [LINK_RETRY_MAX]), so HEARTBEATs that resume are read again without restarting the app (REQ-019). A
  * transport that ends without an error is treated the same way. The only failure never retried is the
  * session's first bind failing ([LinkStatus.Unavailable]): another app holds the port. A bind failure
- * while reopening is retried like any other failure.
+ * while reopening is retried like any other failure, and told apart as [LinkStatus.UnavailableRetrying].
  *
  * After a failure the link is [LinkStatus.Failed] until datagrams arrive again, then
  * [LinkStatus.Recovering] until a socket has worked for [LINK_STABLE_AFTER], measured on [timeSource], and
@@ -130,13 +130,13 @@ internal class LinkSession @Inject constructor(
                     }
                 // A socket that worked for a while before failing, while recovering, leaves the link Recovering:
                 // the HUD does not flicker with a flapping link. One that delivered nothing is a real outage.
-                if (!recovering || upSince == null) mutableStatus.value = failure.toStatus()
+                if (!recovering || upSince == null) mutableStatus.value = failure.toStatus(reopening)
                 if (failure is BindException && !reopening) {
                     // The port belongs to another app until the operator acts: never retried. Stay "open"
                     // until the last subscriber leaves, so the failure stays in [status] meanwhile.
                     awaitCancellation()
                 }
-                // Stays Failed (or Unavailable) while waiting; Recovering with the first datagram, since a
+                // Stays Failed (or UnavailableRetrying) while waiting; Recovering with the first datagram, since a
                 // successful bind alone does not prove the link works.
                 reopening = true
                 recovering = true
@@ -155,8 +155,9 @@ internal class LinkSession @Inject constructor(
     /** [flow], collected while keeping the session open, as a subscriber to [messages] does. */
     fun <T> whileOpen(flow: Flow<T>): Flow<T> = merge(messages.transform { }, flow)
 
-    private fun IOException.toStatus(): LinkStatus = when (this) {
-        is BindException -> LinkStatus.Unavailable
+    private fun IOException.toStatus(reopening: Boolean): LinkStatus = when {
+        this is BindException && reopening -> LinkStatus.UnavailableRetrying
+        this is BindException -> LinkStatus.Unavailable
         else -> LinkStatus.Failed(cause = this)
     }
 

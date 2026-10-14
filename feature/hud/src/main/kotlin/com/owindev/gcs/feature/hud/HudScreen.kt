@@ -83,6 +83,13 @@ private fun LinkContent(state: HudUiState, modifier: Modifier = Modifier) {
                     textAlign = TextAlign.Center,
                 )
 
+                is HudUiState.PortUnavailableRetrying -> Text(
+                    text = stringResource(id = R.string.hud_port_unavailable_retrying, state.port),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = GcsTheme.colors.caution,
+                    textAlign = TextAlign.Center,
+                )
+
                 HudUiState.LinkError -> Text(
                     text = stringResource(id = R.string.hud_link_error),
                     style = MaterialTheme.typography.bodyLarge,

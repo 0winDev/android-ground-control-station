@@ -111,6 +111,8 @@ class HudViewModel @Inject constructor(
         return when (traffic) {
             is LinkTraffic.Unavailable -> HudUiState.PortUnavailable(port = traffic.port)
 
+            is LinkTraffic.UnavailableRetrying -> HudUiState.PortUnavailableRetrying(port = traffic.port)
+
             LinkTraffic.Failed -> HudUiState.LinkError
 
             is LinkTraffic.Receiving -> receiving(traffic.port, traffic.datagrams, active, otherVehicles)
@@ -160,5 +162,6 @@ private fun LinkTraffic.toLocalFault(): LocalLinkFault? = when (this) {
     is LinkTraffic.Receiving -> null
     is LinkTraffic.Recovering -> LocalLinkFault.Unstable
     is LinkTraffic.Unavailable -> LocalLinkFault.PortUnavailable(port = port)
+    is LinkTraffic.UnavailableRetrying -> LocalLinkFault.PortUnavailableRetrying(port = port)
     LinkTraffic.Failed -> LocalLinkFault.Failed
 }

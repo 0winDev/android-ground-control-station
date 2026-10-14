@@ -15,8 +15,14 @@ internal sealed interface LinkStatus {
      */
     data class Recovering(val datagrams: Long) : LinkStatus
 
-    /** The port could not be bound because it is already in use (e.g. by another app). */
+    /**
+     * The port could not be bound on the session's first attempt because it is already in use (e.g. by
+     * another app): never retried, the operator has to free it.
+     */
     data object Unavailable : LinkStatus
+
+    /** The port was taken while the link was being reopened after a failure: retried with the backoff. */
+    data object UnavailableRetrying : LinkStatus
 
     /** Receiving stopped because of an unexpected I/O error. */
     data class Failed(val cause: IOException) : LinkStatus

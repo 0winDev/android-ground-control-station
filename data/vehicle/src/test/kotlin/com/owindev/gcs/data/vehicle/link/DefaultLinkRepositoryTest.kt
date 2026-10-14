@@ -72,6 +72,27 @@ class DefaultLinkRepositoryTest {
         result shouldBeEqualTo listOf(receiving(0), LinkTraffic.Unavailable(port = PORT))
     }
 
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the port is taken while reopening WHEN observing the traffic THEN becomes UnavailableRetrying`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            every { transport.port } returns PORT
+            every { transport.datagrams() } returnsMany listOf(
+                failingWith(SocketException()),
+                failingWith(BindException()),
+            )
+
+            val result = repository.traffic.take(3).toList()
+
+            result shouldBeEqualTo listOf(
+                receiving(0),
+                LinkTraffic.Failed,
+                LinkTraffic.UnavailableRetrying(port = PORT),
+            )
+        }
+
     @Test
     fun `GIVEN an unexpected socket error WHEN observing the traffic THEN becomes Failed`() = testScope.runTest {
         mockkStatic(Log::class)

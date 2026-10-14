@@ -94,7 +94,12 @@ private fun LocalFaultText(fault: LocalLinkFault) {
     Text(
         text = when (fault) {
             is LocalLinkFault.PortUnavailable -> stringResource(id = R.string.hud_local_fault_port, fault.port)
+
+            is LocalLinkFault.PortUnavailableRetrying ->
+                stringResource(id = R.string.hud_local_fault_port_retrying, fault.port)
+
             LocalLinkFault.Failed -> stringResource(id = R.string.hud_local_fault_failed)
+
             LocalLinkFault.Unstable -> stringResource(id = R.string.hud_local_fault_unstable)
         },
         style = MaterialTheme.typography.titleLarge,
