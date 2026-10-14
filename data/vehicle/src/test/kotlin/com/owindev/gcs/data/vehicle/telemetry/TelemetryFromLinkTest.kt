@@ -55,7 +55,11 @@ class TelemetryFromLinkTest {
         coEvery { transport.send(any(), any()) } returns SendResult.Sent
         coEvery { telemetryRequester.run(any(), capture(isHeard)) } coAnswers { awaitCancellation() }
         repository = DefaultVehicleRepository(
-            session = LinkSession(transport = transport, scope = testScope.backgroundScope),
+            session = LinkSession(
+                transport = transport,
+                scope = testScope.backgroundScope,
+                timeSource = testScope.testScheduler.timeSource,
+            ),
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
             heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
@@ -139,7 +143,11 @@ class TelemetryFromLinkTest {
             val deviceClock = TestTimeSource()
             every { transport.datagrams() } returns datagrams(HEARTBEAT)
             val sleepy = DefaultVehicleRepository(
-                session = LinkSession(transport = transport, scope = backgroundScope),
+                session = LinkSession(
+                    transport = transport,
+                    scope = backgroundScope,
+                    timeSource = testScheduler.timeSource,
+                ),
                 timeSource = deviceClock,
                 rule = LinkLossRule(),
                 heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),

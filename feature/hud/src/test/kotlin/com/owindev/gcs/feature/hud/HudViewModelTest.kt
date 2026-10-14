@@ -395,6 +395,84 @@ class HudViewModelTest {
             )
         }
     }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN a recovering link and a heard vehicle WHEN observing THEN shows it connected and unstable`() = runTest {
+        turbineScope {
+            traffic.value = LinkTraffic.Recovering(port = PORT, datagrams = DATAGRAMS)
+            activeSystemId.value = SYSTEM_1
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.CONNECTED, heardAgo = Duration.ZERO))
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            result.expectMostRecentItem() shouldBeEqualTo HudUiState.Connected(
+                vehicle = GUIDED_ARMED_1,
+                port = PORT,
+                datagramCount = DATAGRAMS,
+                otherVehicles = emptyList(),
+                linkUnstable = true,
+            )
+        }
+    }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the link is recovering before any vehicle WHEN observing the state THEN waits and shows it unstable`() =
+        runTest {
+            turbineScope {
+                traffic.value = LinkTraffic.Recovering(port = PORT, datagrams = DATAGRAMS)
+
+                val result = viewModel.state.testIn(backgroundScope)
+
+                result.expectMostRecentItem() shouldBeEqualTo HudUiState.WaitingForVehicle(
+                    port = PORT,
+                    datagramCount = DATAGRAMS,
+                    linkUnstable = true,
+                )
+            }
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the link is recovering after the vehicle was lost WHEN observing THEN LinkLost shows it unstable`() =
+        runTest {
+            turbineScope {
+                traffic.value = LinkTraffic.Recovering(port = PORT, datagrams = DATAGRAMS)
+                activeSystemId.value = SYSTEM_1
+                vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = TIMEOUT))
+
+                val result = viewModel.state.testIn(backgroundScope)
+
+                result.expectMostRecentItem() shouldBeEqualTo HudUiState.LinkLost(
+                    lastKnown = GUIDED_ARMED_1,
+                    sinceLastHeartbeat = TIMEOUT,
+                    otherVehicles = emptyList(),
+                    localFault = LocalLinkFault.Unstable,
+                )
+            }
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the link is recovering WHEN it recovers THEN the unstable warning goes away`() = runTest {
+        turbineScope {
+            traffic.value = LinkTraffic.Recovering(port = PORT, datagrams = DATAGRAMS)
+            activeSystemId.value = SYSTEM_1
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.CONNECTED, heardAgo = Duration.ZERO))
+            val states = viewModel.state.testIn(backgroundScope)
+
+            traffic.value = LinkTraffic.Receiving(port = PORT, datagrams = DATAGRAMS)
+            val result = states.expectMostRecentItem()
+
+            result shouldBeEqualTo HudUiState.Connected(
+                vehicle = GUIDED_ARMED_1,
+                port = PORT,
+                datagramCount = DATAGRAMS,
+                otherVehicles = emptyList(),
+            )
+        }
+    }
 }
 
 private const val PORT = 14550

@@ -8,6 +8,13 @@ internal sealed interface LinkStatus {
     /** Listening; [datagrams] have arrived since the session started. */
     data class Running(val datagrams: Long) : LinkStatus
 
+    /**
+     * Reopened after a failure and receiving again, but not yet up for [LINK_STABLE_AFTER]; [datagrams] as in
+     * [Running]. A socket that fails after delivering datagrams keeps this state, so a flapping link does not
+     * flicker between [Failed] and [Running].
+     */
+    data class Recovering(val datagrams: Long) : LinkStatus
+
     /** The port could not be bound because it is already in use (e.g. by another app). */
     data object Unavailable : LinkStatus
 

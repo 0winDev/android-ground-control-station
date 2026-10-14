@@ -95,6 +95,7 @@ private fun LocalFaultText(fault: LocalLinkFault) {
         text = when (fault) {
             is LocalLinkFault.PortUnavailable -> stringResource(id = R.string.hud_local_fault_port, fault.port)
             LocalLinkFault.Failed -> stringResource(id = R.string.hud_local_fault_failed)
+            LocalLinkFault.Unstable -> stringResource(id = R.string.hud_local_fault_unstable)
         },
         style = MaterialTheme.typography.titleLarge,
         color = GcsTheme.colors.onEmergencyContainer,
@@ -106,6 +107,24 @@ private fun LocalFaultText(fault: LocalLinkFault) {
 @Composable
 internal fun OtherVehiclesBanner(systemIds: List<Int>) {
     if (systemIds.isEmpty()) return
+    CautionBanner(
+        text = pluralStringResource(
+            id = R.plurals.hud_other_vehicles,
+            count = systemIds.size,
+            systemIds.joinToString(separator = ", "),
+        ),
+    )
+}
+
+/** The link failed and is receiving again, but may fail again: the vehicle is still shown as usual. */
+@Composable
+internal fun UnstableLinkBanner(linkUnstable: Boolean) {
+    if (linkUnstable) CautionBanner(text = stringResource(id = R.string.hud_link_unstable))
+}
+
+/** A caution with an icon and text, never color alone. */
+@Composable
+private fun CautionBanner(text: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = ChipShape,
@@ -119,14 +138,7 @@ internal fun OtherVehiclesBanner(systemIds: List<Int>) {
         ) {
             // Decorative: the text next to it carries the warning.
             Icon(painter = painterResource(id = DesignSystemR.drawable.ic_warning), contentDescription = null)
-            Text(
-                text = pluralStringResource(
-                    id = R.plurals.hud_other_vehicles,
-                    count = systemIds.size,
-                    systemIds.joinToString(separator = ", "),
-                ),
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Text(text = text, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

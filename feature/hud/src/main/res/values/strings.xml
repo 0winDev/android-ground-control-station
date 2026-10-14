@@ -22,6 +22,8 @@
     <string name="hud_link_failed">Error</string>
     <string name="hud_local_fault_port">This device cannot listen on UDP port %1$d.</string>
     <string name="hud_local_fault_failed">The link failed on this device. Reopening it and waiting for the vehicle.</string>
+    <string name="hud_link_unstable">Link unstable on this device: receiving again, but it may fail again.</string>
+    <string name="hud_local_fault_unstable">The link on this device is unstable: it keeps failing and reopening.</string>
     <plurals name="hud_other_vehicles">
         <item quantity="one">Other vehicle detected (SYS %1$s)</item>
         <item quantity="other">Other vehicles detected (SYS %1$s)</item>

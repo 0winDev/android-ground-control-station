@@ -12,8 +12,10 @@ import java.net.BindException
 import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.awaitCancellation
@@ -39,10 +41,18 @@ internal val LINK_STOP_TIMEOUT: Duration = 5.seconds
 
 /**
  * Backoff before reopening the link after a transport failure while it is observed (REQ-019): doubles from
- * [LINK_RETRY_FIRST] up to [LINK_RETRY_MAX], and starts again from the first delay once datagrams arrive.
+ * [LINK_RETRY_FIRST] up to [LINK_RETRY_MAX], and starts again from the first delay only once the link has
+ * recovered ([LINK_STABLE_AFTER]).
  */
 internal val LINK_RETRY_FIRST: Duration = 1.seconds
 internal val LINK_RETRY_MAX: Duration = 5.seconds
+
+/**
+ * How long a reopened socket must keep working, from its first datagram, before the link counts as recovered
+ * (REQ-019). Twice [LINK_RETRY_MAX], so a link that keeps failing every few seconds never looks recovered: its
+ * backoff keeps growing, its outage is logged once and the HUD shows it as unstable instead of flickering.
+ */
+internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
 
 /**
  * The one place that receives, parses and decodes the vehicle link; every repository builds on it.
@@ -59,6 +69,11 @@ internal val LINK_RETRY_MAX: Duration = 5.seconds
  * session's first bind failing ([LinkStatus.Unavailable]): another app holds the port. A bind failure
  * while reopening is retried like any other failure.
  *
+ * After a failure the link is [LinkStatus.Failed] until datagrams arrive again, then
+ * [LinkStatus.Recovering] until a socket has worked for [LINK_STABLE_AFTER], measured on [timeSource], and
+ * only then [LinkStatus.Running] again. A socket that fails after delivering datagrams leaves the link
+ * Recovering, so a flapping link shows one steady state instead of one change per datagram.
+ *
  * [messages] has no replay: a late subscriber only gets messages that arrive after it subscribed, so an
  * old HEARTBEAT is never delivered as a new one. What a late subscriber needs to know, such as a bind
  * failure, is in [status].
@@ -67,6 +82,7 @@ internal val LINK_RETRY_MAX: Duration = 5.seconds
 internal class LinkSession @Inject constructor(
     private val transport: UdpTransport,
     @param:ApplicationScope private val scope: CoroutineScope,
+    private val timeSource: TimeSource.WithComparableMarks,
 ) {
 
     private val mutableStatus = MutableStateFlow<LinkStatus>(LinkStatus.Running(datagrams = 0))
@@ -86,10 +102,13 @@ internal class LinkSession @Inject constructor(
             var datagrams = 0L
             var retryDelay = LINK_RETRY_FIRST
             var reopening = false
+            // From a failure until a socket has worked for LINK_STABLE_AFTER.
+            var recovering = false
             while (true) {
                 // A new parser per socket: a frame split across two sockets is not one frame.
                 val parser = MavlinkParser(MavlinkMessages)
                 var failure: IOException = EOFException("The transport stopped delivering datagrams")
+                var upSince: ComparableTimeMark? = null
                 transport.datagrams()
                     // Only the transport's own failures, never the downstream's: only I/O failures are link
                     // states; anything else is a bug and must crash, not be shared. CancellationException is
@@ -97,19 +116,30 @@ internal class LinkSession @Inject constructor(
                     .catch { e -> failure = e as? IOException ?: throw e }
                     .collect { datagram ->
                         datagrams++
-                        retryDelay = LINK_RETRY_FIRST
-                        mutableStatus.value = LinkStatus.Running(datagrams)
+                        val firstDatagram = upSince ?: timeSource.markNow().also { upSince = it }
+                        if (recovering && firstDatagram.elapsedNow() >= LINK_STABLE_AFTER) {
+                            recovering = false
+                            retryDelay = LINK_RETRY_FIRST
+                        }
+                        mutableStatus.value = if (recovering) {
+                            LinkStatus.Recovering(datagrams)
+                        } else {
+                            LinkStatus.Running(datagrams)
+                        }
                         parser.parse(datagram.payload).forEach { frame -> emit(received(frame, datagram.sender)) }
                     }
-                mutableStatus.value = failure.toStatus()
+                // A socket that worked for a while before failing, while recovering, leaves the link Recovering:
+                // the HUD does not flicker with a flapping link. One that delivered nothing is a real outage.
+                if (!recovering || upSince == null) mutableStatus.value = failure.toStatus()
                 if (failure is BindException && !reopening) {
                     // The port belongs to another app until the operator acts: never retried. Stay "open"
                     // until the last subscriber leaves, so the failure stays in [status] meanwhile.
                     awaitCancellation()
                 }
-                // Stays Failed (or Unavailable) while waiting; Running again with the first datagram, since
-                // a successful bind alone does not prove the link works.
+                // Stays Failed (or Unavailable) while waiting; Recovering with the first datagram, since a
+                // successful bind alone does not prove the link works.
                 reopening = true
+                recovering = true
                 delay(retryDelay)
                 retryDelay = minOf(retryDelay * 2, LINK_RETRY_MAX)
             }

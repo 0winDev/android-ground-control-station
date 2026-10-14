@@ -18,7 +18,8 @@ import kotlinx.coroutines.flow.stateIn
  * Counts the datagrams arriving on the UDP link, from the status of the shared [LinkSession].
  *
  * The count restarts when the session does: after nobody has observed the link for [LINK_STOP_TIMEOUT]. A
- * transport failure shows as [LinkTraffic.Failed] while the session reopens the link by itself (REQ-019).
+ * transport failure shows as [LinkTraffic.Failed] while the session reopens the link by itself, then as
+ * [LinkTraffic.Recovering] until the link has stayed up for [LINK_STABLE_AFTER] (REQ-019).
  */
 @Singleton
 internal class DefaultLinkRepository @Inject constructor(
@@ -42,13 +43,15 @@ internal class DefaultLinkRepository @Inject constructor(
 
     private fun LinkStatus.toLinkTraffic(): LinkTraffic = when (this) {
         is LinkStatus.Running -> LinkTraffic.Receiving(port = session.port, datagrams = datagrams)
+        is LinkStatus.Recovering -> LinkTraffic.Recovering(port = session.port, datagrams = datagrams)
         LinkStatus.Unavailable -> LinkTraffic.Unavailable(port = session.port)
         is LinkStatus.Failed -> LinkTraffic.Failed
     }
 
     /**
      * The UI only says "link error"; the cause goes to logcat so the failure can be diagnosed. Once per
-     * outage, not once per reopening attempt, and once more when datagrams arrive again.
+     * outage, not once per reopening attempt, and once more when the link has recovered: Recovering is still
+     * the same outage, so a flapping link logs once.
      */
     private fun logTransition(status: LinkStatus) {
         when {

@@ -6,6 +6,12 @@ sealed interface LinkTraffic {
     /** Listening on [port]; [datagrams] have arrived since the link was opened. */
     data class Receiving(val port: Int, val datagrams: Long) : LinkTraffic
 
+    /**
+     * Receiving again on [port] after the link failed, but not for long enough to call it recovered: the link
+     * may still be flapping. [datagrams] as in [Receiving].
+     */
+    data class Recovering(val port: Int, val datagrams: Long) : LinkTraffic
+
     /** The link could not listen on [port] because it is already in use (e.g. by another app). */
     data class Unavailable(val port: Int) : LinkTraffic
 

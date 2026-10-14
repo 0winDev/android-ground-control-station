@@ -739,7 +739,11 @@ class DefaultVehicleRepositoryTest {
             val start = testScheduler.timeSource.markNow()
             every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
                 .onCompletion { closedAt = start.elapsedNow().inWholeMilliseconds }
-            val session = LinkSession(transport = transport, scope = backgroundScope)
+            val session = LinkSession(
+                transport = transport,
+                scope = backgroundScope,
+                timeSource = testScheduler.timeSource,
+            )
             val requester = TelemetryRequester(
                 sender = GcsMessageSender(transport),
                 session = session,
@@ -784,7 +788,11 @@ private fun TestScope.repositoryOn(
     transport: UdpTransport,
     telemetryRequester: TelemetryRequester,
     telemetryStore: TelemetryStore,
-    session: LinkSession = LinkSession(transport = transport, scope = backgroundScope),
+    session: LinkSession = LinkSession(
+        transport = transport,
+        scope = backgroundScope,
+        timeSource = testScheduler.timeSource,
+    ),
     timeSource: TimeSource.WithComparableMarks = testScheduler.timeSource,
     rule: LinkLossRule = LinkLossRule(),
     heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),

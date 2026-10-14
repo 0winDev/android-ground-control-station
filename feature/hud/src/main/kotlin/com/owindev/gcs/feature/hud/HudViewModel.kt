@@ -113,17 +113,30 @@ class HudViewModel @Inject constructor(
 
             LinkTraffic.Failed -> HudUiState.LinkError
 
-            is LinkTraffic.Receiving -> if (active == null) {
-                HudUiState.WaitingForVehicle(port = traffic.port, datagramCount = traffic.datagrams)
-            } else {
-                HudUiState.Connected(
-                    vehicle = active.toStatus(),
-                    port = traffic.port,
-                    datagramCount = traffic.datagrams,
-                    otherVehicles = otherVehicles,
-                )
-            }
+            is LinkTraffic.Receiving -> receiving(traffic.port, traffic.datagrams, active, otherVehicles)
+
+            // Data is arriving, so the vehicle is shown as usual; the warning only says the link may fail again.
+            is LinkTraffic.Recovering ->
+                receiving(traffic.port, traffic.datagrams, active, otherVehicles, linkUnstable = true)
         }
+    }
+
+    private fun receiving(
+        port: Int,
+        datagrams: Long,
+        active: Vehicle?,
+        otherVehicles: List<Int>,
+        linkUnstable: Boolean = false,
+    ): HudUiState = if (active == null) {
+        HudUiState.WaitingForVehicle(port = port, datagramCount = datagrams, linkUnstable = linkUnstable)
+    } else {
+        HudUiState.Connected(
+            vehicle = active.toStatus(),
+            port = port,
+            datagramCount = datagrams,
+            otherVehicles = otherVehicles,
+            linkUnstable = linkUnstable,
+        )
     }
 
     private fun Vehicle.isLost(): Boolean =
@@ -145,6 +158,7 @@ private fun Vehicle.toStatus() = VehicleStatus(
 
 private fun LinkTraffic.toLocalFault(): LocalLinkFault? = when (this) {
     is LinkTraffic.Receiving -> null
+    is LinkTraffic.Recovering -> LocalLinkFault.Unstable
     is LinkTraffic.Unavailable -> LocalLinkFault.PortUnavailable(port = port)
     LinkTraffic.Failed -> LocalLinkFault.Failed
 }
