@@ -46,15 +46,15 @@ Security checklist: `docs/security.md`.
 8. Never commit secrets: the MAVLink signing key lives in Android Keystore-protected storage, never in
    code, resources, logs or the repo.
 
-## What is delegated and what is not
+## How each piece is built
 
-| Piece | Who | Why |
+| Piece | How | Why |
 |---|---|---|
-| Gradle, modules, CI, detekt, Compose UI | Claude implements, owner reviews | Already mastered in a previous project |
+| Gradle, modules, CI, detekt, Compose UI | Reviewed in the PR | Already mastered in a previous project |
 | MAVLink codec (framing, CRC, parsing, signing) | Test-first from SITL captures, `mavlink-reviewer` review, **owner reviews every line** | The core of the interview |
-| Mission upload state machine | Owner designs the diagram, Claude implements | Must be drawable on a whiteboard |
-| Geo math (distances, bearings, MGRS) | Claude implements, owner explains each formula in the PR | Learn just enough georeferencing |
-| README, ADRs, diagrams | Claude drafts, owner rewrites in their own words | Must sound like the owner |
+| Mission upload state machine | The state diagram is drawn first; the code follows it | Must be drawable on a whiteboard |
+| Geo math (distances, bearings, MGRS) | Every formula is explained with its source in the PR | Learn just enough georeferencing |
+| README, ADRs, diagrams | Each ADR records context, decision and consequences, and is reviewed in its PR | Every decision must be defensible |
 
 **Control rule:** if the owner cannot explain a PR without looking at it, it is not merged.
 

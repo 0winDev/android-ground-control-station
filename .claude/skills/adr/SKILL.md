@@ -9,8 +9,8 @@ description: |
 
 # ADR — GCS
 
-ADRs record decisions that someone will ask "why?" about in an interview or a review. Claude drafts
-them; the owner rewrites them in their own words before merging.
+ADRs record decisions that someone will ask "why?" about in an interview or a review. Each ADR records
+context, decision and consequences, and is reviewed in its PR.
 
 ## When an ADR is needed
 
