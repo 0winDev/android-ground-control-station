@@ -94,17 +94,40 @@ class AlertRuleTest {
 
         val result = rule.evaluate(listOf(LOW), telemetry)
 
-        result shouldBeEqualTo listOf(LOW, STALE)
+        result shouldBeEqualTo listOf(LOW, UNKNOWN, STALE_BATTERY, STALE_GPS)
     }
 
     @Test
-    fun `GIVEN no alert WHEN the battery goes stale with a critical reading THEN only the staleness is raised`() {
+    fun `GIVEN no alert WHEN the battery goes stale with a critical reading THEN is unknown, not critical`() {
         val telemetry = telemetry(battery(remaining = 5), gps = gps(), receivedAt = clock.markNow())
         clock += BATTERY_STALE_AFTER
 
         val result = rule.evaluate(NONE, telemetry)
 
-        result shouldBeEqualTo listOf(STALE)
+        result shouldBeEqualTo listOf(UNKNOWN, STALE_BATTERY, STALE_GPS)
+    }
+
+    @Test
+    fun `GIVEN a battery with no alert WHEN only its reading goes stale THEN is unknown, never OK`() {
+        val battery = Timed(battery(remaining = 50), clock.markNow() - BATTERY_STALE_AFTER)
+
+        val result = rule.evaluate(NONE, Telemetry(battery = battery, gps = Timed(gps(), clock.markNow())))
+
+        result shouldBeEqualTo listOf(UNKNOWN, STALE_BATTERY)
+    }
+
+    @Test
+    fun `GIVEN acknowledged stale attitude WHEN the battery goes stale too THEN is a new alert, not acknowledged`() {
+        val previous = listOf(STALE_ATTITUDE.copy(acknowledged = true))
+        val telemetry = Telemetry(
+            attitude = Timed(ATTITUDE, clock.markNow() - ATTITUDE_STALE_AFTER),
+            battery = Timed(battery(remaining = 50), clock.markNow() - BATTERY_STALE_AFTER),
+            gps = Timed(gps(), clock.markNow()),
+        )
+
+        val result = rule.evaluate(previous, telemetry)
+
+        result shouldBeEqualTo listOf(UNKNOWN, STALE_BATTERY, STALE_ATTITUDE.copy(acknowledged = true))
     }
 
     @Test
@@ -181,7 +204,7 @@ class AlertRuleTest {
 
         val result = rule.evaluate(listOf(GPS_LOST), telemetry)
 
-        result shouldBeEqualTo listOf(GPS_LOST, STALE)
+        result shouldBeEqualTo listOf(GPS_LOST, STALE_GPS)
     }
 
     @Test
@@ -201,7 +224,7 @@ class AlertRuleTest {
 
         val result = rule.evaluate(NONE, telemetry(battery(remaining = 100)).copy(attitude = attitude))
 
-        result shouldBeEqualTo listOf(STALE)
+        result shouldBeEqualTo listOf(STALE_ATTITUDE)
     }
 
     @Test
@@ -234,7 +257,7 @@ class AlertRuleTest {
 
         val result = rule.evaluate(NONE, telemetry)
 
-        result shouldBeEqualTo listOf(CRITICAL, GPS_LOST, STALE)
+        result shouldBeEqualTo listOf(CRITICAL, GPS_LOST, STALE_ATTITUDE)
     }
 
     @Test
@@ -248,20 +271,20 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN active alerts WHEN acknowledging a caution THEN only that one is acknowledged`() {
-        val active = listOf(CRITICAL, GPS_LOST, STALE)
+        val active = listOf(CRITICAL, GPS_LOST, STALE_GPS)
 
         val result = rule.acknowledge(active, Alert.GpsFixLost)
 
-        result shouldBeEqualTo listOf(CRITICAL, GPS_LOST.copy(acknowledged = true), STALE)
+        result shouldBeEqualTo listOf(CRITICAL, GPS_LOST.copy(acknowledged = true), STALE_GPS)
     }
 
     @Test
-    fun `GIVEN active alerts WHEN acknowledging an advisory THEN is acknowledged`() {
-        val active = listOf(GPS_LOST, STALE)
+    fun `GIVEN active alerts WHEN acknowledging a stale stream THEN only that stream is acknowledged`() {
+        val active = listOf(GPS_LOST, STALE_ATTITUDE, STALE_GPS)
 
-        val result = rule.acknowledge(active, Alert.TelemetryStale)
+        val result = rule.acknowledge(active, Alert.TelemetryStale(TelemetryKind.GPS))
 
-        result shouldBeEqualTo listOf(GPS_LOST, STALE.copy(acknowledged = true))
+        result shouldBeEqualTo listOf(GPS_LOST, STALE_ATTITUDE, STALE_GPS.copy(acknowledged = true))
     }
 
     @Test
@@ -320,7 +343,9 @@ private val CRITICAL = ActiveAlert(Alert.BatteryCritical)
 private val UNHEALTHY = ActiveAlert(Alert.BatteryUnhealthy)
 private val UNKNOWN = ActiveAlert(Alert.BatteryUnknown)
 private val GPS_LOST = ActiveAlert(Alert.GpsFixLost)
-private val STALE = ActiveAlert(Alert.TelemetryStale)
+private val STALE_ATTITUDE = ActiveAlert(Alert.TelemetryStale(TelemetryKind.ATTITUDE))
+private val STALE_BATTERY = ActiveAlert(Alert.TelemetryStale(TelemetryKind.BATTERY))
+private val STALE_GPS = ActiveAlert(Alert.TelemetryStale(TelemetryKind.GPS))
 
 private val ATTITUDE_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.ATTITUDE)
 private val GPS_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.GPS)

@@ -1,5 +1,7 @@
 package com.owindev.gcs.core.domain.alert
 
+import com.owindev.gcs.core.domain.telemetry.TelemetryKind
+
 /**
  * How urgent an alert is, in the aviation convention: an advisory needs awareness, a caution needs attention
  * soon, an emergency needs it now. Declared from least to most urgent, so they compare by urgency. Losing the
@@ -35,7 +37,10 @@ sealed interface Alert {
         override val level = AlertLevel.EMERGENCY
     }
 
-    /** The vehicle has no battery monitor or sends no remaining energy: the battery is unknown, never OK. */
+    /**
+     * The battery is unknown, never OK: the vehicle has no battery monitor, sends no voltage or remaining energy,
+     * or its battery reading has gone stale.
+     */
     data object BatteryUnknown : Alert {
         override val level = AlertLevel.ADVISORY
     }
@@ -45,8 +50,11 @@ sealed interface Alert {
         override val level = AlertLevel.CAUTION
     }
 
-    /** Some telemetry is older than its staleness threshold, so what it shows may no longer be true. */
-    data object TelemetryStale : Alert {
+    /**
+     * The telemetry of [kind] is older than its staleness threshold, so what it shows may no longer be true. One
+     * per kind, so acknowledging one stream that stopped never hides the next one that does.
+     */
+    data class TelemetryStale(val kind: TelemetryKind) : Alert {
         override val level = AlertLevel.ADVISORY
     }
 }

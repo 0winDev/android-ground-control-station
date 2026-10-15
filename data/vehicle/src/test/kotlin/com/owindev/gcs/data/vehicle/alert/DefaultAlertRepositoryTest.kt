@@ -107,7 +107,10 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo listOf(STALE)
+            result shouldBeEqualTo listOf(STALE_GPS)
+            verifyOnce {
+                Log.i(TAG, "Alert raised: TelemetryStale(kind=GPS) (advisory)")
+            }
         }
 
     @Test
@@ -229,7 +232,7 @@ private const val TAG = "AlertRepository"
 private val NONE = emptyList<ActiveAlert>()
 private val LOW = ActiveAlert(Alert.BatteryLow)
 private val CRITICAL = ActiveAlert(Alert.BatteryCritical)
-private val STALE = ActiveAlert(Alert.TelemetryStale)
+private val STALE_GPS = ActiveAlert(Alert.TelemetryStale(TelemetryKind.GPS))
 
 private val GPS_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.GPS)
 

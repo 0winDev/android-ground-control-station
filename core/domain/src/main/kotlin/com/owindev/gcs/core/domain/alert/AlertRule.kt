@@ -15,7 +15,8 @@ import kotlin.time.Duration
  * Alerts are state: [evaluate] takes the alerts active until now and returns those active now, so that an alert
  * keeps its acknowledgement while it lasts and the battery thresholds can have hysteresis. A value that is stale
  * or not known (missing, or unknown to the vehicle) never raises or clears an alert as if it were current: the
- * alerts that depend on it stay as they were, and a stale value raises [Alert.TelemetryStale] instead.
+ * alerts that depend on it stay as they were, and a stale value raises [Alert.TelemetryStale] for its kind instead.
+ * A battery that is stale or not known is also [Alert.BatteryUnknown], so it never looks OK.
  *
  * The result is ordered by level, most urgent first, and newest first within a level.
  */
@@ -54,7 +55,8 @@ class AlertRule(
         // Nothing received yet is unknown, never OK.
         timed == null -> setOf(Alert.BatteryUnknown)
 
-        isStale(timed, TelemetryKind.BATTERY) -> wasActive intersect BATTERY_ALERTS
+        // What it said last may no longer be true: unknown, keeping what it raised until it is heard again.
+        isStale(timed, TelemetryKind.BATTERY) -> (wasActive intersect BATTERY_ALERTS) + Alert.BatteryUnknown
 
         else -> freshBatteryAlerts(timed.value, wasActive)
     }
@@ -90,10 +92,9 @@ class AlertRule(
         else -> setOf(Alert.GpsFixLost)
     }
 
-    private fun staleAlerts(telemetry: Telemetry): Set<Alert> {
-        val anyStale = TelemetryKind.entries.any { kind -> telemetry[kind]?.let { isStale(it, kind) } == true }
-        return if (anyStale) setOf(Alert.TelemetryStale) else emptySet()
-    }
+    private fun staleAlerts(telemetry: Telemetry): Set<Alert> = TelemetryKind.entries
+        .filter { kind -> telemetry[kind]?.let { isStale(it, kind) } == true }
+        .mapTo(mutableSetOf(), Alert::TelemetryStale)
 
     private fun isStale(timed: Timed<*>, kind: TelemetryKind): Boolean =
         staleness.isStale(kind, timed.receivedAt.elapsedNow())

@@ -102,7 +102,8 @@ internal class DefaultAlertRepository @Inject constructor(
             .forEach { Log.i(TAG, "Alert acknowledged: ${it.alert.describe()}") }
     }
 
-    private fun Alert.describe(): String = "${this::class.simpleName} (${level.name.lowercase()})"
+    /** `BatteryLow (caution)`, `TelemetryStale(kind=GPS) (advisory)`. */
+    private fun Alert.describe(): String = "$this (${level.name.lowercase()})"
 
     private companion object {
         const val TAG = "AlertRepository"
