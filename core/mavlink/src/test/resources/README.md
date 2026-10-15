@@ -331,7 +331,7 @@ real value, so the data layer must not trust extension fields the sender did not
 | `derived/gps-raw-int-time-2-63.bin` | `telemetry/gps-raw-int.bin` re-packed with `time_usec` 2⁶³ | as the real one, time_usec 9223372036854775808 (`00 00 00 00 00 00 00 80`). LEN 40 | Decoder: the documented limit, a uint64 of 2⁶³ or more comes out as a negative `Long` (here `Long.MIN_VALUE`) |
 | `derived/sys-status-battery-zero-volts.bin` | `telemetry/sys-status.bin` re-packed with `voltage_battery` 0 (#41) | as the real one, voltage_battery 0; the battery bit (`MAV_SYS_STATUS_SENSOR_BATTERY`, `0x2000000`) set in present, enabled and health. LEN 31 | Mapper: a healthy, enabled monitor reading 0 V is a 0 V reading |
 | `derived/sys-status-no-battery-monitor.bin` | `telemetry/sys-status.bin` re-packed without the battery bit in `_enabled`, `voltage_battery` 0 and the other two battery fields -1 (#41) | enabled 1348574255, voltage_battery 0, current_battery -1, battery_remaining -1, the rest as the real one. LEN 31 | Mapper: ArduPilot without a battery monitor, no reading |
-| `derived/sys-status-battery-unhealthy.bin` | `telemetry/sys-status.bin` re-packed without the battery bit in `_health` (#41) | health 1433508911, the rest as the real one. LEN 31 | Mapper: an unhealthy monitor or a battery failsafe, voltage not trusted |
+| `derived/sys-status-battery-unhealthy.bin` | `telemetry/sys-status.bin` re-packed without the battery bit in `_health` (#41) | health 1433508911, the rest as the real one. LEN 31 | Mapper: an unhealthy monitor or a battery failsafe, voltage kept (#41) |
 
 Raw bytes:
 
@@ -367,3 +367,69 @@ derived/sys-status-battery-unhealthy.bin
                                         fd 1f 00 00 22 01 01 01 00 00 2f fc 71 53 2f 9c 61 52 2f 9c 71 55
                                         00 00 38 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 64 58 ff
 ```
+
+## Out-of-range telemetry (#49)
+
+Derived by `tools/fixtures/derive_fixtures.py` from the real telemetry frames above, every field but the
+replaced ones checked unchanged with pymavlink 2.4.50. Ranges from the field descriptions: GLOBAL_POSITION_INT
+`hdg` "0.0..359.99 degrees" (`standard.xml`), GPS_RAW_INT `cog` "0.0..359.99 degrees" and `yaw` "Use 36000 for
+north" (`common.xml`), VFR_HUD `throttle` "(0 to 100)", ATTITUDE angles "(-pi..+pi)"; latitude and longitude have
+no range in the XML, so their WGS84 definition (±90°, ±180°) applies. Used by the mapper tests in `:data:vehicle`;
+the codec decodes them like any other frame.
+
+| File | Derived from | Replaced (pymavlink) | Used for |
+|---|---|---|---|
+| `derived/global-position-int-hdg-36000.bin` | `telemetry/global-position-int.bin` | hdg 36000. LEN 28 | heading past 359.99° |
+| `derived/global-position-int-lat-past-90.bin` | same | lat 900000001. LEN 28 | latitude past 90° |
+| `derived/global-position-int-lon-past-180.bin` | same | lon -1800000001. LEN 28 | longitude past -180° |
+| `derived/global-position-int-lon-past-180-east.bin` | same | lon 1800000001. LEN 28 | longitude past 180° |
+| `derived/global-position-int-lat-int32-min.bin` | same | lat -2147483648 (INT32_MIN). LEN 28 | a latitude whose absolute value overflows an int32 |
+| `derived/global-position-int-ends.bin` | same | lat 900000000, lon -1800000000, hdg 35999. LEN 28 | the ends of every range, valid |
+| `derived/global-position-int-ends-south-east.bin` | same | lat -900000000, lon 1800000000. LEN 28 | the other ends, valid |
+| `derived/gps-raw-int-out-of-range.bin` | `telemetry/gps-raw-int.bin` | cog 40000, yaw 36001; the extensions are no longer truncated, LEN 52 | course and GPS yaw past their ranges |
+| `derived/vfr-hud-out-of-range.bin` | `telemetry/vfr-hud.bin` | airspeed NaN (`00 00 c0 7f`), climb +infinity (`00 00 80 7f`), throttle 101. LEN 19 | non-finite floats, throttle past 100 |
+| `derived/vfr-hud-throttle-100.bin` | same | throttle 100. LEN 19 | the end of the throttle range, valid |
+| `derived/attitude-out-of-range.bin` | `telemetry/attitude.bin` | roll NaN, pitch -infinity (`00 00 80 ff`), yaw 0.5. LEN 28 | non-finite angles, one valid angle kept |
+| `derived/attitude-past-pi.bin` | same | roll 3.1415927 (`db 0f 49 40`, the float32 closest to pi), pitch -0.25, yaw 3.1416 (`f9 0f 49 40`). LEN 28 | the end of the angle range, valid, and past it |
+
+Raw bytes:
+
+```
+derived/global-position-int-hdg-36000.bin
+                                        fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 16 fb eb ea 3b cf e8 58
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 a0 8c 0b 01
+derived/global-position-int-lat-past-90.bin
+                                        fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 01 e9 a4 35 3b cf e8 58
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 5f 8c ad e3
+derived/global-position-int-lon-past-180.bin
+                                        fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 16 fb eb ea ff 2d b6 94
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 5f 8c c7 ef
+derived/global-position-int-lon-past-180-east.bin
+                                        fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 16 fb eb ea 01 d2 49 6b
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 5f 8c 8a c5
+derived/global-position-int-lat-int32-min.bin
+                                        fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 00 00 00 80 3b cf e8 58
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 5f 8c 92 f1
+derived/global-position-int-ends.bin    fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 00 e9 a4 35 00 2e b6 94
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 9f 8c 8e f4
+derived/global-position-int-ends-south-east.bin
+                                        fd 1c 00 00 35 01 01 21 00 00 e9 0f 06 00 00 17 5b ca 00 d2 49 6b
+                                        7a f5 08 00 f3 ff ff ff 01 00 ff ff 00 00 5f 8c 94 ad
+derived/gps-raw-int-out-of-range.bin    fd 34 00 00 27 01 01 18 00 00 78 1f a6 17 00 00 00 00 15 fb eb ea
+                                        3c cf e8 58 8e f5 08 00 79 00 c8 00 00 00 40 9c 06 0a 8e f5 08 00
+                                        2c 01 00 00 2c 01 00 00 00 00 00 00 00 00 00 00 a1 8c 82 0b
+derived/vfr-hud-out-of-range.bin        fd 13 00 00 2b 01 01 4a 00 00 00 00 c0 7f 00 8f c3 3c 52 c8 12 44
+                                        00 00 80 7f 67 01 65 d7 71
+derived/vfr-hud-throttle-100.bin        fd 13 00 00 2b 01 01 4a 00 00 01 90 c3 3c 00 8f c3 3c 52 c8 12 44
+                                        73 50 1e b9 67 01 64 bf 5f
+derived/attitude-out-of-range.bin       fd 1c 00 00 2a 01 01 1e 00 00 3f 0f 06 00 00 00 c0 7f 00 00 80 ff
+                                        00 00 00 3f 50 f7 69 b9 00 fd 67 b9 c0 a8 4a ba e8 12
+derived/attitude-past-pi.bin            fd 1c 00 00 2a 01 01 1e 00 00 3f 0f 06 00 db 0f 49 40 00 00 80 be
+                                        f9 0f 49 40 50 f7 69 b9 00 fd 67 b9 c0 a8 4a ba ee 4f
+```
+
+For `derived/session-stream.bin` the script also prints, from pymavlink, how many of the vehicle autopilot's
+MAVLink 2 telemetry frames carry each value the app maps (a documented "unknown" not counted, our ranges not
+applied): 130 GLOBAL_POSITION_INT, all with a heading; 260 ATTITUDE with roll, pitch and yaw; 260 VFR_HUD with
+airspeed, groundspeed, climb and throttle; 325 GPS_RAW_INT, all with a course and none with a yaw (no
+dual-antenna GPS in SITL).

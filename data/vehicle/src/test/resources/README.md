@@ -41,3 +41,24 @@ below are what it gives, and the mapper tests convert them by hand. The battery 
 | `telemetry/gps-raw-int.bin` | real | fix_type 6, eph 121, epv 200, vel 0, cog 0, satellites_visible 10, h_acc 300, v_acc 300, yaw 0 | GPS converted; yaw not provided |
 | `derived/gps-raw-int-edges.bin` | derived | fix_type 3, eph 150, epv 250, vel 1234, cog 35999, satellites_visible 12, h_acc 2309737967, v_acc 400, yaw 36000 | uint32 accuracy; yaw north |
 | `derived/gps-raw-int-unknown.bin` | derived | fix_type 0, eph, epv, vel, cog 65535, satellites_visible 255, extensions 0 | every GPS reading unknown |
+
+## Out-of-range telemetry (#49)
+
+Byte-identical copies of the out-of-range fixtures in `core/mavlink/src/test/resources/`, where the ranges are
+cited and the bytes listed; every field not named below is the real frame's.
+
+| File | Raw values (pymavlink) | Used for |
+|---|---|---|
+| `derived/global-position-int-hdg-36000.bin` | hdg 36000 | heading past 359.99°: no heading |
+| `derived/global-position-int-lat-past-90.bin` | lat 900000001 | latitude past 90°: the frame is dropped |
+| `derived/global-position-int-lon-past-180.bin` | lon -1800000001 | longitude past -180°: the frame is dropped |
+| `derived/global-position-int-lon-past-180-east.bin` | lon 1800000001 | longitude past 180°: the frame is dropped |
+| `derived/global-position-int-lat-int32-min.bin` | lat -2147483648 | INT32_MIN, whose absolute value overflows: the frame is dropped |
+| `derived/global-position-int-ends.bin` | lat 900000000, lon -1800000000, hdg 35999 | the ends of every range kept |
+| `derived/global-position-int-ends-south-east.bin` | lat -900000000, lon 1800000000 | the other ends kept |
+| `derived/gps-raw-int-out-of-range.bin` | cog 40000, yaw 36001 | no course, no GPS yaw |
+| `derived/vfr-hud-out-of-range.bin` | airspeed NaN, climb +infinity, throttle 101 | no airspeed, climb rate or throttle; groundspeed kept |
+| `derived/vfr-hud-throttle-100.bin` | throttle 100 | the end of the throttle range kept |
+| `derived/attitude-out-of-range.bin` | roll NaN, pitch -infinity, yaw 0.5 | no roll or pitch; yaw kept |
+| `derived/attitude-past-pi.bin` | roll 3.1415927 (float32 pi), pitch -0.25, yaw 3.1416 | roll at pi kept, yaw past pi dropped |
+| `derived/session-stream.bin` | the whole SITL session (see the README in `:core:mavlink`) | no real value dropped: 130 positions and headings, 260 of each ATTITUDE and VFR_HUD value, 325 GPS courses, 0 GPS yaws |
