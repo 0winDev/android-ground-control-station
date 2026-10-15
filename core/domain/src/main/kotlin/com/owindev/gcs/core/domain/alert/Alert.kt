@@ -45,7 +45,7 @@ sealed interface Alert {
         override val level = AlertLevel.ADVISORY
     }
 
-    /** The GPS has no 3D fix. */
+    /** The GPS has no 3D fix, or nothing has been received from it yet. */
     data object GpsFixLost : Alert {
         override val level = AlertLevel.CAUTION
     }

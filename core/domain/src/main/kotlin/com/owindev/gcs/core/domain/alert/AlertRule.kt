@@ -63,7 +63,7 @@ class AlertRule(
 
     private fun freshBatteryAlerts(battery: Battery, wasActive: Set<Alert>): Set<Alert> = buildSet {
         val remaining = battery.remaining
-        if (!battery.monitored || remaining == null) add(Alert.BatteryUnknown)
+        if (!battery.monitored || battery.voltage == null || remaining == null) add(Alert.BatteryUnknown)
         if (battery.monitored && !battery.healthy) add(Alert.BatteryUnhealthy)
         // Without a monitor or a remaining energy, the energy alerts stay as they were. An unhealthy monitor still
         // drives them: ArduPilot sends no remaining energy (-1) when the monitor itself fails, so a percentage from
@@ -91,8 +91,13 @@ class AlertRule(
     }
 
     private fun gpsAlerts(timed: Timed<GpsStatus>?, wasActive: Set<Alert>): Set<Alert> = when {
-        timed == null || isStale(timed, TelemetryKind.GPS) -> wasActive intersect setOf(Alert.GpsFixLost)
+        // Nothing received yet is no fix, never a fix.
+        timed == null -> setOf(Alert.GpsFixLost)
+
+        isStale(timed, TelemetryKind.GPS) -> wasActive intersect setOf(Alert.GpsFixLost)
+
         timed.value.fixType in FIX_3D -> emptySet()
+
         else -> setOf(Alert.GpsFixLost)
     }
 

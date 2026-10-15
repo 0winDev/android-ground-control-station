@@ -61,6 +61,26 @@ class AlertRuleTest {
     }
 
     @Test
+    fun `GIVEN a critical battery WHEN the energy comes back past the low threshold THEN clears 3 points above it`() {
+        val energies = listOf(21, 22, 23)
+
+        val result = energies.map { remaining ->
+            rule.evaluate(listOf(CRITICAL), telemetry(battery(remaining = remaining)))
+        }
+
+        result shouldBeEqualTo listOf(listOf(LOW), listOf(LOW), NONE)
+    }
+
+    @Test
+    fun `GIVEN the ends of the energy range WHEN evaluating them THEN critical at 0 and nothing at 100`() {
+        val energies = listOf(0, 100)
+
+        val result = energies.map { remaining -> rule.evaluate(NONE, telemetry(battery(remaining = remaining))) }
+
+        result shouldBeEqualTo listOf(listOf(CRITICAL), NONE)
+    }
+
+    @Test
     fun `GIVEN an acknowledged low battery WHEN it reaches critical THEN is a new alert, not acknowledged`() {
         val previous = listOf(LOW.copy(acknowledged = true))
 
@@ -149,6 +169,15 @@ class AlertRuleTest {
     }
 
     @Test
+    fun `GIVEN a monitored battery without a voltage WHEN evaluating it THEN the battery is unknown, never OK`() {
+        val telemetry = telemetry(battery(remaining = 50, voltage = null))
+
+        val result = rule.evaluate(NONE, telemetry)
+
+        result shouldBeEqualTo listOf(UNKNOWN)
+    }
+
+    @Test
     fun `GIVEN no battery received yet WHEN evaluating it THEN the battery is unknown, never OK`() {
         val telemetry = Telemetry(gps = Timed(gps(), clock.markNow()))
 
@@ -185,6 +214,15 @@ class AlertRuleTest {
     }
 
     @Test
+    fun `GIVEN no alert WHEN the vehicle reports a critical battery unhealthy THEN both emergencies are raised`() {
+        val telemetry = telemetry(battery(remaining = 5, healthy = false))
+
+        val result = rule.evaluate(NONE, telemetry)
+
+        result shouldBeEqualTo listOf(UNHEALTHY, CRITICAL)
+    }
+
+    @Test
     fun `GIVEN an unhealthy battery WHEN acknowledging it THEN stays unacknowledged`() {
         val active = rule.evaluate(NONE, telemetry(battery(remaining = 100, healthy = false)))
 
@@ -209,10 +247,19 @@ class AlertRuleTest {
         )
 
         val result = fixTypes.associateWith { fixType ->
-            rule.evaluate(NONE, telemetry(battery(remaining = 100), gps(fixType))).isNotEmpty()
+            rule.evaluate(NONE, telemetry(battery(remaining = 100), gps(fixType)))
         }
 
-        result shouldBeEqualTo fixTypes.associateWith { it !in FIX_3D }
+        result shouldBeEqualTo fixTypes.associateWith { if (it in FIX_3D) NONE else listOf(GPS_LOST) }
+    }
+
+    @Test
+    fun `GIVEN no GPS received yet WHEN evaluating it THEN the fix is lost, never OK`() {
+        val telemetry = Telemetry(battery = Timed(battery(remaining = 100), clock.markNow()))
+
+        val result = rule.evaluate(NONE, telemetry)
+
+        result shouldBeEqualTo listOf(GPS_LOST)
     }
 
     @Test
@@ -383,13 +430,14 @@ private val FIX_3D = setOf(
 
 private val ATTITUDE = Attitude(roll = 0.0, pitch = 0.0, yaw = 0.0)
 
-private fun battery(remaining: Int?, monitored: Boolean = true, healthy: Boolean = true) = Battery(
-    voltage = 12.6,
-    current = 0.0,
-    remaining = remaining,
-    monitored = monitored,
-    healthy = healthy,
-)
+private fun battery(remaining: Int?, monitored: Boolean = true, healthy: Boolean = true, voltage: Double? = 12.6) =
+    Battery(
+        voltage = voltage,
+        current = 0.0,
+        remaining = remaining,
+        monitored = monitored,
+        healthy = healthy,
+    )
 
 private fun gps(fixType: GpsFixType = GpsFixType.Fix3d) = GpsStatus(
     fixType = fixType,
