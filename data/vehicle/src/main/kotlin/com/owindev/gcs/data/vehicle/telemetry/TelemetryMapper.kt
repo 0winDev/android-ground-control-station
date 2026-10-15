@@ -109,8 +109,11 @@ internal object TelemetryMapper {
         val monitored = onboardControlSensorsEnabled and MAV_SYS_STATUS_SENSOR_BATTERY != 0L
         val healthy = onboardControlSensorsHealth and MAV_SYS_STATUS_SENSOR_BATTERY != 0L
         return Battery(
+            // ArduPilot keeps sending the voltage after its battery failsafe clears the health bit (`send_sys_status`
+            // in `libraries/GCS_MAVLink/GCS_Common.cpp`), so an unhealthy monitor's reading is kept, flagged by
+            // `healthy`; only its 0 mV is no reading, as at boot.
             voltage = voltageBattery
-                .takeIf { monitored && healthy && it != SysStatus.VOLTAGE_BATTERY_UNKNOWN }
+                .takeIf { monitored && it != SysStatus.VOLTAGE_BATTERY_UNKNOWN && (healthy || it != 0) }
                 ?.let { it / MILLI },
             current = currentBattery.takeUnless { it == SysStatus.CURRENT_BATTERY_UNKNOWN }?.let { it / CENTI },
             // -1 is the documented "not sent"; any other value outside 0–100 is no percentage either.

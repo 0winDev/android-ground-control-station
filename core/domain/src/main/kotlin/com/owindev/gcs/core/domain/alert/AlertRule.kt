@@ -65,8 +65,12 @@ class AlertRule(
         val remaining = battery.remaining
         if (!battery.monitored || remaining == null) add(Alert.BatteryUnknown)
         if (battery.monitored && !battery.healthy) add(Alert.BatteryUnhealthy)
-        // A reading the vehicle cannot vouch for neither raises nor clears the energy alerts.
-        if (!battery.monitored || !battery.healthy || remaining == null) {
+        // Without a monitor or a remaining energy, the energy alerts stay as they were. An unhealthy monitor still
+        // drives them: ArduPilot sends no remaining energy (-1) when the monitor itself fails, so a percentage from
+        // an unhealthy one is real, sent after the battery failsafe has triggered and while the battery goes on
+        // draining (`battery_remaining_pct` in `libraries/GCS_MAVLink/GCS_Common.cpp`, which needs a healthy
+        // monitor in `capacity_remaining_pct`, `libraries/AP_BattMonitor/AP_BattMonitor_Backend.cpp`).
+        if (!battery.monitored || remaining == null) {
             addAll(wasActive intersect ENERGY_ALERTS)
         } else {
             energyAlert(remaining, wasActive)?.let(::add)

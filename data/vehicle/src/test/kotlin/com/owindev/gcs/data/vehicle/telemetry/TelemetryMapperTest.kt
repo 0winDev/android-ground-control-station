@@ -151,13 +151,13 @@ class TelemetryMapperTest {
     }
 
     @Test
-    fun `GIVEN a SYS_STATUS with distinct readings from an unhealthy monitor WHEN mapping it THEN has no voltage`() {
+    fun `GIVEN a SYS_STATUS with distinct readings from an unhealthy monitor WHEN mapping it THEN keeps them`() {
         val received = receivedFixture(SYS_STATUS_EDGES)
 
         val result = mapper.update(Telemetry(), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo Battery(
-            voltage = null,
+            voltage = 11.1,
             current = 15.5,
             remaining = 42,
             monitored = true,
@@ -208,12 +208,12 @@ class TelemetryMapperTest {
     }
 
     @Test
-    fun `GIVEN a SYS_STATUS from an unhealthy monitor WHEN mapping it THEN is unhealthy and has no voltage`() {
+    fun `GIVEN a SYS_STATUS after a battery failsafe WHEN mapping it THEN is unhealthy and keeps its voltage`() {
         val received = receivedFixture(SYS_STATUS_UNHEALTHY)
 
         val result = mapper.update(Telemetry(), received, RECEIVED_AT)
 
-        result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(voltage = null, healthy = false)
+        result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(healthy = false)
     }
 
     @Test

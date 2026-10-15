@@ -67,8 +67,10 @@ data class AirData(val airspeed: Double, val groundspeed: Double, val climbRate:
 /**
  * The vehicle's main battery, each reading `null` when the vehicle does not send it or it cannot be trusted.
  *
- * @property voltage in V; `null` without a monitor or while the monitor is not [healthy], and 0 only when a
- *   healthy monitor reads 0 V (a broken sense wire, or the pack unplugged while the autopilot runs on USB).
+ * @property voltage in V; `null` without a monitor, and 0 only when a [healthy] monitor reads 0 V (a broken sense
+ *   wire, or the pack unplugged while the autopilot runs on USB): an unhealthy one reading 0 V has no reading yet.
+ *   An unhealthy monitor's other readings are kept, because ArduPilot keeps sending them after its battery failsafe
+ *   has triggered, when they matter most; the HUD shows them as not vouched for.
  * @property current in A: negative while charging.
  * @property remaining energy left, in percent from 0 to 100.
  * @property monitored whether the vehicle has a battery monitor; without one the battery is unknown, never OK.

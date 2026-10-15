@@ -159,11 +159,29 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN a low battery WHEN the vehicle reports it unhealthy THEN is an emergency and stays low`() {
-        val telemetry = telemetry(battery(remaining = 50, healthy = false))
+        val telemetry = telemetry(battery(remaining = 15, healthy = false))
 
         val result = rule.evaluate(listOf(LOW), telemetry)
 
         result shouldBeEqualTo listOf(UNHEALTHY, LOW)
+    }
+
+    @Test
+    fun `GIVEN a battery failsafe WHEN the battery keeps draining to critical THEN is critical too`() {
+        val telemetry = telemetry(battery(remaining = 10, healthy = false))
+
+        val result = rule.evaluate(listOf(UNHEALTHY), telemetry)
+
+        result shouldBeEqualTo listOf(CRITICAL, UNHEALTHY)
+    }
+
+    @Test
+    fun `GIVEN a low battery WHEN an unhealthy monitor sends no remaining energy THEN stays low`() {
+        val telemetry = telemetry(battery(remaining = null, healthy = false))
+
+        val result = rule.evaluate(listOf(LOW), telemetry)
+
+        result shouldBeEqualTo listOf(UNHEALTHY, LOW, UNKNOWN)
     }
 
     @Test
