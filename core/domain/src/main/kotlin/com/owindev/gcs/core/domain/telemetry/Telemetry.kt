@@ -65,13 +65,25 @@ data class Attitude(val roll: Double, val pitch: Double, val yaw: Double)
 data class AirData(val airspeed: Double, val groundspeed: Double, val climbRate: Double, val throttle: Int)
 
 /**
- * The vehicle's main battery, each reading `null` when the vehicle does not send it.
+ * The vehicle's main battery, each reading `null` when the vehicle does not send it or it cannot be trusted.
  *
- * @property voltage in V.
+ * @property voltage in V; `null` without a monitor, and 0 only when a [healthy] monitor reads 0 V (a broken sense
+ *   wire, or the pack unplugged while the autopilot runs on USB): an unhealthy one reading 0 V has no reading yet.
+ *   An unhealthy monitor's other readings are kept, because ArduPilot keeps sending them after its battery failsafe
+ *   has triggered, when they matter most; the HUD shows them as not vouched for.
  * @property current in A: negative while charging.
  * @property remaining energy left, in percent from 0 to 100.
+ * @property monitored whether the vehicle has a battery monitor; without one the battery is unknown, never OK.
+ * @property healthy whether the vehicle reports its battery healthy. ArduPilot reports it unhealthy both when the
+ *   monitor fails and once its battery failsafe has triggered, which lasts until it reboots.
  */
-data class Battery(val voltage: Double?, val current: Double?, val remaining: Int?)
+data class Battery(
+    val voltage: Double?,
+    val current: Double?,
+    val remaining: Int?,
+    val monitored: Boolean,
+    val healthy: Boolean,
+)
 
 /**
  * The quality of the vehicle's GPS fix, as its GPS receiver reports it. Each reading is `null` when the

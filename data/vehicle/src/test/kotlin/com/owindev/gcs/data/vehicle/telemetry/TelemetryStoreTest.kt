@@ -98,7 +98,7 @@ private val LEVEL = Attitude(roll = 0.0, pitch = 0.0, yaw = 0.0)
 
 // The float closest to π/2, in degrees as Python's math.degrees gives it.
 private val ROLLED_90 = Attitude(roll = 90.00000250447816, pitch = 0.0, yaw = 0.0)
-private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100)
+private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
 
 private fun received(systemId: Int, message: MavlinkMessage) =
     ReceivedMessage(systemId, MAV_COMP_ID_AUTOPILOT1, message, SENDER)
@@ -113,10 +113,13 @@ private fun attitude(roll: Float) = MavlinkMessage.Attitude(
     yawspeed = 0f,
 )
 
+/** `common.xml`: a battery monitor enabled and healthy. */
+private const val MAV_SYS_STATUS_SENSOR_BATTERY = 0x0200_0000L
+
 private fun sysStatus() = MavlinkMessage.SysStatus(
     onboardControlSensorsPresent = 0,
-    onboardControlSensorsEnabled = 0,
-    onboardControlSensorsHealth = 0,
+    onboardControlSensorsEnabled = MAV_SYS_STATUS_SENSOR_BATTERY,
+    onboardControlSensorsHealth = MAV_SYS_STATUS_SENSOR_BATTERY,
     load = 0,
     voltageBattery = 12_600,
     currentBattery = 0,

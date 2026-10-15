@@ -235,3 +235,11 @@ Add one line per closed issue: what surprised us and what to do differently.
 - #31 Flapping link: a StateFlow conflates a status that is set and replaced in the same instant, so tests check statuses
   by type or by time, never by `take(n)`. A state held to avoid flicker needs a time limit, or a silent socket keeps it
   forever (found by `safety-reviewer`).
+- #40 MGRS: exactly on a 1 m boundary a nanometre decides the digit, so reference points that do not test truncation stay
+  at least 1 cm off one; GEOTRANS 2.4.2 is not sub-mm accurate, and the two references disagree at exactly 84°N (UPS vs
+  35X). Take expected letters from the reference output, never by hand: two reasons in the CSV were wrong at first.
+- #41 Alerts: a `WhileSubscribed` repository with no consumer evaluates nothing, so a SITL check before its UI needs a
+  temporary, uncommitted observer. ArduPilot only streams to a TCP channel it hears from and forgets channel rates on
+  reboot: SITL tools send their own HEARTBEAT and request their streams again. Read the vehicle's code, not only the docs:
+  its battery failsafe clears the health bit but keeps the voltage and percentage coming. Mission Planner's SITL updated
+  again (git fbd0a316).
