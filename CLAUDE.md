@@ -246,3 +246,7 @@ Add one line per closed issue: what surprised us and what to do differently.
 - #49 Out-of-range telemetry: rejecting a value must never erase state. An invalid frame is dropped, not turned
   into a `null` part, or the stale alert goes quiet (found by `safety-reviewer`). Compare ±π ranges as float32,
   so a real float ±π reading is kept, and integer ranges with `in`, not `abs()` (`abs(Int.MIN_VALUE)` overflows).
+- #42 HUD: a fresh message is not a fresh value. ArduPilot sends GLOBAL_POSITION_INT 0°, 0° before a position and
+  the last one frozen after losing it, so a position needs a fresh 3D GPS fix, and never 0°, 0°. Check
+  QGroundControl's UI in its docs for the installed version before giving steps, and compare against its MAVLink
+  Inspector. pymavlink's TCP `autoreconnect` gives up after 3 tries: pass `retries` when the autopilot reboots.
