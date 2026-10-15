@@ -2,6 +2,7 @@ package com.owindev.gcs.data.vehicle.telemetry
 
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
+import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -51,6 +52,17 @@ class TelemetryStoreTest {
         val result = store.telemetry.value
 
         result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(attitude = Timed(ROLLED_90, SECOND)))
+    }
+
+    @Tag("REQ-031")
+    @Test
+    fun `GIVEN a known position WHEN a position that does not exist arrives THEN the last one keeps its time`() {
+        store.record(received(systemId = 1, message = globalPositionInt(lat = SOUTH_LAT_DEGE7)), FIRST)
+
+        store.record(received(systemId = 1, message = globalPositionInt(lat = PAST_NORTH_POLE_DEGE7)), SECOND)
+        val result = store.telemetry.value
+
+        result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(position = Timed(SOUTH_POSITION, FIRST)))
     }
 
     @Tag("REQ-016")
@@ -111,6 +123,33 @@ private fun attitude(roll: Float) = MavlinkMessage.Attitude(
     rollspeed = 0f,
     pitchspeed = 0f,
     yawspeed = 0f,
+)
+
+/** 35° S, and 90.0000001° N, past the pole: no place on the WGS84 ellipsoid. */
+private const val SOUTH_LAT_DEGE7 = -350_000_000
+private const val PAST_NORTH_POLE_DEGE7 = 900_000_001
+
+private val SOUTH_POSITION = GlobalPosition(
+    latitude = -35.0,
+    longitude = 149.0,
+    altitudeMsl = 0.0,
+    altitudeAboveHome = 0.0,
+    velocityNorth = 0.0,
+    velocityEast = 0.0,
+    velocityDown = 0.0,
+    heading = 0.0,
+)
+
+private fun globalPositionInt(lat: Int) = MavlinkMessage.GlobalPositionInt(
+    timeBootMs = 397_289,
+    lat = lat,
+    lon = 1_490_000_000,
+    alt = 0,
+    relativeAlt = 0,
+    vx = 0,
+    vy = 0,
+    vz = 0,
+    hdg = 0,
 )
 
 /** `common.xml`: a battery monitor enabled and healthy. */

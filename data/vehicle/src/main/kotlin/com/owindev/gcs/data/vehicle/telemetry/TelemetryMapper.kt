@@ -18,7 +18,8 @@ import kotlin.time.TimeMark
 
 /**
  * Maps the telemetry messages to the domain: SI units except angles, which are in degrees, and every
- * "unknown" value to `null`, never to 0.
+ * "unknown" value to `null`, never to 0. A value outside its documented range ([TelemetryRanges], REQ-031) is
+ * `null` too, never clamped or wrapped.
  *
  * Only the autopilot describes the vehicle, as for HEARTBEATs: other components of the same system must not
  * overwrite its telemetry. Units and special values from `common.xml` and `standard.xml`
@@ -33,9 +34,6 @@ internal object TelemetryMapper {
     private const val MILLI = 1_000.0
     private const val PERCENT_MAX = 100
     private const val NORTH_DEGREES = 0.0
-
-    /** GLOBAL_POSITION_INT `hdg`: "If unknown, set to: UINT16_MAX". */
-    private const val GLOBAL_POSITION_HDG_UNKNOWN = 0xFFFF
 
     // GPS_FIX_TYPE (common.xml).
     private const val GPS_FIX_TYPE_NO_GPS = 0
@@ -67,12 +65,13 @@ internal object TelemetryMapper {
 
     /**
      * [telemetry] with the part [received] carries, marked [receivedAt], or `null` if [received] is not
-     * telemetry from a vehicle's autopilot.
+     * telemetry from a vehicle's autopilot, or is a position that does not exist: that frame is dropped, so the
+     * last valid position keeps its time and goes stale (REQ-031), never replaced by nothing.
      */
     fun update(telemetry: Telemetry, received: ReceivedMessage, receivedAt: TimeMark): Telemetry? {
         if (received.componentId != MAV_COMP_ID_AUTOPILOT1) return null
         return when (val message = received.message) {
-            is GlobalPositionInt -> telemetry.copy(position = Timed(message.toPosition(), receivedAt))
+            is GlobalPositionInt -> message.toPosition()?.let { telemetry.copy(position = Timed(it, receivedAt)) }
             is MavlinkMessage.Attitude -> telemetry.copy(attitude = Timed(message.toAttitude(), receivedAt))
             is VfrHud -> telemetry.copy(airData = Timed(message.toAirData(), receivedAt))
             is SysStatus -> telemetry.copy(battery = Timed(message.toBattery(), receivedAt))
@@ -81,28 +80,35 @@ internal object TelemetryMapper {
         }
     }
 
-    private fun GlobalPositionInt.toPosition() = GlobalPosition(
-        latitude = lat / DEGE7_PER_DEGREE,
-        longitude = lon / DEGE7_PER_DEGREE,
-        altitudeMsl = alt / MILLI,
-        altitudeAboveHome = relativeAlt / MILLI,
-        velocityNorth = vx / CENTI,
-        velocityEast = vy / CENTI,
-        velocityDown = vz / CENTI,
-        heading = hdg.takeUnless { it == GLOBAL_POSITION_HDG_UNKNOWN }?.let { it / CENTI },
-    )
+    /** `null` for a place that does not exist. */
+    private fun GlobalPositionInt.toPosition(): GlobalPosition? {
+        if (!TelemetryRanges.isOnEarth(lat, lon)) return null
+        return GlobalPosition(
+            latitude = lat / DEGE7_PER_DEGREE,
+            longitude = lon / DEGE7_PER_DEGREE,
+            altitudeMsl = alt / MILLI,
+            altitudeAboveHome = relativeAlt / MILLI,
+            velocityNorth = vx / CENTI,
+            velocityEast = vy / CENTI,
+            velocityDown = vz / CENTI,
+            heading = TelemetryRanges.direction(hdg)?.let { it / CENTI },
+        )
+    }
 
     private fun MavlinkMessage.Attitude.toAttitude() = Attitude(
-        roll = Math.toDegrees(roll.toDouble()),
-        pitch = Math.toDegrees(pitch.toDouble()),
-        yaw = Math.toDegrees(yaw.toDouble()),
+        roll = degreesOf(roll),
+        pitch = degreesOf(pitch),
+        yaw = degreesOf(yaw),
     )
 
+    private fun degreesOf(radians: Float): Double? =
+        TelemetryRanges.angle(radians)?.let { Math.toDegrees(it.toDouble()) }
+
     private fun VfrHud.toAirData() = AirData(
-        airspeed = airspeed.toDouble(),
-        groundspeed = groundspeed.toDouble(),
-        climbRate = climb.toDouble(),
-        throttle = throttle,
+        airspeed = TelemetryRanges.finite(airspeed)?.toDouble(),
+        groundspeed = TelemetryRanges.finite(groundspeed)?.toDouble(),
+        climbRate = TelemetryRanges.finite(climb)?.toDouble(),
+        throttle = TelemetryRanges.throttle(throttle),
     )
 
     private fun SysStatus.toBattery(): Battery {
@@ -129,17 +135,20 @@ internal object TelemetryMapper {
         hdop = eph.takeUnless { it == GpsRawInt.EPH_UNKNOWN }?.let { it / CENTI },
         vdop = epv.takeUnless { it == GpsRawInt.EPV_UNKNOWN }?.let { it / CENTI },
         groundSpeed = vel.takeUnless { it == GpsRawInt.VEL_UNKNOWN }?.let { it / CENTI },
-        courseOverGround = cog.takeUnless { it == GpsRawInt.COG_UNKNOWN }?.let { it / CENTI },
+        courseOverGround = TelemetryRanges.direction(cog)?.let { it / CENTI },
         horizontalAccuracy = hAcc.takeUnless { it == ACCURACY_ZERO_FILLED }?.let { it / MILLI },
         verticalAccuracy = vAcc.takeUnless { it == ACCURACY_ZERO_FILLED }?.let { it / MILLI },
         yaw = gpsYawOf(yaw),
     )
 
-    /** 0 is "not provided" and UINT16_MAX "unable to provide it", so north is sent as 36000. */
+    /**
+     * 0 is "not provided" and UINT16_MAX "unable to provide it", so north is sent as 36000; anything past 36000 is
+     * no yaw either.
+     */
     private fun gpsYawOf(yaw: Int): Double? = when (yaw) {
-        GpsRawInt.YAW_NOT_PROVIDED, GpsRawInt.YAW_UNAVAILABLE -> null
         GpsRawInt.YAW_NORTH -> NORTH_DEGREES
-        else -> yaw / CENTI
+        in 1 until GpsRawInt.YAW_NORTH -> yaw / CENTI
+        else -> null
     }
 
     private fun gpsFixTypeOf(fixType: Int): GpsFixType = when (fixType) {

@@ -112,9 +112,35 @@ Writes:
                                                 telemetry/sys-status.bin re-packed by pymavlink without the
                                                 battery bit in onboard_control_sensors_health: an unhealthy
                                                 monitor or a battery failsafe
+  <out>/derived/global-position-int-hdg-36000.bin
+                                                telemetry/global-position-int.bin re-packed by pymavlink with hdg
+                                                36000: past 359.99 degrees, the documented range (#49)
+  <out>/derived/global-position-int-lat-past-90.bin
+                                                the same with lat 900000001 (90.0000001 degrees)
+  <out>/derived/global-position-int-lon-past-180.bin
+                                                the same with lon -1800000001 (-180.0000001 degrees)
+  <out>/derived/global-position-int-lon-past-180-east.bin
+                                                the same with lon 1800000001 (180.0000001 degrees)
+  <out>/derived/global-position-int-lat-int32-min.bin
+                                                the same with lat -2147483648 (INT32_MIN), whose absolute value
+                                                does not fit an int32
+  <out>/derived/global-position-int-ends.bin    the same with lat 900000000, lon -1800000000 and hdg 35999: the
+                                                ends of every range, all valid
+  <out>/derived/global-position-int-ends-south-east.bin
+                                                the same with lat -900000000 and lon 1800000000: the other ends
+  <out>/derived/gps-raw-int-out-of-range.bin    telemetry/gps-raw-int.bin re-packed by pymavlink with cog 40000
+                                                and yaw 36001, the rest as captured
+  <out>/derived/vfr-hud-out-of-range.bin        telemetry/vfr-hud.bin re-packed by pymavlink with airspeed NaN,
+                                                climb +infinity and throttle 101, groundspeed as captured
+  <out>/derived/vfr-hud-throttle-100.bin        the same VFR_HUD with throttle 100, the end of its range
+  <out>/derived/attitude-out-of-range.bin       telemetry/attitude.bin re-packed by pymavlink with roll NaN,
+                                                pitch -infinity and yaw 0.5
+  <out>/derived/attitude-past-pi.bin            the same ATTITUDE with roll pi (the float32 closest to it, the
+                                                end of the range), pitch -0.25 and yaw 3.1416, past it
 
 checks each output with pymavlink before writing it, prints the decoded fields of the telemetry fixtures
-(floats as the shortest decimal text that is the same float32) and the session counts the tests expect.
+(floats as the shortest decimal text that is the same float32), the session counts the tests expect and, for
+the telemetry the app maps, how many of the vehicle's frames carry each value (not a documented "unknown").
 
 Usage:
   py -m pip install --user pymavlink==2.4.50
@@ -123,6 +149,7 @@ Usage:
 
 import argparse
 import io
+import math
 import struct
 from pathlib import Path
 
@@ -273,6 +300,23 @@ TIME_USEC_2_63 = 2**63  # the smallest uint64 a Kotlin Long cannot hold
 # MAV_SYS_STATUS_SENSOR_BATTERY (common.xml). ArduPilot always sets it in _present; _enabled only with a
 # battery monitor, _health only while the monitor is healthy and not in failsafe (GCS.cpp, AP_BATTERY_ENABLED).
 MAV_SYS_STATUS_SENSOR_BATTERY = 0x0200_0000
+# Out of the documented ranges (#49): hdg and cog 0.0..359.99 degrees (standard.xml, common.xml), GPS yaw up to
+# 36000 (north), throttle 0 to 100, ATTITUDE angles -pi..+pi; latitude and longitude by their WGS84 definition.
+POSITION_HDG_PAST_RANGE = {"hdg": 36000}
+POSITION_LAT_PAST_90 = {"lat": 900_000_001}
+POSITION_LON_PAST_180 = {"lon": -1_800_000_001}
+POSITION_LAT_INT32_MIN = {"lat": -(2**31)}
+POSITION_LON_PAST_180_EAST = {"lon": 1_800_000_001}
+POSITION_ENDS_SOUTH_EAST = {"lat": -900_000_000, "lon": 1_800_000_000}
+POSITION_ENDS = {"lat": 900_000_000, "lon": -1_800_000_000, "hdg": 35999}
+GPS_RAW_INT_OUT_OF_RANGE = {"cog": 40000, "yaw": 36001}
+VFR_HUD_OUT_OF_RANGE = {"airspeed": float("nan"), "climb": float("inf"), "throttle": 101}
+VFR_HUD_THROTTLE_MAX = {"throttle": 100}
+ATTITUDE_OUT_OF_RANGE = {"roll": float("nan"), "pitch": float("-inf"), "yaw": 0.5}
+ATTITUDE_PAST_PI = {"roll": math.pi, "pitch": -0.25, "yaw": 3.1416}
+FLOAT32_PI = struct.unpack("<f", struct.pack("<f", math.pi))[0]
+VEHICLE_SYSTEM_ID = 1
+MAV_COMP_ID_AUTOPILOT1 = 1
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -488,6 +532,50 @@ def session_counts(session: Path) -> dict:
             counts["mavlink1_bytes"] += len(frame)
 
 
+def same(decoded, expected) -> bool:
+    """[decoded] equals [expected] as pymavlink packs it: NaN for NaN, float32 for floats."""
+    if isinstance(expected, float):
+        if math.isnan(expected):
+            return math.isnan(decoded)
+        return decoded == struct.unpack("<f", struct.pack("<f", expected))[0]
+    return decoded == expected
+
+
+def session_telemetry_counts(session: Path) -> dict:
+    """For every MAVLink 2 telemetry frame of the vehicle's autopilot in the session, how many carry each value
+    the app maps, a documented "unknown" (common.xml, standard.xml) not counted. Our ranges are not applied:
+    this is what the mapper must keep from a real flight (#49)."""
+    log = mavutil.mavlink_connection(str(session), dialect="common", robust_parsing=True)
+    counts = {}
+
+    def count(key: str, has_value: bool = True) -> None:
+        counts[key] = counts.get(key, 0) + has_value
+
+    while True:
+        msg = log.recv_match(blocking=False)
+        if msg is None:
+            return counts
+        frame = bytes(msg.get_msgbuf())
+        if frame[0] != START_MARKER or msg.get_srcSystem() != VEHICLE_SYSTEM_ID:
+            continue
+        if msg.get_srcComponent() != MAV_COMP_ID_AUTOPILOT1:
+            continue
+        kind = msg.get_type()
+        if kind == "GLOBAL_POSITION_INT":
+            count("position")
+            count("heading", msg.hdg != 0xFFFF)
+        elif kind == "ATTITUDE":
+            for name in ("roll", "pitch", "yaw"):
+                count(name)
+        elif kind == "VFR_HUD":
+            for name in ("airspeed", "groundspeed", "climb", "throttle"):
+                count(name)
+        elif kind == "GPS_RAW_INT":
+            count("gps")
+            count("cog", msg.cog != 0xFFFF)
+            count("gps_yaw", msg.yaw not in (0, 0xFFFF))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, default=Path("core/mavlink/src/test/resources"))
@@ -595,6 +683,20 @@ def main() -> None:
         derived_dir / "sys-status-battery-zero-volts.bin": with_message_fields(battery, voltage_battery=0),
         derived_dir / "sys-status-no-battery-monitor.bin": with_message_fields(battery, **no_monitor),
         derived_dir / "sys-status-battery-unhealthy.bin": with_message_fields(battery, **unhealthy),
+        derived_dir / "global-position-int-hdg-36000.bin": with_message_fields(position, **POSITION_HDG_PAST_RANGE),
+        derived_dir / "global-position-int-lat-past-90.bin": with_message_fields(position, **POSITION_LAT_PAST_90),
+        derived_dir / "global-position-int-lon-past-180.bin": with_message_fields(position, **POSITION_LON_PAST_180),
+        derived_dir / "global-position-int-lat-int32-min.bin": with_message_fields(position, **POSITION_LAT_INT32_MIN),
+        derived_dir / "global-position-int-lon-past-180-east.bin": with_message_fields(
+            position, **POSITION_LON_PAST_180_EAST
+        ),
+        derived_dir / "global-position-int-ends-south-east.bin": with_message_fields(position, **POSITION_ENDS_SOUTH_EAST),
+        derived_dir / "global-position-int-ends.bin": with_message_fields(position, **POSITION_ENDS),
+        derived_dir / "gps-raw-int-out-of-range.bin": with_message_fields(gps_raw_int, **GPS_RAW_INT_OUT_OF_RANGE),
+        derived_dir / "vfr-hud-out-of-range.bin": with_message_fields(vfr_hud, **VFR_HUD_OUT_OF_RANGE),
+        derived_dir / "vfr-hud-throttle-100.bin": with_message_fields(vfr_hud, **VFR_HUD_THROTTLE_MAX),
+        derived_dir / "attitude-out-of-range.bin": with_message_fields(attitude, **ATTITUDE_OUT_OF_RANGE),
+        derived_dir / "attitude-past-pi.bin": with_message_fields(attitude, **ATTITUDE_PAST_PI),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -674,6 +776,27 @@ def main() -> None:
     assert decode(outputs[derived_dir / "gps-raw-int-unknown.bin"]).lat == decode(gps_raw_int).lat
     for flags in ("present", "enabled", "health"):
         assert getattr(battery_msg, f"onboard_control_sensors_{flags}") & MAV_SYS_STATUS_SENSOR_BATTERY, flags
+    for name, source_frame, fields in (
+        ("global-position-int-hdg-36000.bin", position, POSITION_HDG_PAST_RANGE),
+        ("global-position-int-lat-past-90.bin", position, POSITION_LAT_PAST_90),
+        ("global-position-int-lon-past-180.bin", position, POSITION_LON_PAST_180),
+        ("global-position-int-lat-int32-min.bin", position, POSITION_LAT_INT32_MIN),
+        ("global-position-int-lon-past-180-east.bin", position, POSITION_LON_PAST_180_EAST),
+        ("global-position-int-ends-south-east.bin", position, POSITION_ENDS_SOUTH_EAST),
+        ("global-position-int-ends.bin", position, POSITION_ENDS),
+        ("gps-raw-int-out-of-range.bin", gps_raw_int, GPS_RAW_INT_OUT_OF_RANGE),
+        ("vfr-hud-out-of-range.bin", vfr_hud, VFR_HUD_OUT_OF_RANGE),
+        ("vfr-hud-throttle-100.bin", vfr_hud, VFR_HUD_THROTTLE_MAX),
+        ("attitude-out-of-range.bin", attitude, ATTITUDE_OUT_OF_RANGE),
+        ("attitude-past-pi.bin", attitude, ATTITUDE_PAST_PI),
+    ):
+        derived = decode(outputs[derived_dir / name])
+        assert all(same(getattr(derived, field), value) for field, value in fields.items()), name
+        original = decode(source_frame)
+        unchanged = [field for field in original.get_fieldnames() if field not in fields]
+        assert all(same(getattr(derived, field), getattr(original, field)) for field in unchanged), name
+    assert decode(outputs[derived_dir / "attitude-past-pi.bin"]).roll == FLOAT32_PI
+    assert decode(outputs[derived_dir / "attitude-past-pi.bin"]).yaw > FLOAT32_PI
 
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
@@ -700,11 +823,24 @@ def main() -> None:
         derived_dir / "sys-status-battery-zero-volts.bin",
         derived_dir / "sys-status-no-battery-monitor.bin",
         derived_dir / "sys-status-battery-unhealthy.bin",
+        derived_dir / "global-position-int-hdg-36000.bin",
+        derived_dir / "global-position-int-lat-past-90.bin",
+        derived_dir / "global-position-int-lon-past-180.bin",
+        derived_dir / "global-position-int-lat-int32-min.bin",
+        derived_dir / "global-position-int-lon-past-180-east.bin",
+        derived_dir / "global-position-int-ends.bin",
+        derived_dir / "global-position-int-ends-south-east.bin",
+        derived_dir / "gps-raw-int-out-of-range.bin",
+        derived_dir / "vfr-hud-out-of-range.bin",
+        derived_dir / "vfr-hud-throttle-100.bin",
+        derived_dir / "attitude-out-of-range.bin",
+        derived_dir / "attitude-past-pi.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")
     print()
     print(f"session counts (pymavlink): {session_counts(args.out / SESSION)}")
+    print(f"session telemetry values (pymavlink): {session_telemetry_counts(args.out / SESSION)}")
 
 
 if __name__ == "__main__":

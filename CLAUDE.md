@@ -243,3 +243,6 @@ Add one line per closed issue: what surprised us and what to do differently.
   reboot: SITL tools send their own HEARTBEAT and request their streams again. Read the vehicle's code, not only the docs:
   its battery failsafe clears the health bit but keeps the voltage and percentage coming. Mission Planner's SITL updated
   again (git fbd0a316).
+- #49 Out-of-range telemetry: rejecting a value must never erase state. An invalid frame is dropped, not turned
+  into a `null` part, or the stale alert goes quiet (found by `safety-reviewer`). Compare ±π ranges as float32,
+  so a real float ±π reading is kept, and integer ranges with `in`, not `abs()` (`abs(Int.MIN_VALUE)` overflows).

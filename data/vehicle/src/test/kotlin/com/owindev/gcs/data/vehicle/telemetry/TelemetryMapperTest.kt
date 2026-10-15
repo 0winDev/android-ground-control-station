@@ -80,6 +80,56 @@ class TelemetryMapperTest {
     }
 
     @Test
+    @Tag("REQ-031")
+    fun `GIVEN a GLOBAL_POSITION_INT with a heading of 360 degrees WHEN mapping it THEN has no heading`() {
+        val received = receivedFixture(GLOBAL_POSITION_INT_HDG_36000)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.position?.value shouldBeEqualTo REAL_POSITION.copy(heading = null)
+    }
+
+    @Test
+    @Tag("REQ-031")
+    fun `GIVEN a GLOBAL_POSITION_INT at the ends of every range WHEN mapping it THEN keeps them`() {
+        val received = receivedFixture(GLOBAL_POSITION_INT_ENDS)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.position?.value shouldBeEqualTo REAL_POSITION.copy(
+            latitude = 90.0,
+            longitude = -180.0,
+            heading = 359.99,
+        )
+    }
+
+    @Test
+    @Tag("REQ-031")
+    fun `GIVEN a known position WHEN a GLOBAL_POSITION_INT places the vehicle nowhere THEN the frame is dropped`() {
+        val telemetry = Telemetry(position = Timed(REAL_POSITION, EARLIER))
+        val placesNowhere = listOf(
+            GLOBAL_POSITION_INT_LAT_PAST_90,
+            GLOBAL_POSITION_INT_LON_PAST_180,
+            GLOBAL_POSITION_INT_LON_PAST_180_EAST,
+            GLOBAL_POSITION_INT_LAT_INT32_MIN,
+        )
+
+        val result = placesNowhere.map { path -> mapper.update(telemetry, receivedFixture(path), RECEIVED_AT) }
+
+        result shouldBeEqualTo listOf(null, null, null, null)
+    }
+
+    @Test
+    @Tag("REQ-031")
+    fun `GIVEN a GLOBAL_POSITION_INT at the south and east ends WHEN mapping it THEN keeps them`() {
+        val received = receivedFixture(GLOBAL_POSITION_INT_ENDS_SOUTH_EAST)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.position?.value shouldBeEqualTo REAL_POSITION.copy(latitude = -90.0, longitude = 180.0)
+    }
+
+    @Test
     fun `GIVEN a real ATTITUDE WHEN mapping it THEN is in degrees`() {
         val received = receivedFixture(ATTITUDE)
 
@@ -103,6 +153,30 @@ class TelemetryMapperTest {
             roll = 28.64788975654116,
             pitch = -14.32394487827058,
             yaw = -180.00000500895632,
+        )
+    }
+
+    @Test
+    @Tag("REQ-031")
+    fun `GIVEN an ATTITUDE with a NaN roll and an infinite pitch WHEN mapping it THEN only the yaw is kept`() {
+        val received = receivedFixture(ATTITUDE_OUT_OF_RANGE)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.attitude?.value shouldBeEqualTo Attitude(roll = null, pitch = null, yaw = 28.64788975654116)
+    }
+
+    @Test
+    @Tag("REQ-031")
+    fun `GIVEN an ATTITUDE with a roll at pi and a yaw past it WHEN mapping it THEN only the yaw is dropped`() {
+        val received = receivedFixture(ATTITUDE_PAST_PI)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.attitude?.value shouldBeEqualTo Attitude(
+            roll = 180.00000500895632,
+            pitch = -14.32394487827058,
+            yaw = null,
         )
     }
 
@@ -137,6 +211,31 @@ class TelemetryMapperTest {
             climbRate = -2.5,
             throttle = 65,
         )
+    }
+
+    @Test
+    @Tag("REQ-031")
+    fun `GIVEN a VFR_HUD with non-finite floats and throttle 101 WHEN mapping it THEN keeps only the groundspeed`() {
+        val received = receivedFixture(VFR_HUD_OUT_OF_RANGE)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.airData?.value shouldBeEqualTo AirData(
+            airspeed = null,
+            groundspeed = 0.023871898651123047,
+            climbRate = null,
+            throttle = null,
+        )
+    }
+
+    @Test
+    @Tag("REQ-031")
+    fun `GIVEN a VFR_HUD at full throttle WHEN mapping it THEN keeps a throttle of 100`() {
+        val received = receivedFixture(VFR_HUD_THROTTLE_100)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.airData?.value?.throttle shouldBeEqualTo 100
     }
 
     @Test
@@ -297,6 +396,26 @@ class TelemetryMapperTest {
     }
 
     @Test
+    @Tag("REQ-031")
+    fun `GIVEN a GPS_RAW_INT with a course and a yaw past their ranges WHEN mapping it THEN has neither`() {
+        val received = receivedFixture(GPS_RAW_INT_OUT_OF_RANGE)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result?.gps?.value shouldBeEqualTo GpsStatus(
+            fixType = GpsFixType.RtkFixed,
+            satellitesVisible = 10,
+            hdop = 1.21,
+            vdop = 2.0,
+            groundSpeed = 0.0,
+            courseOverGround = null,
+            horizontalAccuracy = 0.3,
+            verticalAccuracy = 0.3,
+            yaw = null,
+        )
+    }
+
+    @Test
     fun `GIVEN a GPS_RAW_INT with a fix type GPS_FIX_TYPE does not define WHEN mapping it THEN keeps its number`() {
         val received = received(gpsRawInt(fixType = UNDEFINED_FIX_TYPE))
 
@@ -340,6 +459,18 @@ class TelemetryMapperTest {
 
 private const val GLOBAL_POSITION_INT = "telemetry/global-position-int.bin"
 private const val GLOBAL_POSITION_INT_EDGES = "derived/global-position-int-edges.bin"
+private const val GLOBAL_POSITION_INT_HDG_36000 = "derived/global-position-int-hdg-36000.bin"
+private const val GLOBAL_POSITION_INT_LAT_PAST_90 = "derived/global-position-int-lat-past-90.bin"
+private const val GLOBAL_POSITION_INT_LON_PAST_180 = "derived/global-position-int-lon-past-180.bin"
+private const val GLOBAL_POSITION_INT_LON_PAST_180_EAST = "derived/global-position-int-lon-past-180-east.bin"
+private const val GLOBAL_POSITION_INT_ENDS_SOUTH_EAST = "derived/global-position-int-ends-south-east.bin"
+private const val GLOBAL_POSITION_INT_LAT_INT32_MIN = "derived/global-position-int-lat-int32-min.bin"
+private const val GLOBAL_POSITION_INT_ENDS = "derived/global-position-int-ends.bin"
+private const val ATTITUDE_OUT_OF_RANGE = "derived/attitude-out-of-range.bin"
+private const val ATTITUDE_PAST_PI = "derived/attitude-past-pi.bin"
+private const val VFR_HUD_OUT_OF_RANGE = "derived/vfr-hud-out-of-range.bin"
+private const val VFR_HUD_THROTTLE_100 = "derived/vfr-hud-throttle-100.bin"
+private const val GPS_RAW_INT_OUT_OF_RANGE = "derived/gps-raw-int-out-of-range.bin"
 private const val ATTITUDE = "telemetry/attitude.bin"
 private const val ATTITUDE_EDGES = "derived/attitude-edges.bin"
 private const val VFR_HUD = "telemetry/vfr-hud.bin"
@@ -369,6 +500,18 @@ private val SENDER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_551)
 private val CLOCK = TestTimeSource()
 private val EARLIER = CLOCK.markNow()
 private val RECEIVED_AT = CLOCK.markNow()
+
+/** `telemetry/global-position-int.bin` as pymavlink decodes it, converted by hand. */
+private val REAL_POSITION = GlobalPosition(
+    latitude = -35.3633514,
+    longitude = 149.1652411,
+    altitudeMsl = 587.13,
+    altitudeAboveHome = -0.013,
+    velocityNorth = 0.01,
+    velocityEast = -0.01,
+    velocityDown = 0.0,
+    heading = 359.35,
+)
 
 private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
 

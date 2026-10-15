@@ -5,7 +5,8 @@ package com.owindev.gcs.core.domain.telemetry
  * `null` until its first message arrives; a part that stops arriving keeps its last value and grows stale.
  *
  * Units are SI except angles, which are in degrees: latitude, longitude, headings, courses and attitude.
- * A field that the vehicle reported as unknown is `null`, never 0.
+ * A field that the vehicle reported as unknown, or sent outside its documented range (REQ-031), is `null`,
+ * never 0 nor a clamped or wrapped value.
  */
 data class Telemetry(
     val position: Timed<GlobalPosition>? = null,
@@ -35,7 +36,8 @@ data class Telemetry(
  * @property velocityNorth in m/s.
  * @property velocityEast in m/s.
  * @property velocityDown in m/s: negative while climbing.
- * @property heading where the vehicle points, 0 (north) up to 360 degrees, or `null` if unknown.
+ * @property heading where the vehicle points, 0 (north) up to 360 degrees, or `null` if unknown or sent past
+ *   359.99 degrees.
  */
 data class GlobalPosition(
     val latitude: Double,
@@ -50,19 +52,21 @@ data class GlobalPosition(
 
 /**
  * The vehicle's attitude, each angle in degrees from -180 to 180 as the vehicle sends it; float rounding of
- * ±π can put it a few millionths of a degree past ±180.
+ * ±π can put it a few millionths of a degree past ±180. Each angle is `null` when the vehicle sends it as NaN,
+ * infinite or past ±π, so one bad angle never hides the others.
  */
-data class Attitude(val roll: Double, val pitch: Double, val yaw: Double)
+data class Attitude(val roll: Double?, val pitch: Double?, val yaw: Double?)
 
 /**
- * What a HUD shows of the flight.
+ * What a HUD shows of the flight. Each value is `null` when the vehicle sends it outside its range: a speed or
+ * climb rate that is NaN or infinite, a throttle above 100.
  *
  * @property airspeed in m/s, as the vehicle estimates it.
  * @property groundspeed in m/s.
  * @property climbRate in m/s: positive while climbing.
  * @property throttle in percent, 0 to 100.
  */
-data class AirData(val airspeed: Double, val groundspeed: Double, val climbRate: Double, val throttle: Int)
+data class AirData(val airspeed: Double?, val groundspeed: Double?, val climbRate: Double?, val throttle: Int?)
 
 /**
  * The vehicle's main battery, each reading `null` when the vehicle does not send it or it cannot be trusted.
@@ -93,10 +97,12 @@ data class Battery(
  * @property hdop horizontal dilution of precision (unitless).
  * @property vdop vertical dilution of precision (unitless).
  * @property groundSpeed in m/s.
- * @property courseOverGround the direction of movement, not the heading, from 0 (north) up to 360 degrees.
+ * @property courseOverGround the direction of movement, not the heading, from 0 (north) up to 360 degrees;
+ *   `null` past 359.99.
  * @property horizontalAccuracy position uncertainty, in m.
  * @property verticalAccuracy altitude uncertainty, in m.
- * @property yaw the heading a dual-antenna receiver measures, from 0 (north) up to 360 degrees.
+ * @property yaw the heading a dual-antenna receiver measures, from 0 (north) up to 360 degrees; `null` past
+ *   360.
  */
 data class GpsStatus(
     val fixType: GpsFixType,
