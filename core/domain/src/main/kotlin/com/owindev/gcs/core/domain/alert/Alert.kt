@@ -30,8 +30,9 @@ sealed interface Alert {
 
     /**
      * The vehicle reports its battery unhealthy. ArduPilot does so both when the monitor fails and once its own
-     * battery failsafe has triggered, which then acts on the vehicle and lasts until it reboots
-     * (`libraries/GCS_MAVLink/GCS.cpp`); the two look the same, so it is an emergency.
+     * battery failsafe has triggered, which then acts on the vehicle and lasts until it reboots or the battery is
+     * reset with no pack still in failsafe (`libraries/GCS_MAVLink/GCS.cpp`, `reset_remaining_mask` in
+     * `libraries/AP_BattMonitor/AP_BattMonitor.cpp`); the two look the same, so it is an emergency.
      */
     data object BatteryUnhealthy : Alert {
         override val level = AlertLevel.EMERGENCY

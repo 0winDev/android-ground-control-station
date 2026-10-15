@@ -33,6 +33,10 @@ import kotlinx.coroutines.launch
  * arriving ([AlertRule.untilNextStale]), so a stream that stops raises [Alert.TelemetryStale] on time. Each change
  * is logged once, which is what the SITL check reads.
  *
+ * Known limit, as in `DefaultVehicleRepository`: the ages count deep sleep but `delay` does not, so after the
+ * device wakes a value that went stale while it slept is judged on the next telemetry or when the timer ends,
+ * never early.
+ *
  * Nothing remembered is ever shown (as the telemetry, #13): when the last observer leaves the alerts are dropped
  * and the next observer starts from none, judged afresh on the telemetry as it is then.
  */

@@ -132,6 +132,11 @@ class AlertRule(
  * The low threshold follows ArduPilot's battery failsafe, which recommends `BATT_LOW_MAH` at 20 % of the
  * battery's capacity (https://ardupilot.org/copter/docs/failsafe-battery.html); the documentation gives no
  * figure for the critical one, so 10 % is ours.
+ *
+ * Known limit: only the remaining energy is judged, while ArduPilot's failsafe also triggers on voltage
+ * (`BATT_LOW_VOLT`, `BATT_CRT_VOLT`). A monitor without current sensing, or a `BATT_CAPACITY` of 10 mAh or less,
+ * sends no remaining energy, so the battery is only [Alert.BatteryUnknown] and never low or critical; and these
+ * thresholds are not the ones configured on the vehicle. A voltage rule from the vehicle's own parameters is #53.
  */
 class BatteryThresholds(val low: Int = 20, val critical: Int = 10, val hysteresis: Int = 3) {
 
