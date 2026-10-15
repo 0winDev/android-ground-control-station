@@ -2,8 +2,20 @@ package com.owindev.gcs.feature.hud
 
 import app.cash.turbine.testIn
 import app.cash.turbine.turbineScope
+import com.owindev.gcs.core.domain.geo.Mgrs
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
+import com.owindev.gcs.core.domain.telemetry.AirData
+import com.owindev.gcs.core.domain.telemetry.Attitude
+import com.owindev.gcs.core.domain.telemetry.Battery
+import com.owindev.gcs.core.domain.telemetry.GlobalPosition
+import com.owindev.gcs.core.domain.telemetry.GpsFixType
+import com.owindev.gcs.core.domain.telemetry.GpsStatus
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.Telemetry
+import com.owindev.gcs.core.domain.telemetry.TelemetryKind
+import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -44,6 +56,8 @@ class HudViewModelTest {
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val linkRepository: LinkRepository = mockk()
     private val vehicleRepository: VehicleRepository = mockk()
+    private val activeTelemetry = MutableStateFlow<Telemetry?>(null)
+    private val telemetryRepository: TelemetryRepository = mockk()
 
     private lateinit var viewModel: HudViewModel
 
@@ -52,7 +66,9 @@ class HudViewModelTest {
         every { linkRepository.traffic } returns traffic
         every { vehicleRepository.activeSystemId } returns activeSystemId
         every { vehicleRepository.vehicles } returns vehicles
-        viewModel = HudViewModel(linkRepository, vehicleRepository, LinkLossRule())
+        every { telemetryRepository.activeTelemetry } returns activeTelemetry
+        viewModel =
+            HudViewModel(linkRepository, vehicleRepository, telemetryRepository, LinkLossRule(), StalenessRule())
     }
 
     @Tag("REQ-005")
@@ -361,7 +377,13 @@ class HudViewModelTest {
             turbineScope {
                 activeSystemId.value = SYSTEM_1
                 vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.CONNECTED, heardAgo = ONE_SECOND))
-                val custom = HudViewModel(linkRepository, vehicleRepository, LinkLossRule(timeout = CUSTOM_TIMEOUT))
+                val custom = HudViewModel(
+                    linkRepository,
+                    vehicleRepository,
+                    telemetryRepository,
+                    LinkLossRule(timeout = CUSTOM_TIMEOUT),
+                    StalenessRule(),
+                )
                 val states = custom.state.testIn(backgroundScope)
 
                 delay(JUST_PAST_CUSTOM_TIMEOUT)
@@ -505,6 +527,199 @@ class HudViewModelTest {
             )
         }
     }
+
+    @Tag("REQ-029")
+    @Tag("REQ-027")
+    @Test
+    fun `GIVEN fresh telemetry of the active vehicle WHEN observing the state THEN shows every part with its MGRS`() =
+        runTest {
+            turbineScope {
+                connectedVehicle()
+                val now = testScheduler.timeSource.markNow()
+                activeTelemetry.value = Telemetry(
+                    position = Timed(SITL_HOME, now),
+                    attitude = Timed(LEVEL, now),
+                    airData = Timed(HOVER, now),
+                    battery = Timed(FULL_BATTERY, now),
+                    gps = Timed(RTK_FIX, now),
+                )
+
+                val result = viewModel.state.testIn(backgroundScope)
+
+                result.expectMostRecentItem() shouldBeEqualTo connected(
+                    TelemetryPanel(
+                        position = fresh(PositionReading(SITL_HOME, SITL_HOME_MGRS, verified = true)),
+                        attitude = fresh(LEVEL),
+                        airData = fresh(HOVER),
+                        battery = fresh(FULL_BATTERY),
+                        gps = fresh(RTK_FIX),
+                    ),
+                )
+            }
+        }
+
+    @Tag("REQ-029")
+    @Test
+    fun `GIVEN only the attitude received WHEN observing the state THEN the other parts are not shown`() = runTest {
+        turbineScope {
+            connectedVehicle()
+            activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            result.expectMostRecentItem() shouldBeEqualTo connected(TelemetryPanel(attitude = fresh(LEVEL)))
+        }
+    }
+
+    @Tag("REQ-029")
+    @Tag("REQ-031")
+    @Test
+    fun `GIVEN angles the vehicle sent out of range WHEN observing the state THEN stay no value`() = runTest {
+        turbineScope {
+            connectedVehicle()
+            val withoutRoll = Attitude(roll = null, pitch = 3.0, yaw = null)
+            activeTelemetry.value = Telemetry(attitude = Timed(withoutRoll, testScheduler.timeSource.markNow()))
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            result.expectMostRecentItem() shouldBeEqualTo connected(TelemetryPanel(attitude = fresh(withoutRoll)))
+        }
+    }
+
+    @Tag("REQ-029")
+    @Tag("REQ-027")
+    @Test
+    fun `GIVEN a position north of UTM WHEN observing the state THEN its MGRS is not available`() = runTest {
+        turbineScope {
+            connectedVehicle()
+            val north = SITL_HOME.copy(latitude = NORTH_OF_UTM)
+            activeTelemetry.value = Telemetry(position = Timed(north, testScheduler.timeSource.markNow()))
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            result.expectMostRecentItem() shouldBeEqualTo connected(
+                TelemetryPanel(position = fresh(PositionReading(north, Mgrs.NotAvailable, verified = false))),
+            )
+        }
+    }
+
+    @Tag("REQ-029")
+    @Test
+    fun `GIVEN a fresh position but the GPS without a fix WHEN observing the state THEN it is not verified`() =
+        runTest {
+            turbineScope {
+                connectedVehicle()
+                val now = testScheduler.timeSource.markNow()
+                activeTelemetry.value = Telemetry(position = Timed(SITL_HOME, now), gps = Timed(NO_FIX, now))
+
+                val result = viewModel.state.testIn(backgroundScope)
+
+                result.expectMostRecentItem() shouldBeEqualTo connected(
+                    TelemetryPanel(
+                        position = fresh(PositionReading(SITL_HOME, SITL_HOME_MGRS, verified = false)),
+                        gps = fresh(NO_FIX),
+                    ),
+                )
+            }
+        }
+
+    @Tag("REQ-029")
+    @Tag("REQ-026")
+    @Test
+    fun `GIVEN attitude that stops arriving WHEN 1 ms is left to its threshold THEN is not stale yet`() = runTest {
+        turbineScope {
+            connectedVehicle()
+            activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+            val states = viewModel.state.testIn(backgroundScope)
+
+            delay(ATTITUDE_STALE_AFTER - 1.milliseconds)
+            val result = states.expectMostRecentItem()
+
+            result shouldBeEqualTo connected(TelemetryPanel(attitude = fresh(LEVEL)))
+        }
+    }
+
+    @Tag("REQ-029")
+    @Tag("REQ-026")
+    @Test
+    fun `GIVEN attitude that stops arriving WHEN its threshold passes THEN is stale with nothing new arriving`() =
+        runTest {
+            turbineScope {
+                connectedVehicle()
+                activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+                val states = viewModel.state.testIn(backgroundScope)
+
+                delay(ATTITUDE_STALE_AFTER)
+                val result = states.expectMostRecentItem()
+
+                result shouldBeEqualTo connected(
+                    TelemetryPanel(attitude = Reading(LEVEL, stale = true, age = ONE_SECOND)),
+                )
+            }
+        }
+
+    @Tag("REQ-029")
+    @Tag("REQ-026")
+    @Test
+    fun `GIVEN a stale GPS WHEN time passes THEN its age counts in whole seconds, never under-stated`() = runTest {
+        turbineScope {
+            connectedVehicle()
+            val received = testScheduler.timeSource.markNow() - TWO_AND_A_HALF_SECONDS
+            activeTelemetry.value = Telemetry(gps = Timed(RTK_FIX, received))
+            val states = viewModel.state.testIn(backgroundScope)
+
+            delay(SIX_HUNDRED_MILLISECONDS)
+            val result = states.expectMostRecentItem()
+
+            result shouldBeEqualTo connected(TelemetryPanel(gps = Reading(RTK_FIX, stale = true, age = FOUR_SECONDS)))
+        }
+    }
+
+    @Tag("REQ-029")
+    @Test
+    fun `GIVEN telemetry but the vehicle lost WHEN observing the state THEN only the link loss is shown`() = runTest {
+        turbineScope {
+            activeSystemId.value = SYSTEM_1
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = FOUR_SECONDS))
+            activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            result.expectMostRecentItem() shouldBeEqualTo HudUiState.LinkLost(
+                lastKnown = GUIDED_ARMED_1,
+                sinceLastHeartbeat = FOUR_SECONDS,
+                otherVehicles = emptyList(),
+            )
+        }
+    }
+
+    @Tag("REQ-029")
+    @Tag("REQ-026")
+    @Test
+    fun `GIVEN the link was lost WHEN the vehicle is heard again THEN its old telemetry shows stale with its age`() =
+        runTest {
+            turbineScope {
+                activeSystemId.value = SYSTEM_1
+                vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = FOUR_SECONDS))
+                activeTelemetry.value = Telemetry(
+                    attitude = Timed(LEVEL, testScheduler.timeSource.markNow() - FOUR_SECONDS),
+                )
+                val states = viewModel.state.testIn(backgroundScope)
+
+                connectedVehicle()
+                val result = states.expectMostRecentItem()
+
+                result shouldBeEqualTo connected(
+                    TelemetryPanel(attitude = Reading(LEVEL, stale = true, age = FIVE_SECONDS)),
+                )
+            }
+        }
+
+    /** The active vehicle, system 1, heard just now. */
+    private fun TestScope.connectedVehicle() {
+        activeSystemId.value = SYSTEM_1
+        vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.CONNECTED, heardAgo = Duration.ZERO))
+    }
 }
 
 private const val PORT = 14550
@@ -520,6 +735,7 @@ private val TIMEOUT = LinkLossRule.DEFAULT_TIMEOUT
 private val ONE_SECOND = 1.seconds
 private val FOUR_SECONDS = 4.seconds
 private val SEVEN_SECONDS = 7.seconds
+private val FIVE_SECONDS = 5.seconds
 private val TWO_SECONDS = 2.seconds
 private val CUSTOM_TIMEOUT = 2_500.milliseconds
 
@@ -530,6 +746,64 @@ private val JUST_PAST_CUSTOM_TIMEOUT = 1_600.milliseconds
 private val PAST_STOP_AND_LINK_TIMEOUTS = 9.seconds
 private val TWO_AND_A_HALF_SECONDS = 2_500.milliseconds
 private val FOUR_AND_A_HALF_SECONDS = 4_500.milliseconds
+
+private val ATTITUDE_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.ATTITUDE)
+private val SIX_HUNDRED_MILLISECONDS = 600.milliseconds
+
+/** Past 84°N, where MGRS uses UPS: no UTM square. */
+private const val NORTH_OF_UTM = 85.0
+
+/** ArduPilot SITL's home (CMAC, Canberra), as decoded in the telemetry tests. */
+private val SITL_HOME = GlobalPosition(
+    latitude = -35.3633514,
+    longitude = 149.1652411,
+    altitudeMsl = 587.13,
+    altitudeAboveHome = -0.013,
+    velocityNorth = 0.01,
+    velocityEast = -0.01,
+    velocityDown = 0.0,
+    heading = 359.35,
+)
+
+/** `55HFA9672084509`, from GeoConvert 2.7 in `core/domain/src/test/resources/geo/mgrs-reference.csv`. */
+private val SITL_HOME_MGRS = Mgrs.Grid(zone = 55, band = 'H', square = "FA", easting = 96720, northing = 84509)
+private val LEVEL = Attitude(roll = 0.0, pitch = 0.0, yaw = 0.0)
+private val HOVER = AirData(airspeed = 0.0, groundspeed = 0.0, climbRate = 0.0, throttle = 40)
+private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
+
+/** GPS_RAW_INT as ArduPilot SITL sent it before its first fix (#42): no fix, 3 satellites. */
+private val NO_FIX = GpsStatus(
+    fixType = GpsFixType.NoFix,
+    satellitesVisible = 3,
+    hdop = null,
+    vdop = null,
+    groundSpeed = null,
+    courseOverGround = null,
+    horizontalAccuracy = null,
+    verticalAccuracy = null,
+    yaw = null,
+)
+private val RTK_FIX = GpsStatus(
+    fixType = GpsFixType.RtkFixed,
+    satellitesVisible = 10,
+    hdop = 1.21,
+    vdop = 2.0,
+    groundSpeed = 0.0,
+    courseOverGround = 0.0,
+    horizontalAccuracy = 0.3,
+    verticalAccuracy = 0.3,
+    yaw = null,
+)
+
+private fun <T> fresh(value: T) = Reading(value, stale = false, age = Duration.ZERO)
+
+private fun connected(telemetry: TelemetryPanel) = HudUiState.Connected(
+    vehicle = GUIDED_ARMED_1,
+    port = PORT,
+    datagramCount = DATAGRAMS,
+    otherVehicles = emptyList(),
+    telemetry = telemetry,
+)
 
 /** A copter whose last HEARTBEAT arrived [heardAgo] on the test scheduler's clock. */
 private fun TestScope.vehicle(systemId: SystemId, link: VehicleLink, heardAgo: Duration, mode: FlightMode = GUIDED) =

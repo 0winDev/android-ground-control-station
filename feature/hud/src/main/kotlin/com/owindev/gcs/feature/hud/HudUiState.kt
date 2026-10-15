@@ -21,6 +21,7 @@ sealed interface HudUiState {
      * and armed state carry no age because this state only exists while it is younger than the link-loss
      * timeout: past it, the state is [LinkLost]. [linkUnstable] as in [WaitingForVehicle]: the vehicle is
      * still decided by its HEARTBEATs, the warning only says the link on this device may fail again.
+     * [telemetry] is the vehicle's, each part with its staleness (REQ-029).
      */
     data class Connected(
         val vehicle: VehicleStatus,
@@ -28,6 +29,7 @@ sealed interface HudUiState {
         val datagramCount: Long,
         val otherVehicles: List<Int>,
         val linkUnstable: Boolean = false,
+        val telemetry: TelemetryPanel = TelemetryPanel(),
     ) : HudUiState
 
     /**
