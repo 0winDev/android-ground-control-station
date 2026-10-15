@@ -29,3 +29,16 @@ sealed interface GpsFixType {
     /** A fix type [number] that `GPS_FIX_TYPE` does not define. */
     data class Unknown(val number: Int) : GpsFixType
 }
+
+/** Whether this fix gives a 3D position; anything else, an undefined type included, is no 3D fix. */
+val GpsFixType.isFix3d: Boolean
+    get() = this in FIX_3D
+
+private val FIX_3D: Set<GpsFixType> = setOf(
+    GpsFixType.Fix3d,
+    GpsFixType.Dgps,
+    GpsFixType.RtkFloat,
+    GpsFixType.RtkFixed,
+    GpsFixType.Static,
+    GpsFixType.Ppp,
+)

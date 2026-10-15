@@ -14,6 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.core.domain.telemetry.Battery
+import com.owindev.gcs.core.domain.telemetry.GpsFixType
+import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 
 /** System, link, mode and armed state of the active vehicle, as chips like the prototype's top bar. */
@@ -30,6 +33,8 @@ internal fun StatusBar(state: HudUiState) {
             value = vehicle?.let { stringResource(id = R.string.hud_system, it.systemId) } ?: noValue,
         )
         LinkChip(state = state)
+        GpsChip(reading = (state as? HudUiState.Connected)?.telemetry?.gps)
+        BatteryChip(reading = (state as? HudUiState.Connected)?.telemetry?.battery)
         StatusChip(
             label = stringResource(id = R.string.hud_label_mode),
             value = vehicle?.let { flightModeText(it.flightMode) } ?: noValue,
@@ -67,6 +72,65 @@ private fun LinkChip(state: HudUiState) {
     StatusChip(label = stringResource(id = R.string.hud_label_link), value = value, valueColor = color)
 }
 
+/** Fix and satellites, as the prototype's GPS chip; greyed with its age once stale (REQ-029). */
+@Composable
+private fun GpsChip(reading: Reading<GpsStatus>?) {
+    val noValue = stringResource(id = R.string.hud_no_value)
+    val gps = reading?.value
+    val value = gps?.let {
+        stringResource(
+            id = R.string.hud_gps_status,
+            fixTypeText(it.fixType),
+            it.satellitesVisible?.toString() ?: noValue,
+        )
+    } ?: noValue
+    StatusChip(
+        label = stringResource(id = R.string.hud_label_gps),
+        value = withAge(value, reading),
+        valueColor = valueColor(reading),
+    )
+}
+
+/**
+ * Remaining energy and voltage, as the prototype's battery chip; greyed with its age once stale (REQ-029). No
+ * monitor and an unhealthy battery are said in words, the latter also in the emergency colour (#41).
+ */
+@Composable
+private fun BatteryChip(reading: Reading<Battery>?) {
+    val noValue = stringResource(id = R.string.hud_no_value)
+    val state = batteryChipStateOf(reading?.value)
+    val value = when (state) {
+        BatteryChipState.NoReading -> noValue
+
+        BatteryChipState.NoMonitor -> stringResource(id = R.string.hud_battery_no_monitor)
+
+        is BatteryChipState.Measured -> {
+            val measured = stringResource(
+                id = R.string.hud_battery_status,
+                state.remaining?.let { stringResource(id = R.string.hud_value_percent, it) } ?: noValue,
+                state.voltage?.let { stringResource(id = R.string.hud_value_volts, it) } ?: noValue,
+            )
+            if (state.healthy) measured else stringResource(id = R.string.hud_battery_unhealthy, measured)
+        }
+    }
+    val unhealthy = state is BatteryChipState.Measured && !state.healthy
+    StatusChip(
+        label = stringResource(id = R.string.hud_label_battery),
+        value = withAge(value, reading),
+        valueColor = if (unhealthy && reading?.stale != true) GcsTheme.colors.emergency else valueColor(reading),
+        containerColor = if (unhealthy) {
+            GcsTheme.colors.emergencyContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+    )
+}
+
+/** A stale chip says so in words, not only in grey. */
+@Composable
+private fun withAge(value: String, reading: Reading<*>?): String =
+    if (reading?.stale == true) "$value · ${ageText(reading.age)}" else value
+
 @Composable
 private fun StatusChip(
     label: String,
@@ -96,3 +160,18 @@ internal fun flightModeText(flightMode: FlightMode): String = when (flightMode) 
 @Composable
 internal fun armedText(armed: Boolean): String =
     stringResource(id = if (armed) R.string.hud_armed else R.string.hud_disarmed)
+
+/** The fix, abbreviated; a type `GPS_FIX_TYPE` does not define shows its number. */
+@Composable
+internal fun fixTypeText(fixType: GpsFixType): String = when (fixType) {
+    GpsFixType.NoGps -> stringResource(id = R.string.hud_fix_no_gps)
+    GpsFixType.NoFix -> stringResource(id = R.string.hud_fix_none)
+    GpsFixType.Fix2d -> stringResource(id = R.string.hud_fix_2d)
+    GpsFixType.Fix3d -> stringResource(id = R.string.hud_fix_3d)
+    GpsFixType.Dgps -> stringResource(id = R.string.hud_fix_dgps)
+    GpsFixType.RtkFloat -> stringResource(id = R.string.hud_fix_rtk_float)
+    GpsFixType.RtkFixed -> stringResource(id = R.string.hud_fix_rtk_fixed)
+    GpsFixType.Static -> stringResource(id = R.string.hud_fix_static)
+    GpsFixType.Ppp -> stringResource(id = R.string.hud_fix_ppp)
+    is GpsFixType.Unknown -> stringResource(id = R.string.hud_fix_unknown, fixType.number)
+}

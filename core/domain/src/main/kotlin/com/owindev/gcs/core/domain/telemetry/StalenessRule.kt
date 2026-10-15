@@ -40,6 +40,16 @@ class StalenessRule(thresholds: Map<TelemetryKind, Duration> = DEFAULT_THRESHOLD
     /** Whether a value of [kind] received [age] ago, on a monotonic clock, is stale. */
     fun isStale(kind: TelemetryKind, age: Duration): Boolean = age >= thresholdOf(kind)
 
+    /**
+     * How long until the next fresh value of [telemetry] goes stale: a consumer must judge it again then, even if
+     * nothing new arrives, or a value that stopped arriving would never go stale. `null` when no value is fresh,
+     * so nothing will change until something arrives.
+     */
+    fun untilNextStale(telemetry: Telemetry): Duration? = TelemetryKind.entries
+        .mapNotNull { kind -> telemetry[kind]?.let { thresholdOf(kind) - it.receivedAt.elapsedNow() } }
+        .filter { it > Duration.ZERO }
+        .minOrNull()
+
     companion object {
         /**
          * About four or five intervals of the rate each value is requested at (10, 5, 4, 2 Hz), so one or two

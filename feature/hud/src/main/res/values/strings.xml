@@ -26,6 +26,46 @@
     <string name="hud_local_fault_failed">The link failed on this device. Reopening it and waiting for the vehicle.</string>
     <string name="hud_link_unstable">Link unstable on this device: receiving again, but it may fail again.</string>
     <string name="hud_local_fault_unstable">The link on this device is unstable: it keeps failing and reopening.</string>
+    <string name="hud_label_altitude">Alt (rel. home)</string>
+    <string name="hud_label_ground_speed">Ground speed</string>
+    <string name="hud_label_heading">Heading</string>
+    <string name="hud_label_vertical_speed">Vertical speed</string>
+    <string name="hud_label_position">Position</string>
+    <string name="hud_label_mgrs" translatable="false">MGRS</string>
+    <string name="hud_label_gps" translatable="false">GPS</string>
+    <string name="hud_label_battery">Battery</string>
+    <string name="hud_attitude">Roll %1$s · Pitch %2$s</string>
+    <string name="hud_attitude_not_available">Roll and pitch not available</string>
+    <string name="hud_value_metres">%1$.1f m</string>
+    <string name="hud_value_speed">%1$.1f m/s</string>
+    <string name="hud_value_climb_rate">%1$+.1f m/s</string>
+    <string name="hud_value_degrees">%1$.0f°</string>
+    <string name="hud_value_signed_degrees">%1$+.0f°</string>
+    <string name="hud_coordinate">%1$.5f° %2$s</string>
+    <string name="hud_coordinates">%1$s · %2$s</string>
+    <string name="hud_north">N</string>
+    <string name="hud_south">S</string>
+    <string name="hud_east">E</string>
+    <string name="hud_west">W</string>
+    <string name="hud_mgrs_not_available">Not available outside UTM</string>
+    <string name="hud_age_seconds">Data from %1$d s ago</string>
+    <string name="hud_gps_status">%1$s · %2$s</string>
+    <string name="hud_battery_status">%1$s · %2$s</string>
+    <string name="hud_value_percent">%1$d %%</string>
+    <string name="hud_value_volts">%1$.1f V</string>
+    <string name="hud_fix_no_gps">No GPS</string>
+    <string name="hud_fix_none">No fix</string>
+    <string name="hud_fix_2d" translatable="false">2D</string>
+    <string name="hud_fix_3d" translatable="false">3D</string>
+    <string name="hud_fix_dgps" translatable="false">DGPS</string>
+    <string name="hud_fix_rtk_float">RTK float</string>
+    <string name="hud_fix_rtk_fixed">RTK fixed</string>
+    <string name="hud_fix_static">Static</string>
+    <string name="hud_fix_ppp" translatable="false">PPP</string>
+    <string name="hud_fix_unknown">Fix %1$d</string>
+    <string name="hud_position_not_verified">No 3D GPS fix: position not verified</string>
+    <string name="hud_battery_no_monitor">No monitor</string>
+    <string name="hud_battery_unhealthy">Unhealthy · %1$s</string>
     <plurals name="hud_other_vehicles">
         <item quantity="one">Other vehicle detected (SYS %1$s)</item>
         <item quantity="other">Other vehicles detected (SYS %1$s)</item>

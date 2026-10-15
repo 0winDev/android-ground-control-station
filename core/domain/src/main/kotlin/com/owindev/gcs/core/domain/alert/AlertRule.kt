@@ -1,12 +1,12 @@
 package com.owindev.gcs.core.domain.alert
 
 import com.owindev.gcs.core.domain.telemetry.Battery
-import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.telemetry.isFix3d
 import kotlin.time.Duration
 
 /**
@@ -37,14 +37,10 @@ class AlertRule(
     }
 
     /**
-     * How long until a value of [telemetry] goes stale: the alerts must be evaluated again then, even if nothing
-     * new arrives, or a value that stopped arriving would never raise [Alert.TelemetryStale]. `null` when no value
-     * is fresh, so nothing will change until something arrives.
+     * When the alerts must be evaluated again with nothing new arriving ([StalenessRule.untilNextStale]), or a value
+     * that stopped arriving would never raise [Alert.TelemetryStale].
      */
-    fun untilNextStale(telemetry: Telemetry): Duration? = TelemetryKind.entries
-        .mapNotNull { kind -> telemetry[kind]?.let { staleness.thresholdOf(kind) - it.receivedAt.elapsedNow() } }
-        .filter { it > Duration.ZERO }
-        .minOrNull()
+    fun untilNextStale(telemetry: Telemetry): Duration? = staleness.untilNextStale(telemetry)
 
     /** [active] with [alert] acknowledged, unless it is an emergency: an emergency is never acknowledged. */
     fun acknowledge(active: List<ActiveAlert>, alert: Alert): List<ActiveAlert> = active.map {
@@ -96,7 +92,7 @@ class AlertRule(
 
         isStale(timed, TelemetryKind.GPS) -> wasActive intersect setOf(Alert.GpsFixLost)
 
-        timed.value.fixType in FIX_3D -> emptySet()
+        timed.value.fixType.isFix3d -> emptySet()
 
         else -> setOf(Alert.GpsFixLost)
     }
@@ -111,16 +107,6 @@ class AlertRule(
     private companion object {
         val ENERGY_ALERTS: Set<Alert> = setOf(Alert.BatteryCritical, Alert.BatteryLow)
         val BATTERY_ALERTS: Set<Alert> = ENERGY_ALERTS + setOf(Alert.BatteryUnhealthy, Alert.BatteryUnknown)
-
-        /** Every `GPS_FIX_TYPE` with a 3D position; anything else, an undefined type included, is no 3D fix. */
-        val FIX_3D: Set<GpsFixType> = setOf(
-            GpsFixType.Fix3d,
-            GpsFixType.Dgps,
-            GpsFixType.RtkFloat,
-            GpsFixType.RtkFixed,
-            GpsFixType.Static,
-            GpsFixType.Ppp,
-        )
     }
 }
 

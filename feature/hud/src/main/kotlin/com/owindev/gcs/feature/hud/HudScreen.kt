@@ -2,6 +2,8 @@ package com.owindev.gcs.feature.hud
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -57,50 +59,66 @@ private fun LinkContent(state: HudUiState, modifier: Modifier = Modifier) {
 
             else -> Unit
         }
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(space = ContentSpacing, alignment = Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            horizontalArrangement = Arrangement.spacedBy(ContentSpacing),
         ) {
-            when (state) {
-                is HudUiState.WaitingForVehicle -> {
-                    Text(
-                        text = stringResource(id = R.string.hud_waiting_for_vehicle),
-                        style = MaterialTheme.typography.headlineMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                    DatagramCount(port = state.port, datagramCount = state.datagramCount)
-                }
-
-                is HudUiState.Connected -> DatagramCount(port = state.port, datagramCount = state.datagramCount)
-
-                is HudUiState.PortUnavailable -> Text(
-                    text = stringResource(id = R.string.hud_port_unavailable, state.port),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = GcsTheme.colors.caution,
-                    textAlign = TextAlign.Center,
-                )
-
-                is HudUiState.PortUnavailableRetrying -> Text(
-                    text = stringResource(id = R.string.hud_port_unavailable_retrying, state.port),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = GcsTheme.colors.caution,
-                    textAlign = TextAlign.Center,
-                )
-
-                HudUiState.LinkError -> Text(
-                    text = stringResource(id = R.string.hud_link_error),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = GcsTheme.colors.emergency,
-                    textAlign = TextAlign.Center,
-                )
-
-                HudUiState.Starting, is HudUiState.LinkLost -> Unit
-            }
+            if (state is HudUiState.Connected) TelemetryPanelContent(panel = state.telemetry)
+            MainContent(
+                state = state,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1f),
+            )
         }
         Disclaimer()
+    }
+}
+
+@Composable
+private fun MainContent(state: HudUiState, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(space = ContentSpacing, alignment = Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        when (state) {
+            is HudUiState.WaitingForVehicle -> {
+                Text(
+                    text = stringResource(id = R.string.hud_waiting_for_vehicle),
+                    style = MaterialTheme.typography.headlineMedium,
+                    textAlign = TextAlign.Center,
+                )
+                DatagramCount(port = state.port, datagramCount = state.datagramCount)
+            }
+
+            is HudUiState.Connected -> DatagramCount(port = state.port, datagramCount = state.datagramCount)
+
+            is HudUiState.PortUnavailable -> Text(
+                text = stringResource(id = R.string.hud_port_unavailable, state.port),
+                style = MaterialTheme.typography.bodyLarge,
+                color = GcsTheme.colors.caution,
+                textAlign = TextAlign.Center,
+            )
+
+            is HudUiState.PortUnavailableRetrying -> Text(
+                text = stringResource(id = R.string.hud_port_unavailable_retrying, state.port),
+                style = MaterialTheme.typography.bodyLarge,
+                color = GcsTheme.colors.caution,
+                textAlign = TextAlign.Center,
+            )
+
+            HudUiState.LinkError -> Text(
+                text = stringResource(id = R.string.hud_link_error),
+                style = MaterialTheme.typography.bodyLarge,
+                color = GcsTheme.colors.emergency,
+                textAlign = TextAlign.Center,
+            )
+
+            HudUiState.Starting, is HudUiState.LinkLost -> Unit
+        }
     }
 }
 

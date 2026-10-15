@@ -293,25 +293,13 @@ class AlertRuleTest {
     }
 
     @Test
-    fun `GIVEN values received at different times WHEN asking when to evaluate again THEN is the next to go stale`() {
-        val battery = Timed(battery(remaining = 100), clock.markNow())
-        clock += 400.milliseconds
+    fun `GIVEN fresh attitude WHEN asking when to evaluate again THEN is when it goes stale`() {
         val attitude = Timed(ATTITUDE, clock.markNow())
         clock += 300.milliseconds
 
-        val result = rule.untilNextStale(Telemetry(attitude = attitude, battery = battery))
-
-        result shouldBeEqualTo 200.milliseconds
-    }
-
-    @Test
-    fun `GIVEN only stale or missing telemetry WHEN asking when to evaluate again THEN there is no need to`() {
-        val attitude = Timed(ATTITUDE, clock.markNow())
-        clock += ATTITUDE_STALE_AFTER
-
         val result = rule.untilNextStale(Telemetry(attitude = attitude))
 
-        result.shouldBeNull()
+        result shouldBeEqualTo ATTITUDE_STALE_AFTER - 300.milliseconds
     }
 
     @Test

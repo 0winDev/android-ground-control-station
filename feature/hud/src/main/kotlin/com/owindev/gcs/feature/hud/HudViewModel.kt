@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.Telemetry
+import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
@@ -16,6 +19,7 @@ import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,6 +41,10 @@ import kotlinx.coroutines.flow.stateIn
  * ticker re-reads the age on every whole second and exactly at the timeout, so a link that times out
  * shows LOST on time and the time since the last HEARTBEAT keeps counting.
  *
+ * The active vehicle's telemetry is judged by [staleness] on the same clock (REQ-026, REQ-029): the panel is
+ * built again when something arrives, when a value goes stale and on every whole second of a stale value's age,
+ * never at the telemetry's own rate of change.
+ *
  * Nothing remembered is ever shown: when nobody observes the HUD for [STOP_TIMEOUT], the state goes back
  * to [HudUiState.Starting], so coming back never flashes an old CONNECTED before the fresh state.
  */
@@ -45,7 +53,9 @@ import kotlinx.coroutines.flow.stateIn
 class HudViewModel @Inject constructor(
     linkRepository: LinkRepository,
     vehicleRepository: VehicleRepository,
+    telemetryRepository: TelemetryRepository,
     private val rule: LinkLossRule,
+    private val staleness: StalenessRule,
 ) : ViewModel() {
 
     /** Ticks only when the active vehicle's age needs re-reading; a new datagram does not restart it. */
@@ -58,12 +68,27 @@ class HudViewModel @Inject constructor(
         .distinctUntilChanged()
         .flatMapLatest { lastHeartbeat -> if (lastHeartbeat == null) flowOf(Unit) else ticksFor(lastHeartbeat) }
 
+    /** The active vehicle's telemetry, again whenever its panel changes with nothing new arriving. */
+    private val telemetryTicks: Flow<Telemetry?> = telemetryRepository.activeTelemetry.flatMapLatest { telemetry ->
+        if (telemetry == null) {
+            flowOf(null)
+        } else {
+            flow {
+                while (true) {
+                    emit(telemetry)
+                    delay(untilPanelChanges(telemetry, staleness) ?: awaitCancellation())
+                }
+            }
+        }
+    }
+
     val state: StateFlow<HudUiState> = combine(
         linkRepository.traffic,
         vehicleRepository.activeSystemId,
         vehicleRepository.vehicles,
         ticks,
-    ) { traffic, activeSystemId, vehicles, _ -> toUiState(traffic, activeSystemId, vehicles) }
+        telemetryTicks,
+    ) { traffic, activeSystemId, vehicles, _, telemetry -> toUiState(traffic, activeSystemId, vehicles, telemetry) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(
@@ -91,6 +116,7 @@ class HudViewModel @Inject constructor(
         traffic: LinkTraffic,
         activeSystemId: SystemId?,
         vehicles: Map<SystemId, Vehicle>,
+        telemetry: Telemetry?,
     ): HudUiState {
         val active = activeSystemId?.let(vehicles::get)
         val otherVehicles = vehicles
@@ -120,7 +146,7 @@ class HudViewModel @Inject constructor(
             // Data is arriving, so the vehicle is shown as usual; the warning only says the link may fail again.
             is LinkTraffic.Recovering ->
                 receiving(traffic.port, traffic.datagrams, active, otherVehicles, linkUnstable = true)
-        }
+        }.withTelemetry(telemetry)
     }
 
     private fun receiving(
@@ -140,6 +166,10 @@ class HudViewModel @Inject constructor(
             linkUnstable = linkUnstable,
         )
     }
+
+    /** Only a heard vehicle has a telemetry panel: never while waiting, failing or after the link is lost. */
+    private fun HudUiState.withTelemetry(telemetry: Telemetry?): HudUiState =
+        if (this is HudUiState.Connected) copy(telemetry = panelOf(telemetry, staleness)) else this
 
     private fun Vehicle.isLost(): Boolean =
         link == VehicleLink.LOST || rule.linkAfter(lastHeartbeat.elapsedNow()) == VehicleLink.LOST
