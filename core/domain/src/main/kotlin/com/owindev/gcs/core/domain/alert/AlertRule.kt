@@ -1,12 +1,12 @@
 package com.owindev.gcs.core.domain.alert
 
 import com.owindev.gcs.core.domain.telemetry.Battery
-import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.telemetry.isFix3d
 import kotlin.time.Duration
 
 /**
@@ -92,7 +92,7 @@ class AlertRule(
 
         isStale(timed, TelemetryKind.GPS) -> wasActive intersect setOf(Alert.GpsFixLost)
 
-        timed.value.fixType in FIX_3D -> emptySet()
+        timed.value.fixType.isFix3d -> emptySet()
 
         else -> setOf(Alert.GpsFixLost)
     }
@@ -107,16 +107,6 @@ class AlertRule(
     private companion object {
         val ENERGY_ALERTS: Set<Alert> = setOf(Alert.BatteryCritical, Alert.BatteryLow)
         val BATTERY_ALERTS: Set<Alert> = ENERGY_ALERTS + setOf(Alert.BatteryUnhealthy, Alert.BatteryUnknown)
-
-        /** Every `GPS_FIX_TYPE` with a 3D position; anything else, an undefined type included, is no 3D fix. */
-        val FIX_3D: Set<GpsFixType> = setOf(
-            GpsFixType.Fix3d,
-            GpsFixType.Dgps,
-            GpsFixType.RtkFloat,
-            GpsFixType.RtkFixed,
-            GpsFixType.Static,
-            GpsFixType.Ppp,
-        )
     }
 }
 
