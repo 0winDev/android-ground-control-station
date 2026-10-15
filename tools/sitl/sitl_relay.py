@@ -14,10 +14,12 @@ Stopping a stream (#39): s = ask the vehicle, on this relay's channel (the app's
 (MAV_CMD_SET_MESSAGE_INTERVAL with interval -1, "disable" in common.xml). ArduPilot keeps rates per channel
 (#36), so the app stops receiving it and should request it again; the RATES lines show it come back.
 
+Stopping the battery (#41): b = the same for SYS_STATUS, so the app's battery reading goes stale.
+
 Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), s = stop ATTITUDE,
-q = quit. With --background (no terminal; on Windows NUL even claims to be one): create the file
-<log>.downlink-off to cut the downlink and delete it to restore it; create <log>.stop-attitude to stop
-ATTITUDE once (the relay deletes it); stop the process to quit.
+b = stop SYS_STATUS, q = quit. With --background (no terminal; on Windows NUL even claims to be one): create the
+file <log>.downlink-off to cut the downlink and delete it to restore it; create <log>.stop-attitude or
+<log>.stop-sys-status to stop that stream once (the relay deletes it); stop the process to quit.
 
 pymavlink is the reference decoder here and only a tool dependency (py -m pip install --user pymavlink).
 
@@ -42,6 +44,7 @@ CONTROL_POLL_S = 0.2
 MAV_CMD_SET_MESSAGE_INTERVAL = 511
 DISABLE_INTERVAL = -1
 ATTITUDE_ID = 30
+SYS_STATUS_ID = 1
 VEHICLE_SYSTEM_ID = 1
 MAV_COMP_ID_AUTOPILOT1 = 1
 # The streams the app requests (data/vehicle/.../telemetry/TelemetryStream.kt), by pymavlink type name.
@@ -158,7 +161,8 @@ def main() -> None:
     app = (host, int(port))
     log_file = open(args.log, "a", encoding="utf-8")
 
-    sitl = mavutil.mavlink_connection(args.sitl, source_system=253, dialect="common")
+    # Reconnects when the autopilot reboots (#41), so the app sees the boot frames.
+    sitl = mavutil.mavlink_connection(args.sitl, source_system=253, dialect="common", autoreconnect=True)
     log(f"waiting for SITL on {args.sitl}...")
     sitl.wait_heartbeat(timeout=30)
     udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -175,18 +179,21 @@ def main() -> None:
                 set_downlink(not downlink_on.is_set())
             elif key == "s":
                 stop_stream(sitl, ATTITUDE_ID)
+            elif key == "b":
+                stop_stream(sitl, SYS_STATUS_ID)
             elif key == "q":
                 break
     else:
         control = args.log + ".downlink-off"
-        stop_attitude = args.log + ".stop-attitude"
+        stops = {args.log + ".stop-attitude": ATTITUDE_ID, args.log + ".stop-sys-status": SYS_STATUS_ID}
         log(f"background: create {control} to cut the downlink, delete it to restore it")
-        log(f"background: create {stop_attitude} to stop ATTITUDE once")
+        log(f"background: create one of {list(stops)} to stop that stream once")
         while True:
             set_downlink(not os.path.exists(control))
-            if os.path.exists(stop_attitude):
-                os.remove(stop_attitude)
-                stop_stream(sitl, ATTITUDE_ID)
+            for path, message_id in stops.items():
+                if os.path.exists(path):
+                    os.remove(path)
+                    stop_stream(sitl, message_id)
             time.sleep(CONTROL_POLL_S)
     stop.set()
 
@@ -198,7 +205,7 @@ def stop_stream(sitl, message_id: int) -> None:
         VEHICLE_SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, MAV_CMD_SET_MESSAGE_INTERVAL, 0,
         message_id, DISABLE_INTERVAL, 0, 0, 0, 0, 0,
     )
-    log(f"STREAM {message_id} STOPPED by the relay (the app should request it again once it is stale, 0.5 s, and at least 5 s after its last request)")
+    log(f"STREAM {message_id} STOPPED by the relay (the app should request it again once it is stale and at least 5 s after its last request)")
 
 
 def set_downlink(on: bool) -> None:
