@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window before Compose draws, when the app is in the day palette (REQ-030): the GcsTheme day background,
+         so a day launch does not flash dark. The night one is the default, in values/colors.xml. -->
+    <color name="gcs_window_background">#FFF2F4F6</color>
+</resources>
