@@ -1,4 +1,4 @@
-Icons (ic_check_circle, ic_error, ic_info, ic_link_lost, ic_warning) from Google's Material Symbols
+Icons (ic_check_circle, ic_dark_mode, ic_error, ic_info, ic_light_mode, ic_link_lost, ic_warning) from Google's Material Symbols
 (https://github.com/google/material-design-icons), licensed under the Apache License, Version 2.0:
 
 

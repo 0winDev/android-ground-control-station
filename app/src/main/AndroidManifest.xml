@@ -14,6 +14,7 @@
         android:theme="@style/Theme.Gcs">
         <activity
             android:name=".MainActivity"
+            android:configChanges="uiMode"
             android:exported="true"
             android:theme="@style/Theme.Gcs"
             android:windowSoftInputMode="adjustResize">

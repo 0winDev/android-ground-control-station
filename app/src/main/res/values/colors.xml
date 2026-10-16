@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Window background before Compose draws: matches the GcsTheme night background, avoiding a white flash. -->
+    <!-- Window background before Compose draws: matches the GcsTheme night background, avoiding a white flash.
+         The day one is in values-notnight (REQ-030). -->
     <color name="gcs_window_background">#FF0B0E11</color>
 </resources>

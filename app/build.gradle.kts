@@ -27,4 +27,5 @@ dependencies {
     implementation(projects.feature.hud)
     implementation(projects.feature.map)
     implementation(projects.feature.mission)
+    implementation(libs.androidx.lifecycle.runtime.compose)
 }

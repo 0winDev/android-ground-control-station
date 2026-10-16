@@ -2,6 +2,7 @@ package com.owindev.gcs.core.designsystem.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
@@ -33,23 +34,55 @@ internal val NightColorScheme = darkColorScheme(
     onErrorContainer = RedLight,
 )
 
+internal val DayColorScheme = lightColorScheme(
+    primary = DayCyan,
+    onPrimary = Day1,
+    primaryContainer = DayCyanContainer,
+    onPrimaryContainer = DayCyanDark,
+    secondary = DayTextSecondary,
+    onSecondary = Day1,
+    background = Day0,
+    onBackground = DayTextPrimary,
+    surface = Day1,
+    onSurface = DayTextPrimary,
+    surfaceVariant = Day4,
+    onSurfaceVariant = DayTextMuted,
+    surfaceContainerLowest = Day1,
+    surfaceContainerLow = Day2,
+    surfaceContainer = Day3,
+    surfaceContainerHigh = Day4,
+    surfaceContainerHighest = Day5,
+    outline = DayLineStrong,
+    outlineVariant = DayLine,
+    error = DayRed,
+    onError = Day1,
+    errorContainer = DayRedContainer,
+    onErrorContainer = DayRedDark,
+)
+
+/** The two palettes the operator can choose between (REQ-030): night by default, high-contrast day outdoors. */
+enum class GcsPalette {
+    NIGHT,
+    DAY,
+}
+
 private val LocalGcsColors = staticCompositionLocalOf { NightGcsColors }
 private val LocalTelemetryTypography = staticCompositionLocalOf { GcsTelemetryTypography }
 private val LocalGcsSizes = staticCompositionLocalOf { DefaultGcsSizes }
 
 /**
- * GCS theme: night palette, Barlow / Barlow Condensed / IBM Plex Mono and large controls.
- * A high-contrast day theme arrives with the alerts and night mode work (v0.2).
+ * GCS theme: the night or the high-contrast day [palette] (REQ-030), Barlow / Barlow Condensed / IBM Plex Mono and
+ * large controls. Both palettes give every semantic token the same meaning.
  */
 @Composable
-fun GcsTheme(content: @Composable () -> Unit) {
+fun GcsTheme(palette: GcsPalette = GcsPalette.NIGHT, content: @Composable () -> Unit) {
     CompositionLocalProvider(
-        LocalGcsColors provides NightGcsColors,
+        LocalGcsColors provides if (palette == GcsPalette.DAY) DayGcsColors else NightGcsColors,
         LocalTelemetryTypography provides GcsTelemetryTypography,
         LocalGcsSizes provides DefaultGcsSizes,
     ) {
         MaterialTheme(
-            colorScheme = NightColorScheme,
+            colorScheme = if (palette == GcsPalette.DAY) DayColorScheme else NightColorScheme,
             typography = GcsTypography,
             content = content,
         )
