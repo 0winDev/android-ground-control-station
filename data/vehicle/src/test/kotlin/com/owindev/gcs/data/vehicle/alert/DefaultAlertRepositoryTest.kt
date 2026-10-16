@@ -92,7 +92,7 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW))
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(1)))
             verifyOnce {
                 Log.i(TAG, "Alert raised: BatteryLow (caution)")
             }
@@ -121,7 +121,7 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo Alerts.Evaluated(listOf(STALE_GPS))
+            result shouldBeEqualTo Alerts.Evaluated(listOf(STALE_GPS.raised(1)))
             verifyOnce {
                 Log.i(TAG, "Alert raised: TelemetryStale(kind=GPS) (advisory)")
             }
@@ -133,11 +133,11 @@ class DefaultAlertRepositoryTest {
         repository.activeAlerts.launchIn(backgroundScope)
         runCurrent()
 
-        repository.acknowledge(Alert.BatteryLow)
+        repository.acknowledge(occurrence = 1)
         runCurrent()
         val result = repository.activeAlerts.value
 
-        result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.copy(acknowledged = true)))
+        result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(1, acknowledged = true)))
         verifyOnce {
             Log.i(TAG, "Alert acknowledged: BatteryLow (caution)")
         }
@@ -149,13 +149,13 @@ class DefaultAlertRepositoryTest {
             activeTelemetry.value = telemetry(remaining = 20)
             repository.activeAlerts.launchIn(backgroundScope)
             runCurrent()
-            repository.acknowledge(Alert.BatteryLow)
+            repository.acknowledge(occurrence = 1)
 
             activeTelemetry.value = telemetry(remaining = 19)
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.copy(acknowledged = true)))
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(1, acknowledged = true)))
         }
 
     @Test
@@ -165,11 +165,11 @@ class DefaultAlertRepositoryTest {
             repository.activeAlerts.launchIn(backgroundScope)
             runCurrent()
 
-            repository.acknowledge(Alert.BatteryCritical)
+            repository.acknowledge(occurrence = 1)
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo Alerts.Evaluated(listOf(CRITICAL))
+            result shouldBeEqualTo Alerts.Evaluated(listOf(CRITICAL.raised(1)))
             verifyNever {
                 Log.i(TAG, "Alert acknowledged: BatteryCritical (emergency)")
             }
@@ -193,12 +193,12 @@ class DefaultAlertRepositoryTest {
         }
 
     @Test
-    fun `GIVEN an acknowledged alert WHEN the alerts are observed again after nobody did THEN starts afresh`() =
+    fun `GIVEN an acknowledged alert WHEN observed again after nobody did THEN starts afresh, a new occurrence`() =
         testScope.runTest {
             activeTelemetry.value = telemetry(remaining = 20)
             val observer = repository.activeAlerts.launchIn(backgroundScope)
             runCurrent()
-            repository.acknowledge(Alert.BatteryLow)
+            repository.acknowledge(occurrence = 1)
             runCurrent()
             observer.cancel()
             runCurrent()
@@ -207,7 +207,25 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW))
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(2)))
+        }
+
+    @Test
+    fun `GIVEN a low battery raised again WHEN acknowledging the occurrence seen before THEN the new one is not`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = 20)
+            repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
+            activeTelemetry.value = telemetry(remaining = 50)
+            runCurrent()
+            activeTelemetry.value = telemetry(remaining = 20)
+            runCurrent()
+
+            repository.acknowledge(occurrence = 1)
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(2)))
         }
 
     @Test
@@ -245,9 +263,9 @@ class DefaultAlertRepositoryTest {
 private const val TAG = "AlertRepository"
 
 private val NONE = emptyList<ActiveAlert>()
-private val LOW = ActiveAlert(Alert.BatteryLow)
-private val CRITICAL = ActiveAlert(Alert.BatteryCritical)
-private val STALE_GPS = ActiveAlert(Alert.TelemetryStale(TelemetryKind.GPS))
+private val LOW = Alert.BatteryLow
+private val CRITICAL = Alert.BatteryCritical
+private val STALE_GPS = Alert.TelemetryStale(TelemetryKind.GPS)
 
 private val GPS_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.GPS)
 
@@ -262,6 +280,9 @@ private val GPS_3D_FIX = GpsStatus(
     verticalAccuracy = 0.3,
     yaw = null,
 )
+
+private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false) =
+    ActiveAlert(alert = this, occurrence = occurrence, acknowledged = acknowledged)
 
 private fun battery(remaining: Int) = Battery(
     voltage = 12.6,

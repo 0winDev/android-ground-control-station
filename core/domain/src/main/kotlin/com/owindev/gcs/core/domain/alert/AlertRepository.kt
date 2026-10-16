@@ -13,6 +13,9 @@ interface AlertRepository {
      */
     val activeAlerts: StateFlow<Alerts>
 
-    /** Marks [alert] as seen while it stays active; an emergency is never acknowledged. */
-    fun acknowledge(alert: Alert)
+    /**
+     * Marks the alert of [occurrence] ([ActiveAlert.occurrence]) as seen while it stays active; an emergency is never
+     * acknowledged, and an occurrence that has cleared acknowledges nothing.
+     */
+    fun acknowledge(occurrence: Long)
 }

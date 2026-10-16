@@ -25,14 +25,17 @@ class AlertRule(
     private val thresholds: BatteryThresholds = BatteryThresholds(),
 ) {
 
-    /** The alerts active now, from those [previous]ly active and the [telemetry] as it is now. */
-    fun evaluate(previous: List<ActiveAlert>, telemetry: Telemetry): List<ActiveAlert> {
+    /**
+     * The alerts active now, from those [previous]ly active and the [telemetry] as it is now. Each alert raised now
+     * takes the next number from [nextOccurrence], which must never give the same one twice.
+     */
+    fun evaluate(previous: List<ActiveAlert>, telemetry: Telemetry, nextOccurrence: () -> Long): List<ActiveAlert> {
         val wasActive = previous.map(ActiveAlert::alert).toSet()
         val active = batteryAlerts(telemetry.battery, wasActive) +
             gpsAlerts(telemetry.gps, wasActive) +
             staleAlerts(telemetry)
         val kept = previous.filter { it.alert in active }
-        val raised = (active - wasActive).map(::ActiveAlert)
+        val raised = (active - wasActive).map { ActiveAlert(it, occurrence = nextOccurrence()) }
         return (raised + kept).sortedByDescending { it.alert.level }
     }
 
@@ -42,9 +45,12 @@ class AlertRule(
      */
     fun untilNextStale(telemetry: Telemetry): Duration? = staleness.untilNextStale(telemetry)
 
-    /** [active] with [alert] acknowledged, unless it is an emergency: an emergency is never acknowledged. */
-    fun acknowledge(active: List<ActiveAlert>, alert: Alert): List<ActiveAlert> = active.map {
-        if (it.alert == alert && alert.level != AlertLevel.EMERGENCY) it.copy(acknowledged = true) else it
+    /**
+     * [active] with the alert of [occurrence] acknowledged, unless it is an emergency: an emergency is never
+     * acknowledged. An occurrence that is no longer active acknowledges nothing, even if its alert was raised again.
+     */
+    fun acknowledge(active: List<ActiveAlert>, occurrence: Long): List<ActiveAlert> = active.map {
+        if (it.occurrence == occurrence && it.alert.level != AlertLevel.EMERGENCY) it.copy(acknowledged = true) else it
     }
 
     private fun batteryAlerts(timed: Timed<Battery>?, wasActive: Set<Alert>): Set<Alert> = when {

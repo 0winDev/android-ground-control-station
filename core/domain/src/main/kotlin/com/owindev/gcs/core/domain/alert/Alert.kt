@@ -63,8 +63,11 @@ sealed interface Alert {
 /**
  * An [alert] that is active now, and whether the operator has [acknowledged] it. An acknowledged alert stays
  * active until its cause clears; acknowledging only says the operator has seen it.
+ *
+ * [occurrence] tells this raise apart from any other, before or after: an alert that clears and is raised again is
+ * a new occurrence, so acknowledging the one the operator saw never acknowledges the next.
  */
-data class ActiveAlert(val alert: Alert, val acknowledged: Boolean = false)
+data class ActiveAlert(val alert: Alert, val occurrence: Long, val acknowledged: Boolean = false)
 
 /**
  * The active vehicle's alerts as far as they are known. [NotEvaluated] is never "all clear": like a link still

@@ -9,6 +9,7 @@ import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -52,6 +53,9 @@ internal class DefaultAlertRepository @Inject constructor(
     /** Written by the evaluations and by [acknowledge], always through [change]. */
     private val alerts = MutableStateFlow<Alerts>(Alerts.NotEvaluated)
 
+    /** Never reset, not even when nobody observes, so a stale tap can never acknowledge a later raise. */
+    private val occurrences = AtomicLong()
+
     private val evaluations: Flow<Telemetry?> = telemetryRepository.activeTelemetry.flatMapLatest { telemetry ->
         flow {
             while (true) {
@@ -66,7 +70,11 @@ internal class DefaultAlertRepository @Inject constructor(
         launch {
             evaluations.collect { telemetry ->
                 change { previous ->
-                    telemetry?.let { Alerts.Evaluated(rule.evaluate(previous.active(), it)) } ?: Alerts.NotEvaluated
+                    if (telemetry == null) {
+                        Alerts.NotEvaluated
+                    } else {
+                        Alerts.Evaluated(rule.evaluate(previous.active(), telemetry, occurrences::incrementAndGet))
+                    }
                 }
             }
         }
@@ -83,9 +91,9 @@ internal class DefaultAlertRepository @Inject constructor(
             initialValue = Alerts.NotEvaluated,
         )
 
-    override fun acknowledge(alert: Alert) {
+    override fun acknowledge(occurrence: Long) {
         change { alerts ->
-            if (alerts is Alerts.Evaluated) Alerts.Evaluated(rule.acknowledge(alerts.active, alert)) else alerts
+            if (alerts is Alerts.Evaluated) Alerts.Evaluated(rule.acknowledge(alerts.active, occurrence)) else alerts
         }
     }
 
