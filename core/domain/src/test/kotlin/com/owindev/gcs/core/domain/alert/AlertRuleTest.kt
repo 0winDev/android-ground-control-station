@@ -331,6 +331,15 @@ class AlertRuleTest {
     }
 
     @Test
+    fun `GIVEN a monitor failure seen armed WHEN the vehicle disarms with no reading THEN stays an emergency`() {
+        val previous = listOf(UNHEALTHY.raised(PREVIOUS), UNKNOWN.raised(PREVIOUS))
+
+        val result = rule.evaluate(previous, telemetry(BOOT_BATTERY), DISARMED, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo previous
+    }
+
+    @Test
     fun `GIVEN a battery failsafe on a disarmed vehicle WHEN the voltage keeps arriving THEN is an emergency`() {
         val telemetry = telemetry(battery(remaining = 50, healthy = false))
 

@@ -42,8 +42,10 @@ class AlertRule(
      * A battery monitor that is not healthy is an emergency ([Alert.BatteryUnhealthy]), except while the vehicle is
      * disarmed and the monitor has no voltage reading: ArduPilot can send that at boot, before the monitor has read
      * anything (`truncated/sys_status.bin`, enabled, not healthy, 0 mV), and it is then only unknown
-     * ([Alert.BatteryUnknown]). Armed, a monitor that fails is always an emergency, reading or not. On ArduPilot's
-     * battery failsafe the voltage keeps arriving (#41), so it stays an emergency armed or not.
+     * ([Alert.BatteryUnknown]). Armed, a monitor that fails is always an emergency, reading or not, and it stays one
+     * after disarming: only a monitor that was not already an emergency is played down, so the rule covers the boot
+     * and never a failure seen in flight. On ArduPilot's battery failsafe the voltage keeps arriving (#41), so it
+     * stays an emergency armed or not.
      */
     fun evaluate(
         previous: List<ActiveAlert>,
@@ -108,9 +110,11 @@ class AlertRule(
     private fun freshBatteryAlerts(battery: Battery, armed: Boolean, wasActive: Set<Alert>): Set<Alert> = buildSet {
         val remaining = battery.remaining
         if (!battery.monitored || battery.voltage == null || remaining == null) add(Alert.BatteryUnknown)
-        // Disarmed with no reading yet, as at boot, an unhealthy monitor is only unknown (added above).
+        // Disarmed with no reading yet, as at boot, an unhealthy monitor is only unknown (added above), unless it
+        // was already an emergency: a failure seen in flight is not played down by landing.
         val failing = battery.monitored && !battery.healthy
-        if (failing && (armed || battery.voltage != null)) add(Alert.BatteryUnhealthy)
+        val playedDown = !armed && battery.voltage == null && Alert.BatteryUnhealthy !in wasActive
+        if (failing && !playedDown) add(Alert.BatteryUnhealthy)
         // Without a monitor or a remaining energy, the energy alerts stay as they were. An unhealthy monitor still
         // drives them: ArduPilot sends no remaining energy (-1) when the monitor itself fails, so a percentage from
         // an unhealthy one is real, sent after the battery failsafe has triggered and while the battery goes on
