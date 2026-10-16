@@ -90,4 +90,8 @@
         <item quantity="many">%1$d alertas reconocidas siguen activas</item>
         <item quantity="other">%1$d alertas reconocidas siguen activas</item>
     </plurals>
+    <string name="hud_theme_to_day">A día</string>
+    <string name="hud_theme_to_night">A noche</string>
+    <string name="hud_theme_switch_to_day">Cambiar al tema de día</string>
+    <string name="hud_theme_switch_to_night">Cambiar al tema de noche</string>
 </resources>

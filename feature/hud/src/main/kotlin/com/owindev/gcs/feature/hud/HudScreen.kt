@@ -20,14 +20,27 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import kotlin.time.Duration.Companion.seconds
 
+/** The HUD in the [palette] in use, with the operator's switch between night and day ([onToggleTheme], REQ-030). */
 @Composable
-fun HudScreen(modifier: Modifier = Modifier, viewModel: HudViewModel = hiltViewModel()) {
+fun HudScreen(
+    palette: GcsPalette,
+    onToggleTheme: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: HudViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    HudContent(state = state, onAcknowledgeAlert = viewModel::onAlertAcknowledged, modifier = modifier)
+    HudContent(
+        state = state,
+        onAcknowledgeAlert = viewModel::onAlertAcknowledged,
+        modifier = modifier,
+        palette = palette,
+        onToggleTheme = onToggleTheme,
+    )
 }
 
 @Composable
@@ -35,11 +48,20 @@ internal fun HudContent(
     state: HudUiState,
     onAcknowledgeAlert: (occurrence: Long) -> Unit,
     modifier: Modifier = Modifier,
+    palette: GcsPalette = GcsPalette.NIGHT,
+    onToggleTheme: () -> Unit = {},
 ) {
     // Link lost replaces the whole HUD at once, never animated in: it must not be missed or delayed.
     when (state) {
         is HudUiState.LinkLost -> LinkLostContent(state = state, modifier = modifier)
-        else -> LinkContent(state = state, onAcknowledgeAlert = onAcknowledgeAlert, modifier = modifier)
+
+        else -> LinkContent(
+            state = state,
+            onAcknowledgeAlert = onAcknowledgeAlert,
+            palette = palette,
+            onToggleTheme = onToggleTheme,
+            modifier = modifier,
+        )
     }
 }
 
@@ -47,6 +69,8 @@ internal fun HudContent(
 private fun LinkContent(
     state: HudUiState,
     onAcknowledgeAlert: (occurrence: Long) -> Unit,
+    palette: GcsPalette,
+    onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -56,7 +80,7 @@ private fun LinkContent(
         verticalArrangement = Arrangement.spacedBy(ContentSpacing),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        StatusBar(state = state)
+        StatusBar(state = state, palette = palette, onToggleTheme = onToggleTheme)
         when (state) {
             is HudUiState.Connected -> {
                 // The vehicle's own alerts first: the banners below are about this device and the link.
