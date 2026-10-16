@@ -43,7 +43,7 @@ internal fun AlertBannerContent(banner: AlertBanner, onAcknowledge: (occurrence:
     when (banner) {
         AlertBanner.Hidden -> Unit
         is AlertBanner.Showing -> ShowingBanner(banner = banner, onAcknowledge = onAcknowledge)
-        is AlertBanner.AllAcknowledged -> AcknowledgedBanner(count = banner.count)
+        is AlertBanner.AllAcknowledged -> AcknowledgedBanner(count = banner.count, level = banner.level)
     }
 }
 
@@ -75,7 +75,7 @@ private fun ShowingBanner(banner: AlertBanner.Showing, onAcknowledge: (occurrenc
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            if (banner.others > 0) OthersCount(others = banner.others)
+            banner.othersLevel?.let { OthersCount(others = banner.others, level = it) }
             if (banner.acknowledgeable) {
                 OutlinedButton(
                     onClick = { onAcknowledge(banner.occurrence) },
@@ -92,24 +92,50 @@ private fun ShowingBanner(banner: AlertBanner.Showing, onAcknowledge: (occurrenc
     }
 }
 
+/** How many more alerts are active, in the style of the most urgent of them, so it is never played down. */
 @Composable
-private fun OthersCount(others: Int) {
-    val description = pluralStringResource(id = R.plurals.hud_alert_others_description, count = others, others)
-    Text(
-        text = stringResource(id = R.string.hud_alert_others, others),
-        style = GcsTheme.telemetryTypography.value,
-        modifier = Modifier.semantics { contentDescription = description },
+private fun OthersCount(others: Int, level: AlertLevel) {
+    val style = styleOf(level)
+    val description = pluralStringResource(
+        id = R.plurals.hud_alert_others_description,
+        count = others,
+        others,
+        stringResource(id = style.label),
     )
+    Surface(
+        modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = description },
+        shape = ChipShape,
+        color = style.container,
+        contentColor = style.content,
+        border = style.border?.let { BorderStroke(width = EmergencyBorder, color = it) },
+    ) {
+        Row(
+            modifier = Modifier.padding(all = ChipSpacing),
+            horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(painter = painterResource(id = style.icon), contentDescription = null)
+            Text(
+                text = stringResource(id = R.string.hud_alert_others, others),
+                style = GcsTheme.telemetryTypography.value,
+            )
+        }
+    }
 }
 
-/** Every active alert is acknowledged: they are still active, so the HUD still says so, quietly. */
+/**
+ * Every active alert is acknowledged: they are still active, so the HUD still says so, at the level of the most
+ * urgent of them.
+ */
 @Composable
-private fun AcknowledgedBanner(count: Int) {
+private fun AcknowledgedBanner(count: Int, level: AlertLevel) {
+    val style = styleOf(level)
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = ChipShape,
-        color = GcsTheme.colors.advisoryContainer,
-        contentColor = GcsTheme.colors.advisory,
+        color = style.container,
+        contentColor = style.content,
+        border = style.border?.let { BorderStroke(width = EmergencyBorder, color = it) },
     ) {
         Row(
             modifier = Modifier.padding(all = ChipPadding),
@@ -118,7 +144,11 @@ private fun AcknowledgedBanner(count: Int) {
         ) {
             Icon(painter = painterResource(id = DesignSystemR.drawable.ic_check_circle), contentDescription = null)
             Text(
-                text = pluralStringResource(id = R.plurals.hud_alerts_acknowledged, count = count, count),
+                text = stringResource(
+                    id = R.string.hud_alert_banner,
+                    stringResource(id = style.label),
+                    pluralStringResource(id = R.plurals.hud_alerts_acknowledged, count = count, count),
+                ),
                 style = MaterialTheme.typography.titleMedium,
             )
         }
@@ -208,6 +238,7 @@ private fun AlertBannerPreview() {
                     occurrence = 3,
                     acknowledgeable = false,
                     others = 2,
+                    othersLevel = AlertLevel.CAUTION,
                     batteryRemaining = 9,
                 ),
                 onAcknowledge = {},
@@ -218,6 +249,7 @@ private fun AlertBannerPreview() {
                     occurrence = 2,
                     acknowledgeable = true,
                     others = 1,
+                    othersLevel = AlertLevel.ADVISORY,
                     batteryRemaining = 18,
                 ),
                 onAcknowledge = {},
@@ -227,11 +259,15 @@ private fun AlertBannerPreview() {
                     alert = Alert.TelemetryStale(TelemetryKind.ATTITUDE),
                     occurrence = 1,
                     acknowledgeable = true,
-                    others = 0,
+                    others = 1,
+                    othersLevel = AlertLevel.CAUTION,
                 ),
                 onAcknowledge = {},
             )
-            AlertBannerContent(banner = AlertBanner.AllAcknowledged(count = 3), onAcknowledge = {})
+            AlertBannerContent(
+                banner = AlertBanner.AllAcknowledged(count = 3, level = AlertLevel.CAUTION),
+                onAcknowledge = {},
+            )
         }
     }
 }

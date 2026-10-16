@@ -81,9 +81,9 @@
     <string name="hud_alert_stale_gps">Datos de GPS desactualizados</string>
     <string name="hud_alert_acknowledge">Reconocer</string>
     <plurals name="hud_alert_others_description">
-        <item quantity="one">%1$d alerta más activa</item>
-        <item quantity="many">%1$d alertas más activas</item>
-        <item quantity="other">%1$d alertas más activas</item>
+        <item quantity="one">%1$d alerta más activa, %2$s</item>
+        <item quantity="many">%1$d alertas más activas, la más urgente %2$s</item>
+        <item quantity="other">%1$d alertas más activas, la más urgente %2$s</item>
     </plurals>
     <plurals name="hud_alerts_acknowledged">
         <item quantity="one">%1$d alerta reconocida sigue activa</item>

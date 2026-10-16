@@ -13,19 +13,25 @@ sealed interface AlertBanner {
 
     /**
      * The most urgent [alert] not yet acknowledged, raised as [occurrence]; [acknowledgeable] unless it is an
-     * emergency. [others] is how many more alerts are active, acknowledged or not. [batteryRemaining] is the
-     * battery's fresh remaining energy, in percent, for a low or critical battery, or `null` when not known.
+     * emergency. [others] is how many more alerts are active, acknowledged or not, and [othersLevel] the most urgent
+     * of them, `null` with none: an acknowledged caution is still a caution, even under a newer advisory.
+     * [batteryRemaining] is the battery's fresh remaining energy, in percent, for a low or critical battery, or
+     * `null` when not known.
      */
     data class Showing(
         val alert: Alert,
         val occurrence: Long,
         val acknowledgeable: Boolean,
         val others: Int,
+        val othersLevel: AlertLevel? = null,
         val batteryRemaining: Int? = null,
     ) : AlertBanner
 
-    /** Every one of the [count] active alerts has been acknowledged: still active, so still said. */
-    data class AllAcknowledged(val count: Int) : AlertBanner
+    /**
+     * Every one of the [count] active alerts has been acknowledged: still active, so still said, at the [level] of
+     * the most urgent of them.
+     */
+    data class AllAcknowledged(val count: Int, val level: AlertLevel) : AlertBanner
 }
 
 /**
@@ -38,13 +44,14 @@ internal fun alertBannerOf(alerts: Alerts, panel: TelemetryPanel): AlertBanner {
     return when {
         active.isEmpty() -> AlertBanner.Hidden
 
-        shown == null -> AlertBanner.AllAcknowledged(count = active.size)
+        shown == null -> AlertBanner.AllAcknowledged(count = active.size, level = active.maxOf { it.alert.level })
 
         else -> AlertBanner.Showing(
             alert = shown.alert,
             occurrence = shown.occurrence,
             acknowledgeable = shown.alert.level != AlertLevel.EMERGENCY,
             others = active.size - 1,
+            othersLevel = active.filter { it !== shown }.maxOfOrNull { it.alert.level },
             batteryRemaining = shown.batteryRemaining(panel),
         )
     }

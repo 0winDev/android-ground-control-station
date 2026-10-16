@@ -89,8 +89,8 @@
     <string name="hud_alert_others" translatable="false">+%1$d</string>
     <string name="hud_alert_acknowledge">Acknowledge</string>
     <plurals name="hud_alert_others_description">
-        <item quantity="one">%1$d more alert active</item>
-        <item quantity="other">%1$d more alerts active</item>
+        <item quantity="one">%1$d more alert active, %2$s</item>
+        <item quantity="other">%1$d more alerts active, the most urgent %2$s</item>
     </plurals>
     <plurals name="hud_alerts_acknowledged">
         <item quantity="one">%1$d acknowledged alert still active</item>

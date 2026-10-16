@@ -2,6 +2,7 @@ package com.owindev.gcs.feature.hud
 
 import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
+import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
@@ -52,11 +53,12 @@ class AlertBannerTest {
             occurrence = 3,
             acknowledgeable = false,
             others = 2,
+            othersLevel = AlertLevel.CAUTION,
         )
     }
 
     @Test
-    fun `GIVEN an acknowledged caution first WHEN building the banner THEN shows the next unacknowledged one`() {
+    fun `GIVEN an acknowledged caution first WHEN building the banner THEN shows the advisory, others a caution`() {
         val alerts = Alerts.Evaluated(
             listOf(
                 raised(Alert.GpsFixLost, occurrence = 2, acknowledged = true),
@@ -71,6 +73,7 @@ class AlertBannerTest {
             occurrence = 1,
             acknowledgeable = true,
             others = 1,
+            othersLevel = AlertLevel.CAUTION,
         )
     }
 
@@ -85,7 +88,7 @@ class AlertBannerTest {
 
         val result = alertBannerOf(alerts, TelemetryPanel())
 
-        result shouldBeEqualTo AlertBanner.AllAcknowledged(count = 2)
+        result shouldBeEqualTo AlertBanner.AllAcknowledged(count = 2, level = AlertLevel.CAUTION)
     }
 
     @Test
