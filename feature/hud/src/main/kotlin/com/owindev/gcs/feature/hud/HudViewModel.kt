@@ -2,6 +2,8 @@ package com.owindev.gcs.feature.hud
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.owindev.gcs.core.domain.alert.AlertRepository
+import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
@@ -18,6 +20,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -45,18 +48,30 @@ import kotlinx.coroutines.flow.stateIn
  * built again when something arrives, when a value goes stale and on every whole second of a stale value's age,
  * never at the telemetry's own rate of change.
  *
+ * The active vehicle's alerts are shown in a banner while it is heard (REQ-028), the most urgent not yet
+ * acknowledged; acknowledging one passes its occurrence to [AlertRepository], which decides what can be
+ * acknowledged, but only the occurrence on the banner and only once it has been there for [ACKNOWLEDGE_GUARD],
+ * timed on [timeSource]. Link lost hides them, as it outranks every alert (REQ-017).
+ *
  * Nothing remembered is ever shown: when nobody observes the HUD for [STOP_TIMEOUT], the state goes back
  * to [HudUiState.Starting], so coming back never flashes an old CONNECTED before the fresh state.
  */
+// One source per part of the HUD, the two rules that judge them and the clock; grouping them would only hide that.
+@Suppress("LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HudViewModel @Inject constructor(
     linkRepository: LinkRepository,
     vehicleRepository: VehicleRepository,
     telemetryRepository: TelemetryRepository,
+    private val alertRepository: AlertRepository,
     private val rule: LinkLossRule,
     private val staleness: StalenessRule,
+    private val timeSource: TimeSource.WithComparableMarks,
 ) : ViewModel() {
+
+    /** The alert on the banner and since when; written as each state is built, read by [onAlertAcknowledged]. */
+    private var shown: ShownAlert? = null
 
     /** Ticks only when the active vehicle's age needs re-reading; a new datagram does not restart it. */
     private val ticks: Flow<Unit> = combine(vehicleRepository.activeSystemId, vehicleRepository.vehicles) {
@@ -89,6 +104,7 @@ class HudViewModel @Inject constructor(
         ticks,
         telemetryTicks,
     ) { traffic, activeSystemId, vehicles, _, telemetry -> toUiState(traffic, activeSystemId, vehicles, telemetry) }
+        .combine(alertRepository.activeAlerts) { state, alerts -> state.withAlerts(alerts) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(
@@ -97,6 +113,18 @@ class HudViewModel @Inject constructor(
             ),
             initialValue = HudUiState.Starting,
         )
+
+    /**
+     * Acknowledges the alert of [occurrence] the operator saw; an emergency is never acknowledged. Ignored unless it
+     * is the one on the banner now and has been for [ACKNOWLEDGE_GUARD]: a tap meant for another, or for one shown
+     * too briefly to be read, acknowledges nothing.
+     */
+    fun onAlertAcknowledged(occurrence: Long) {
+        val current = shown ?: return
+        if (current.occurrence == occurrence && current.since.elapsedNow() >= ACKNOWLEDGE_GUARD) {
+            alertRepository.acknowledge(occurrence)
+        }
+    }
 
     private fun ticksFor(lastHeartbeat: TimeMark): Flow<Unit> = flow {
         while (true) {
@@ -171,6 +199,14 @@ class HudViewModel @Inject constructor(
     private fun HudUiState.withTelemetry(telemetry: Telemetry?): HudUiState =
         if (this is HudUiState.Connected) copy(telemetry = panelOf(telemetry, staleness)) else this
 
+    /** Only a heard vehicle has an alert banner: never while waiting, failing or after the link is lost. */
+    private fun HudUiState.withAlerts(alerts: Alerts): HudUiState {
+        val banner = (this as? HudUiState.Connected)?.let { alertBannerOf(alerts, it.telemetry) }
+        val occurrence = (banner as? AlertBanner.Showing)?.occurrence
+        if (occurrence != shown?.occurrence) shown = occurrence?.let { ShownAlert(it, timeSource.markNow()) }
+        return if (this is HudUiState.Connected && banner != null) copy(alert = banner) else this
+    }
+
     private fun Vehicle.isLost(): Boolean =
         link == VehicleLink.LOST || rule.linkAfter(lastHeartbeat.elapsedNow()) == VehicleLink.LOST
 
@@ -181,6 +217,9 @@ class HudViewModel @Inject constructor(
         val TICK: Duration = 1.seconds
     }
 }
+
+/** The alert of [occurrence] on the banner, there [since]. */
+private data class ShownAlert(val occurrence: Long, val since: TimeMark)
 
 private fun Vehicle.toStatus() = VehicleStatus(
     systemId = state.systemId.value,

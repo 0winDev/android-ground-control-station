@@ -1,6 +1,7 @@
 package com.owindev.gcs.core.domain.alert
 
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
+import kotlin.time.TimeMark
 
 /**
  * How urgent an alert is, in the aviation convention: an advisory needs awareness, a caution needs attention
@@ -53,7 +54,8 @@ sealed interface Alert {
 
     /**
      * The telemetry of [kind] is older than its staleness threshold, so what it shows may no longer be true. One
-     * per kind, so acknowledging one stream that stopped never hides the next one that does.
+     * per kind, so acknowledging one stream that stopped never hides the next one that does. Once raised it lasts at
+     * least [AlertRule.STALE_MINIMUM_HOLD], so a stream that is late for an instant does not flap.
      */
     data class TelemetryStale(val kind: TelemetryKind) : Alert {
         override val level = AlertLevel.ADVISORY
@@ -63,5 +65,27 @@ sealed interface Alert {
 /**
  * An [alert] that is active now, and whether the operator has [acknowledged] it. An acknowledged alert stays
  * active until its cause clears; acknowledging only says the operator has seen it.
+ *
+ * [occurrence] tells this raise apart from any other, before or after: an alert that clears and is raised again is
+ * a new occurrence, so acknowledging the one the operator saw never acknowledges the next. [raisedAt] is when it was
+ * raised.
  */
-data class ActiveAlert(val alert: Alert, val acknowledged: Boolean = false)
+data class ActiveAlert(
+    val alert: Alert,
+    val occurrence: Long,
+    val raisedAt: TimeMark,
+    val acknowledged: Boolean = false,
+)
+
+/**
+ * The active vehicle's alerts as far as they are known. [NotEvaluated] is never "all clear": like a link still
+ * starting (#13), it says nothing about the vehicle, so it must never be shown as if nothing were wrong.
+ */
+sealed interface Alerts {
+
+    /** Nothing has been judged: there is no active vehicle, or nobody has observed the alerts since. */
+    data object NotEvaluated : Alerts
+
+    /** Judged on the active vehicle's telemetry, most urgent first ([AlertRule]); empty is all clear. */
+    data class Evaluated(val active: List<ActiveAlert>) : Alerts
+}

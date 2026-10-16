@@ -70,4 +70,30 @@
         <item quantity="one">Other vehicle detected (SYS %1$s)</item>
         <item quantity="other">Other vehicles detected (SYS %1$s)</item>
     </plurals>
+    <string name="hud_alert_banner" translatable="false">%1$s · %2$s</string>
+    <string name="hud_alert_level_advisory">Advisory</string>
+    <string name="hud_alert_level_caution">Caution</string>
+    <string name="hud_alert_level_emergency">Emergency</string>
+    <string name="hud_alert_battery_critical">Battery critical</string>
+    <string name="hud_alert_battery_critical_percent">Battery critical (%1$d %%)</string>
+    <string name="hud_alert_battery_low">Battery low</string>
+    <string name="hud_alert_battery_low_percent">Battery low (%1$d %%)</string>
+    <string name="hud_alert_battery_unhealthy">Battery unhealthy or in failsafe</string>
+    <string name="hud_alert_battery_unknown">Battery state unknown</string>
+    <string name="hud_alert_gps_fix_lost">No 3D GPS fix</string>
+    <string name="hud_alert_stale_position">Position data stale</string>
+    <string name="hud_alert_stale_attitude">Attitude data stale</string>
+    <string name="hud_alert_stale_air_data">Speed data stale</string>
+    <string name="hud_alert_stale_battery">Battery data stale</string>
+    <string name="hud_alert_stale_gps">GPS data stale</string>
+    <string name="hud_alert_others" translatable="false">+%1$d</string>
+    <string name="hud_alert_acknowledge">Acknowledge</string>
+    <plurals name="hud_alert_others_description">
+        <item quantity="one">%1$d more alert active, %2$s</item>
+        <item quantity="other">%1$d more alerts active, the most urgent %2$s</item>
+    </plurals>
+    <plurals name="hud_alerts_acknowledged">
+        <item quantity="one">%1$d acknowledged alert still active</item>
+        <item quantity="other">%1$d acknowledged alerts still active</item>
+    </plurals>
 </resources>

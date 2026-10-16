@@ -253,3 +253,9 @@ Add one line per closed issue: what surprised us and what to do differently.
   On Windows a UDP `recvfrom` raises `WinError 10054` after sending to a port nobody holds (emulator not up yet),
   which silently killed the relay's uplink. A quick-boot emulator snapshot can leave `system_server` dying in a
   loop: cold boot it with `-no-snapshot-load`.
+- #56 Alert banner: an occurrence id fixes the race in the repository, not the one on screen: a banner that swaps
+  alerts under a finger needs a guard, and an acknowledged caution must still show its level beside a newer
+  advisory (both found by `safety-reviewer`). Changing `BATT_CAPACITY` does not recharge SITL's battery: relaunch
+  the simulator. Two `uiautomator dump` loops at once make each other fail, and Python on Windows writes CRLF
+  unless `newline="
+"`, which ktlint rejects.
