@@ -110,6 +110,9 @@ def uplink(sitl, udp: socket.socket) -> None:
             data, sender = udp.recvfrom(65_535)
         except socket.timeout:
             continue
+        except ConnectionResetError:
+            # Windows reports an earlier ICMP "port unreachable" (emulator not up yet) on the next recvfrom (#42).
+            continue
         sitl.write(data)
         for msg in parser.parse_buffer(data) or []:
             if msg.get_type() == "COMMAND_LONG":

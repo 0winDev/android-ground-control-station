@@ -250,3 +250,6 @@ Add one line per closed issue: what surprised us and what to do differently.
   the last one frozen after losing it, so a position needs a fresh 3D GPS fix, and never 0°, 0°. Check
   QGroundControl's UI in its docs for the installed version before giving steps, and compare against its MAVLink
   Inspector. pymavlink's TCP `autoreconnect` gives up after 3 tries: pass `retries` when the autopilot reboots.
+  On Windows a UDP `recvfrom` raises `WinError 10054` after sending to a port nobody holds (emulator not up yet),
+  which silently killed the relay's uplink. A quick-boot emulator snapshot can leave `system_server` dying in a
+  loop: cold boot it with `-no-snapshot-load`.
