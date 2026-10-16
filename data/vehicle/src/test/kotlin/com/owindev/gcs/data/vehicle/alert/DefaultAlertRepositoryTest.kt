@@ -67,7 +67,7 @@ class DefaultAlertRepositoryTest {
         repository = DefaultAlertRepository(
             telemetryRepository,
             vehicleRepository,
-            AlertRule(),
+            AlertRule(timeSource = clock),
             clock,
             testScope.backgroundScope,
         )
@@ -146,6 +146,38 @@ class DefaultAlertRepositoryTest {
             verifyOnce {
                 Log.i(TAG, "Alert raised: TelemetryStale(kind=GPS) (advisory)")
             }
+        }
+
+    @Test
+    fun `GIVEN a GPS stale for an instant WHEN 1 ms is left to the hold THEN is still stale`() = testScope.runTest {
+        activeTelemetry.value = telemetry(remaining = 100)
+        repository.activeAlerts.launchIn(backgroundScope)
+        advanceTimeBy(GPS_STALE_AFTER)
+        runCurrent()
+        val raisedAt = clock.markNow()
+        activeTelemetry.value = telemetry(remaining = 100, receivedAt = clock.markNow() + LONG_AFTER)
+
+        advanceTimeBy(AlertRule.STALE_MINIMUM_HOLD - 1.milliseconds)
+        runCurrent()
+        val result = repository.activeAlerts.value
+
+        result shouldBeEqualTo Alerts.Evaluated(listOf(STALE_GPS.raised(1, raisedAt = raisedAt)))
+    }
+
+    @Test
+    fun `GIVEN a GPS stale for an instant WHEN the hold ends THEN clears with nothing new arriving`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = 100)
+            repository.activeAlerts.launchIn(backgroundScope)
+            advanceTimeBy(GPS_STALE_AFTER)
+            runCurrent()
+            activeTelemetry.value = telemetry(remaining = 100, receivedAt = clock.markNow() + LONG_AFTER)
+
+            advanceTimeBy(AlertRule.STALE_MINIMUM_HOLD)
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(NONE)
         }
 
     @Test
@@ -327,14 +359,16 @@ class DefaultAlertRepositoryTest {
             result shouldBeEqualTo 1
         }
 
+    /** Active as [occurrence], raised now unless [raisedAt] says otherwise. */
+    private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false, raisedAt: TimeMark = clock.markNow()) =
+        ActiveAlert(alert = this, occurrence = occurrence, raisedAt = raisedAt, acknowledged = acknowledged)
+
     /** Only a GPS with a 3D fix, kept fresh: the battery never arrives. */
     private fun gpsOnly(): Telemetry = Telemetry(gps = Timed(GPS_3D_FIX, clock.markNow() + LONG_AFTER))
 
-    /** Battery and GPS with a 3D fix, received now. */
-    private fun telemetry(remaining: Int): Telemetry {
-        val now = clock.markNow()
-        return Telemetry(battery = Timed(battery(remaining), now), gps = Timed(GPS_3D_FIX, now))
-    }
+    /** Battery and GPS with a 3D fix, received [receivedAt]. */
+    private fun telemetry(remaining: Int, receivedAt: TimeMark = clock.markNow()): Telemetry =
+        Telemetry(battery = Timed(battery(remaining), receivedAt), gps = Timed(GPS_3D_FIX, receivedAt))
 }
 
 private const val TAG = "AlertRepository"
@@ -371,9 +405,6 @@ private fun vehicle(systemId: SystemId, heardAt: TimeMark) = Vehicle(
     link = VehicleLink.CONNECTED,
     lastHeartbeat = heardAt,
 )
-
-private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false) =
-    ActiveAlert(alert = this, occurrence = occurrence, acknowledged = acknowledged)
 
 private fun battery(remaining: Int) = Battery(
     voltage = 12.6,

@@ -33,7 +33,7 @@ class AlertRuleTest {
 
     @BeforeEach
     fun setUp() {
-        rule = AlertRule()
+        rule = AlertRule(timeSource = clock)
     }
 
     @Test
@@ -354,6 +354,7 @@ class AlertRuleTest {
         clock += 300.milliseconds
 
         val result = rule.untilNextEvaluation(
+            NONE,
             telemetry(battery(remaining = 100)).copy(attitude = attitude),
             evaluatingSince,
         )
@@ -366,7 +367,7 @@ class AlertRuleTest {
         val since = clock.markNow()
         clock += 500.milliseconds
 
-        val result = rule.untilNextEvaluation(Telemetry(), since)
+        val result = rule.untilNextEvaluation(NONE, Telemetry(), since)
 
         result shouldBeEqualTo GPS_STALE_AFTER - 500.milliseconds
     }
@@ -419,6 +420,48 @@ class AlertRuleTest {
         )
 
         result shouldBeEqualTo listOf(GPS_LOST.raised(1))
+    }
+
+    @Test
+    fun `GIVEN stale attitude raised 1 ms under the hold WHEN attitude is fresh again THEN stays stale`() {
+        val previous = listOf(STALE_ATTITUDE.raised(PREVIOUS, raisedAt = clock.markNow()))
+        clock += AlertRule.STALE_MINIMUM_HOLD - 1.milliseconds
+        val telemetry = telemetry(battery(remaining = 100)).copy(attitude = Timed(ATTITUDE, clock.markNow()))
+
+        val result = rule.evaluate(previous, telemetry, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo previous
+    }
+
+    @Test
+    fun `GIVEN stale attitude raised exactly the hold ago WHEN attitude is fresh again THEN clears`() {
+        val previous = listOf(STALE_ATTITUDE.raised(PREVIOUS, raisedAt = clock.markNow()))
+        clock += AlertRule.STALE_MINIMUM_HOLD
+        val telemetry = telemetry(battery(remaining = 100)).copy(attitude = Timed(ATTITUDE, clock.markNow()))
+
+        val result = rule.evaluate(previous, telemetry, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo NONE
+    }
+
+    @Test
+    fun `GIVEN an acknowledged stale stream held WHEN it is fresh again THEN stays acknowledged`() {
+        val previous = listOf(STALE_ATTITUDE.raised(PREVIOUS, acknowledged = true, raisedAt = clock.markNow()))
+        val telemetry = telemetry(battery(remaining = 100)).copy(attitude = Timed(ATTITUDE, clock.markNow()))
+
+        val result = rule.evaluate(previous, telemetry, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo previous
+    }
+
+    @Test
+    fun `GIVEN a held stale alert WHEN asking when to evaluate again THEN is when its hold ends`() {
+        val active = listOf(STALE_ATTITUDE.raised(PREVIOUS, raisedAt = clock.markNow()))
+        clock += 500.milliseconds
+
+        val result = rule.untilNextEvaluation(active, telemetry(battery(remaining = 100)), evaluatingSince)
+
+        result shouldBeEqualTo AlertRule.STALE_MINIMUM_HOLD - 500.milliseconds
     }
 
     @Test
@@ -488,7 +531,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN custom thresholds WHEN evaluating an energy THEN uses them`() {
-        val custom = AlertRule(StalenessRule(), BatteryThresholds(low = 30, critical = 15, hysteresis = 5))
+        val custom = AlertRule(StalenessRule(), BatteryThresholds(low = 30, critical = 15, hysteresis = 5), clock)
 
         val result = listOf(31, 30, 15).map { remaining ->
             custom.evaluate(NONE, telemetry(battery(remaining)), evaluatingSince, ::nextOccurrence)
@@ -523,6 +566,10 @@ class AlertRuleTest {
 
         result shouldThrow IllegalArgumentException::class
     }
+
+    /** Active as [occurrence], raised now unless [raisedAt] says otherwise. */
+    private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false, raisedAt: TimeMark = clock.markNow()) =
+        ActiveAlert(alert = this, occurrence = occurrence, raisedAt = raisedAt, acknowledged = acknowledged)
 
     /** The next occurrence raised in this test: 1, 2, 3, after the [PREVIOUS] ones. */
     private fun nextOccurrence(): Long = ++raised
@@ -565,9 +612,6 @@ private val FIX_3D = setOf(
 )
 
 private val ATTITUDE = Attitude(roll = 0.0, pitch = 0.0, yaw = 0.0)
-
-private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false) =
-    ActiveAlert(alert = this, occurrence = occurrence, acknowledged = acknowledged)
 
 private fun battery(remaining: Int?, monitored: Boolean = true, healthy: Boolean = true, voltage: Double? = 12.6) =
     Battery(

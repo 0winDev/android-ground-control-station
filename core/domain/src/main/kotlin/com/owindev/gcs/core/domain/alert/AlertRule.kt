@@ -8,7 +8,9 @@ import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.domain.telemetry.isFix3d
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * Which alerts are active for the active vehicle's [Telemetry] (REQ-028).
@@ -19,11 +21,13 @@ import kotlin.time.TimeMark
  * alerts that depend on it stay as they were, and a stale value raises [Alert.TelemetryStale] for its kind instead.
  * A battery that is stale or not known is also [Alert.BatteryUnknown], so it never looks OK.
  *
- * The result is ordered by level, most urgent first, and newest first within a level.
+ * The result is ordered by level, most urgent first, and newest first within a level. [timeSource] marks when each
+ * alert is raised; it must be the one the telemetry is marked with.
  */
 class AlertRule(
     private val staleness: StalenessRule = StalenessRule(),
     private val thresholds: BatteryThresholds = BatteryThresholds(),
+    private val timeSource: TimeSource.WithComparableMarks = TimeSource.Monotonic,
 ) {
 
     /**
@@ -44,23 +48,29 @@ class AlertRule(
         val wasActive = previous.map(ActiveAlert::alert).toSet()
         val active = batteryAlerts(telemetry.battery, evaluatingSince, wasActive) +
             gpsAlerts(telemetry.gps, evaluatingSince, wasActive) +
-            staleAlerts(telemetry)
+            staleAlerts(telemetry, previous)
         val kept = previous.filter { it.alert in active }
-        val raised = (active - wasActive).map { ActiveAlert(it, occurrence = nextOccurrence()) }
+        val now = timeSource.markNow()
+        val raised = (active - wasActive).map { ActiveAlert(it, occurrence = nextOccurrence(), raisedAt = now) }
         return (raised + kept).sortedByDescending { it.alert.level }
     }
 
     /**
-     * When the alerts must be evaluated again with nothing new arriving: when a value goes stale
-     * ([StalenessRule.untilNextStale]), or a value that stopped arriving would never raise [Alert.TelemetryStale],
-     * and when a value never received has had its time to arrive ([evaluate]).
+     * When the [active] alerts must be evaluated again with nothing new arriving: when a value goes stale
+     * ([StalenessRule.untilNextStale]), or a value that stopped arriving would never raise [Alert.TelemetryStale];
+     * when a value never received has had its time to arrive ([evaluate]); and when a stale alert's hold ends, or it
+     * would outlast [STALE_MINIMUM_HOLD].
      */
-    fun untilNextEvaluation(telemetry: Telemetry, evaluatingSince: TimeMark): Duration? {
+    fun untilNextEvaluation(active: List<ActiveAlert>, telemetry: Telemetry, evaluatingSince: TimeMark): Duration? {
         val untilNeverReceived = NEVER_RECEIVED_ALERTED
             .filter { kind -> telemetry[kind] == null }
             .map { kind -> staleness.thresholdOf(kind) - evaluatingSince.elapsedNow() }
+        val untilHoldEnds = active
+            .filter { it.alert is Alert.TelemetryStale }
+            .map { STALE_MINIMUM_HOLD - it.raisedAt.elapsedNow() }
+        return (untilNeverReceived + untilHoldEnds + listOfNotNull(staleness.untilNextStale(telemetry)))
             .filter { it > Duration.ZERO }
-        return (untilNeverReceived + listOfNotNull(staleness.untilNextStale(telemetry))).minOrNull()
+            .minOrNull()
     }
 
     /**
@@ -127,9 +137,19 @@ class AlertRule(
             else -> setOf(Alert.GpsFixLost)
         }
 
-    private fun staleAlerts(telemetry: Telemetry): Set<Alert> = TelemetryKind.entries
-        .filter { kind -> telemetry[kind]?.let { isStale(it, kind) } == true }
-        .mapTo(mutableSetOf(), Alert::TelemetryStale)
+    /**
+     * A stale alert for each stale stream, plus those raised less than [STALE_MINIMUM_HOLD] ago, which stay even if
+     * their stream is fresh again.
+     */
+    private fun staleAlerts(telemetry: Telemetry, previous: List<ActiveAlert>): Set<Alert> {
+        val stale = TelemetryKind.entries
+            .filter { kind -> telemetry[kind]?.let { isStale(it, kind) } == true }
+            .mapTo(mutableSetOf<Alert>(), Alert::TelemetryStale)
+        val held = previous
+            .filter { it.alert is Alert.TelemetryStale && it.raisedAt.elapsedNow() < STALE_MINIMUM_HOLD }
+            .map(ActiveAlert::alert)
+        return stale + held
+    }
 
     private fun isStale(timed: Timed<*>, kind: TelemetryKind): Boolean =
         staleness.isStale(kind, timed.receivedAt.elapsedNow())
@@ -138,12 +158,19 @@ class AlertRule(
     private fun isLate(kind: TelemetryKind, evaluatingSince: TimeMark): Boolean =
         staleness.isStale(kind, evaluatingSince.elapsedNow())
 
-    private companion object {
-        /** The values that raise an alert when never received, once they are late ([evaluate]). */
-        val NEVER_RECEIVED_ALERTED: Set<TelemetryKind> = setOf(TelemetryKind.BATTERY, TelemetryKind.GPS)
+    companion object {
+        /**
+         * How long an [Alert.TelemetryStale] lasts at least once raised, so a stream late for an instant does not
+         * raise and clear it repeatedly (#31). It ends at most this long after the stream is fresh again. In about
+         * 6 min of steady SITL streams (#41) one ATTITUDE stream was late once, for about 0.15 s.
+         */
+        val STALE_MINIMUM_HOLD: Duration = 2.seconds
 
-        val ENERGY_ALERTS: Set<Alert> = setOf(Alert.BatteryCritical, Alert.BatteryLow)
-        val BATTERY_ALERTS: Set<Alert> = ENERGY_ALERTS + setOf(Alert.BatteryUnhealthy, Alert.BatteryUnknown)
+        /** The values that raise an alert when never received, once they are late ([evaluate]). */
+        private val NEVER_RECEIVED_ALERTED: Set<TelemetryKind> = setOf(TelemetryKind.BATTERY, TelemetryKind.GPS)
+
+        private val ENERGY_ALERTS: Set<Alert> = setOf(Alert.BatteryCritical, Alert.BatteryLow)
+        private val BATTERY_ALERTS: Set<Alert> = ENERGY_ALERTS + setOf(Alert.BatteryUnhealthy, Alert.BatteryUnknown)
     }
 }
 

@@ -66,6 +66,7 @@ abstract class VehicleDataModule {
 
         /** The battery thresholds decided in #41 (REQ-028), judging staleness as the rest of the app does. */
         @Provides
-        fun provideAlertRule(staleness: StalenessRule): AlertRule = AlertRule(staleness)
+        fun provideAlertRule(staleness: StalenessRule, timeSource: TimeSource.WithComparableMarks): AlertRule =
+            AlertRule(staleness = staleness, timeSource = timeSource)
     }
 }

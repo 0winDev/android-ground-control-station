@@ -26,12 +26,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -79,22 +81,25 @@ internal class DefaultAlertRepository @Inject constructor(
         emit(null)
         val evaluatingSince = timeSource.markNow()
         emitAll(
-            telemetryRepository.activeTelemetry.flatMapLatest { telemetry ->
-                flow {
-                    while (true) {
-                        emit(telemetry?.let { Evaluation(it, evaluatingSince) })
-                        val untilNext = telemetry?.let { rule.untilNextEvaluation(it, evaluatingSince) }
-                        delay(untilNext ?: awaitCancellation())
-                    }
-                }
+            telemetryRepository.activeTelemetry.map { telemetry ->
+                telemetry?.let { Evaluation(it, evaluatingSince) }
             },
         )
     }
 
     override val activeAlerts: StateFlow<Alerts> = channelFlow {
         launch {
-            evaluations.collect { evaluation ->
-                change { previous -> evaluation?.let { evaluate(previous, it) } ?: Alerts.NotEvaluated }
+            // Each new evaluation cancels the wait of the one before.
+            evaluations.collectLatest { evaluation ->
+                if (evaluation == null) {
+                    change { Alerts.NotEvaluated }
+                    return@collectLatest
+                }
+                while (true) {
+                    val active = change { previous -> evaluate(previous, evaluation) }.active()
+                    val untilNext = rule.untilNextEvaluation(active, evaluation.telemetry, evaluation.evaluatingSince)
+                    delay(untilNext ?: awaitCancellation())
+                }
             }
         }
         try {
@@ -116,14 +121,17 @@ internal class DefaultAlertRepository @Inject constructor(
         }
     }
 
-    /** Applies [transform] atomically, so an acknowledgement is never lost to an evaluation, and logs the change. */
-    private fun change(transform: (Alerts) -> Alerts) {
+    /**
+     * Applies [transform] atomically, so an acknowledgement is never lost to an evaluation, logs the change and
+     * returns what it applied.
+     */
+    private fun change(transform: (Alerts) -> Alerts): Alerts {
         while (true) {
             val before = alerts.value
             val after = transform(before)
             if (alerts.compareAndSet(before, after)) {
                 logChange(before.active(), after.active())
-                return
+                return after
             }
         }
     }
