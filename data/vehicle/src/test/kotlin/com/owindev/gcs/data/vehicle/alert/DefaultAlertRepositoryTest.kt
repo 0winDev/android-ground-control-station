@@ -4,6 +4,7 @@ import android.util.Log
 import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
@@ -58,14 +59,27 @@ class DefaultAlertRepositoryTest {
     }
 
     @Test
-    fun `GIVEN no active vehicle WHEN observing the alerts THEN there are none`() = testScope.runTest {
-        repository.activeAlerts.launchIn(backgroundScope)
+    fun `GIVEN no active vehicle WHEN observing the alerts THEN they are not evaluated, never all clear`() =
+        testScope.runTest {
+            repository.activeAlerts.launchIn(backgroundScope)
 
-        runCurrent()
-        val result = repository.activeAlerts.value
+            runCurrent()
+            val result = repository.activeAlerts.value
 
-        result shouldBeEqualTo NONE
-    }
+            result shouldBeEqualTo Alerts.NotEvaluated
+        }
+
+    @Test
+    fun `GIVEN a vehicle with nothing wrong WHEN observing the alerts THEN they are evaluated and all clear`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = 100)
+            repository.activeAlerts.launchIn(backgroundScope)
+
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(NONE)
+        }
 
     @Test
     fun `GIVEN the alerts observed WHEN the battery reaches the low threshold THEN is raised and logged`() =
@@ -78,7 +92,7 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo listOf(LOW)
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW))
             verifyOnce {
                 Log.i(TAG, "Alert raised: BatteryLow (caution)")
             }
@@ -94,7 +108,7 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo NONE
+            result shouldBeEqualTo Alerts.Evaluated(NONE)
         }
 
     @Test
@@ -107,7 +121,7 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo listOf(STALE_GPS)
+            result shouldBeEqualTo Alerts.Evaluated(listOf(STALE_GPS))
             verifyOnce {
                 Log.i(TAG, "Alert raised: TelemetryStale(kind=GPS) (advisory)")
             }
@@ -123,7 +137,7 @@ class DefaultAlertRepositoryTest {
         runCurrent()
         val result = repository.activeAlerts.value
 
-        result shouldBeEqualTo listOf(LOW.copy(acknowledged = true))
+        result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.copy(acknowledged = true)))
         verifyOnce {
             Log.i(TAG, "Alert acknowledged: BatteryLow (caution)")
         }
@@ -141,7 +155,7 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo listOf(LOW.copy(acknowledged = true))
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.copy(acknowledged = true)))
         }
 
     @Test
@@ -155,14 +169,14 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo listOf(CRITICAL)
+            result shouldBeEqualTo Alerts.Evaluated(listOf(CRITICAL))
             verifyNever {
                 Log.i(TAG, "Alert acknowledged: BatteryCritical (emergency)")
             }
         }
 
     @Test
-    fun `GIVEN a low battery WHEN the active vehicle goes away THEN the alert is cleared and logged`() =
+    fun `GIVEN a low battery WHEN the active vehicle goes away THEN is cleared, logged and not evaluated`() =
         testScope.runTest {
             activeTelemetry.value = telemetry(remaining = 20)
             repository.activeAlerts.launchIn(backgroundScope)
@@ -172,7 +186,7 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo NONE
+            result shouldBeEqualTo Alerts.NotEvaluated
             verifyOnce {
                 Log.i(TAG, "Alert cleared: BatteryLow (caution)")
             }
@@ -193,21 +207,22 @@ class DefaultAlertRepositoryTest {
             runCurrent()
             val result = repository.activeAlerts.value
 
-            result shouldBeEqualTo listOf(LOW)
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW))
         }
 
     @Test
-    fun `GIVEN alerts no longer observed WHEN reading them THEN their last value is gone`() = testScope.runTest {
-        activeTelemetry.value = telemetry(remaining = 20)
-        val observer = repository.activeAlerts.launchIn(backgroundScope)
-        runCurrent()
+    fun `GIVEN alerts no longer observed WHEN reading them THEN are not evaluated, never all clear`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = 20)
+            val observer = repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
 
-        observer.cancel()
-        runCurrent()
-        val result = repository.activeAlerts.value
+            observer.cancel()
+            runCurrent()
+            val result = repository.activeAlerts.value
 
-        result shouldBeEqualTo NONE
-    }
+            result shouldBeEqualTo Alerts.NotEvaluated
+        }
 
     @Test
     fun `GIVEN the alerts observed WHEN reading the telemetry THEN is observed too, keeping the link open`() =

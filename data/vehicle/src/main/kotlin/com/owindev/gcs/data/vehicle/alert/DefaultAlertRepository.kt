@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
@@ -38,7 +39,7 @@ import kotlinx.coroutines.launch
  * never early.
  *
  * Nothing remembered is ever shown (as the telemetry, #13): when the last observer leaves the alerts are dropped
- * and the next observer starts from none, judged afresh on the telemetry as it is then.
+ * and the next observer starts from [Alerts.NotEvaluated], judged afresh on the telemetry as it is then.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -49,7 +50,7 @@ internal class DefaultAlertRepository @Inject constructor(
 ) : AlertRepository {
 
     /** Written by the evaluations and by [acknowledge], always through [change]. */
-    private val alerts = MutableStateFlow<List<ActiveAlert>>(emptyList())
+    private val alerts = MutableStateFlow<Alerts>(Alerts.NotEvaluated)
 
     private val evaluations: Flow<Telemetry?> = telemetryRepository.activeTelemetry.flatMapLatest { telemetry ->
         flow {
@@ -61,40 +62,47 @@ internal class DefaultAlertRepository @Inject constructor(
         }
     }
 
-    override val activeAlerts: StateFlow<List<ActiveAlert>> = channelFlow {
+    override val activeAlerts: StateFlow<Alerts> = channelFlow {
         launch {
             evaluations.collect { telemetry ->
-                change { previous -> telemetry?.let { rule.evaluate(previous, it) } ?: emptyList() }
+                change { previous ->
+                    telemetry?.let { Alerts.Evaluated(rule.evaluate(previous.active(), it)) } ?: Alerts.NotEvaluated
+                }
             }
         }
         try {
             alerts.collect(::send)
         } finally {
             // Nobody observes them any more: forgotten, not cleared, so nothing is logged.
-            alerts.value = emptyList()
+            alerts.value = Alerts.NotEvaluated
         }
     }
         .stateIn(
             scope = scope,
             started = SharingStarted.WhileSubscribed(stopTimeout = Duration.ZERO, replayExpiration = Duration.ZERO),
-            initialValue = emptyList(),
+            initialValue = Alerts.NotEvaluated,
         )
 
     override fun acknowledge(alert: Alert) {
-        change { active -> rule.acknowledge(active, alert) }
+        change { alerts ->
+            if (alerts is Alerts.Evaluated) Alerts.Evaluated(rule.acknowledge(alerts.active, alert)) else alerts
+        }
     }
 
     /** Applies [transform] atomically, so an acknowledgement is never lost to an evaluation, and logs the change. */
-    private fun change(transform: (List<ActiveAlert>) -> List<ActiveAlert>) {
+    private fun change(transform: (Alerts) -> Alerts) {
         while (true) {
             val before = alerts.value
             val after = transform(before)
             if (alerts.compareAndSet(before, after)) {
-                logChange(before, after)
+                logChange(before.active(), after.active())
                 return
             }
         }
     }
+
+    /** What is active; nothing when not evaluated, which is never shown as all clear ([Alerts.NotEvaluated]). */
+    private fun Alerts.active(): List<ActiveAlert> = (this as? Alerts.Evaluated)?.active.orEmpty()
 
     private fun logChange(before: List<ActiveAlert>, after: List<ActiveAlert>) {
         val wasActive = before.associateBy(ActiveAlert::alert)

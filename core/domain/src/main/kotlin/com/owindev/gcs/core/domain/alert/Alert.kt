@@ -65,3 +65,16 @@ sealed interface Alert {
  * active until its cause clears; acknowledging only says the operator has seen it.
  */
 data class ActiveAlert(val alert: Alert, val acknowledged: Boolean = false)
+
+/**
+ * The active vehicle's alerts as far as they are known. [NotEvaluated] is never "all clear": like a link still
+ * starting (#13), it says nothing about the vehicle, so it must never be shown as if nothing were wrong.
+ */
+sealed interface Alerts {
+
+    /** Nothing has been judged: there is no active vehicle, or nobody has observed the alerts since. */
+    data object NotEvaluated : Alerts
+
+    /** Judged on the active vehicle's telemetry, most urgent first ([AlertRule]); empty is all clear. */
+    data class Evaluated(val active: List<ActiveAlert>) : Alerts
+}
