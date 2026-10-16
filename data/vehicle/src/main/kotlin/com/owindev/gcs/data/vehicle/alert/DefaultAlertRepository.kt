@@ -8,6 +8,7 @@ import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -23,8 +24,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -40,12 +45,15 @@ import kotlinx.coroutines.launch
  * never early.
  *
  * Nothing remembered is ever shown (as the telemetry, #13): when the last observer leaves the alerts are dropped
- * and the next observer starts from [Alerts.NotEvaluated], judged afresh on the telemetry as it is then.
+ * and the next observer starts from [Alerts.NotEvaluated], judged afresh on the telemetry as it is then. Nor is one
+ * vehicle's state carried to another: when the active system ID changes, its alerts start afresh, with no
+ * hysteresis or acknowledgement from the vehicle before.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 internal class DefaultAlertRepository @Inject constructor(
-    telemetryRepository: TelemetryRepository,
+    private val telemetryRepository: TelemetryRepository,
+    vehicleRepository: VehicleRepository,
     private val rule: AlertRule,
     @ApplicationScope scope: CoroutineScope,
 ) : AlertRepository {
@@ -56,14 +64,26 @@ internal class DefaultAlertRepository @Inject constructor(
     /** Never reset, not even when nobody observes, so a stale tap can never acknowledge a later raise. */
     private val occurrences = AtomicLong()
 
-    private val evaluations: Flow<Telemetry?> = telemetryRepository.activeTelemetry.flatMapLatest { telemetry ->
-        flow {
-            while (true) {
-                emit(telemetry)
-                val untilNextStale = telemetry?.let(rule::untilNextStale) ?: awaitCancellation()
-                delay(untilNextStale)
-            }
-        }
+    /** The active system ID is decided from the vehicles' HEARTBEATs, so they are observed with it. */
+    private val evaluations: Flow<Telemetry?> = vehicleRepository.vehicles
+        .combine(vehicleRepository.activeSystemId) { _, systemId -> systemId }
+        .distinctUntilChanged()
+        .flatMapLatest { systemId -> if (systemId == null) flowOf(null) else evaluationsOfNewVehicle() }
+
+    /** Starts from [Alerts.NotEvaluated], so nothing of the vehicle active before is carried over. */
+    private fun evaluationsOfNewVehicle(): Flow<Telemetry?> = flow {
+        emit(null)
+        emitAll(
+            telemetryRepository.activeTelemetry.flatMapLatest { telemetry ->
+                flow {
+                    while (true) {
+                        emit(telemetry)
+                        val untilNextStale = telemetry?.let(rule::untilNextStale) ?: awaitCancellation()
+                        delay(untilNextStale)
+                    }
+                }
+            },
+        )
     }
 
     override val activeAlerts: StateFlow<Alerts> = channelFlow {

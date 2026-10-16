@@ -13,6 +13,13 @@ import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.vehicle.FlightMode
+import com.owindev.gcs.core.domain.vehicle.SystemId
+import com.owindev.gcs.core.domain.vehicle.Vehicle
+import com.owindev.gcs.core.domain.vehicle.VehicleLink
+import com.owindev.gcs.core.domain.vehicle.VehicleRepository
+import com.owindev.gcs.core.domain.vehicle.VehicleState
+import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import io.mockk.every
@@ -20,6 +27,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeMark
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -42,6 +50,9 @@ class DefaultAlertRepositoryTest {
     private val clock = testScope.testScheduler.timeSource
     private val telemetryRepository: TelemetryRepository = mockk()
     private val activeTelemetry = MutableStateFlow<Telemetry?>(null)
+    private val vehicleRepository: VehicleRepository = mockk()
+    private val activeSystemId = MutableStateFlow<SystemId?>(VEHICLE)
+    private val vehicles = MutableStateFlow(mapOf(VEHICLE to vehicle(VEHICLE, clock.markNow())))
 
     private lateinit var repository: DefaultAlertRepository
 
@@ -50,7 +61,14 @@ class DefaultAlertRepositoryTest {
         mockkStatic(Log::class)
         every { Log.i(any(), any<String>()) } returns 0
         every { telemetryRepository.activeTelemetry } returns activeTelemetry
-        repository = DefaultAlertRepository(telemetryRepository, AlertRule(), testScope.backgroundScope)
+        every { vehicleRepository.activeSystemId } returns activeSystemId
+        every { vehicleRepository.vehicles } returns vehicles
+        repository = DefaultAlertRepository(
+            telemetryRepository,
+            vehicleRepository,
+            AlertRule(),
+            testScope.backgroundScope,
+        )
     }
 
     @AfterEach
@@ -61,6 +79,7 @@ class DefaultAlertRepositoryTest {
     @Test
     fun `GIVEN no active vehicle WHEN observing the alerts THEN they are not evaluated, never all clear`() =
         testScope.runTest {
+            activeSystemId.value = null
             repository.activeAlerts.launchIn(backgroundScope)
 
             runCurrent()
@@ -243,6 +262,33 @@ class DefaultAlertRepositoryTest {
         }
 
     @Test
+    fun `GIVEN an acknowledged low battery WHEN another vehicle becomes active THEN its low battery is a new one`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = 20)
+            repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
+            repository.acknowledge(occurrence = 1)
+            runCurrent()
+
+            activeSystemId.value = OTHER_VEHICLE
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(2)))
+        }
+
+    @Test
+    fun `GIVEN the alerts observed WHEN reading the vehicles THEN are observed too, deciding the active one`() =
+        testScope.runTest {
+            repository.activeAlerts.launchIn(backgroundScope)
+
+            runCurrent()
+            val result = vehicles.subscriptionCount.value
+
+            result shouldBeEqualTo 1
+        }
+
+    @Test
     fun `GIVEN the alerts observed WHEN reading the telemetry THEN is observed too, keeping the link open`() =
         testScope.runTest {
             repository.activeAlerts.launchIn(backgroundScope)
@@ -262,6 +308,9 @@ class DefaultAlertRepositoryTest {
 
 private const val TAG = "AlertRepository"
 
+private val VEHICLE = SystemId(1)
+private val OTHER_VEHICLE = SystemId(2)
+
 private val NONE = emptyList<ActiveAlert>()
 private val LOW = Alert.BatteryLow
 private val CRITICAL = Alert.BatteryCritical
@@ -279,6 +328,12 @@ private val GPS_3D_FIX = GpsStatus(
     horizontalAccuracy = 0.3,
     verticalAccuracy = 0.3,
     yaw = null,
+)
+
+private fun vehicle(systemId: SystemId, heardAt: TimeMark) = Vehicle(
+    state = VehicleState(systemId, VehicleType.COPTER, FlightMode.Named("Stabilize"), armed = false),
+    link = VehicleLink.CONNECTED,
+    lastHeartbeat = heardAt,
 )
 
 private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false) =
