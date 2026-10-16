@@ -16,6 +16,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +38,7 @@ import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
+import kotlinx.coroutines.delay
 
 /**
  * The active vehicle's most urgent alert not yet acknowledged (REQ-028): its level in words and an icon, never
@@ -77,8 +83,15 @@ private fun ShowingBanner(banner: AlertBanner.Showing, onAcknowledge: (occurrenc
             )
             banner.othersLevel?.let { OthersCount(others = banner.others, level = it) }
             if (banner.acknowledgeable) {
+                // Enabled once this alert has been on screen for the guard, as the ViewModel requires.
+                var enabled by remember(banner.occurrence) { mutableStateOf(false) }
+                LaunchedEffect(banner.occurrence) {
+                    delay(ACKNOWLEDGE_GUARD)
+                    enabled = true
+                }
                 OutlinedButton(
                     onClick = { onAcknowledge(banner.occurrence) },
+                    enabled = enabled,
                     modifier = Modifier.heightIn(min = GcsTheme.sizes.button),
                     border = BorderStroke(width = 1.dp, color = LocalContentColor.current),
                 ) {

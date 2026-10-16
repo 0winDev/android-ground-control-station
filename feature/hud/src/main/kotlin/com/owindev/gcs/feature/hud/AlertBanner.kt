@@ -4,6 +4,14 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.alert.Alerts
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+
+/**
+ * How long an alert must have been on the banner before a tap acknowledges it, so a tap meant for the alert before
+ * never acknowledges one that took its place in the same instant: about a reaction time.
+ */
+internal val ACKNOWLEDGE_GUARD: Duration = 1.seconds
 
 /** What the HUD's alert banner shows of the active vehicle's alerts (REQ-028). */
 sealed interface AlertBanner {

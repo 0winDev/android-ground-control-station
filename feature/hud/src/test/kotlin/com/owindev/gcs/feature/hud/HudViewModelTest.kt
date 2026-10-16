@@ -79,6 +79,7 @@ class HudViewModelTest {
             alertRepository,
             LinkLossRule(),
             StalenessRule(),
+            mainDispatcher.testDispatcher.scheduler.timeSource,
         )
     }
 
@@ -395,6 +396,7 @@ class HudViewModelTest {
                     alertRepository,
                     LinkLossRule(timeout = CUSTOM_TIMEOUT),
                     StalenessRule(),
+                    mainDispatcher.testDispatcher.scheduler.timeSource,
                 )
                 val states = custom.state.testIn(backgroundScope)
 

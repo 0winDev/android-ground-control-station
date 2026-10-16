@@ -22,13 +22,17 @@ import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.testing.MainDispatcherExtension
+import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import io.mockk.Runs as runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.amshove.kluent.shouldBeEqualTo
@@ -71,6 +75,7 @@ class HudViewModelAlertTest {
             alertRepository,
             LinkLossRule(),
             StalenessRule(),
+            mainDispatcher.testDispatcher.scheduler.timeSource,
         )
     }
 
@@ -124,13 +129,71 @@ class HudViewModelAlertTest {
     }
 
     @Test
-    fun `GIVEN a shown caution WHEN the operator acknowledges it THEN its occurrence is acknowledged`() {
-        every { alertRepository.acknowledge(any()) } just runs
+    fun `GIVEN a caution shown for the guard time WHEN the operator acknowledges it THEN it is acknowledged`() =
+        runTest {
+            turbineScope {
+                every { alertRepository.acknowledge(any()) } just runs
+                heardVehicle(VehicleLink.CONNECTED, heardAgo = Duration.ZERO)
+                activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = OCCURRENCE)))
+                viewModel.state.launchIn(backgroundScope)
+                delay(ACKNOWLEDGE_GUARD)
 
-        viewModel.onAlertAcknowledged(occurrence = OCCURRENCE)
+                viewModel.onAlertAcknowledged(occurrence = OCCURRENCE)
 
-        verifyOnce {
-            alertRepository.acknowledge(OCCURRENCE)
+                verifyOnce {
+                    alertRepository.acknowledge(OCCURRENCE)
+                }
+            }
+        }
+
+    @Test
+    fun `GIVEN a caution shown 1 ms under the guard time WHEN the operator acknowledges it THEN it is not`() = runTest {
+        turbineScope {
+            heardVehicle(VehicleLink.CONNECTED, heardAgo = Duration.ZERO)
+            activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = OCCURRENCE)))
+            viewModel.state.launchIn(backgroundScope)
+            delay(ACKNOWLEDGE_GUARD - 1.milliseconds)
+
+            viewModel.onAlertAcknowledged(occurrence = OCCURRENCE)
+
+            verifyNever {
+                alertRepository.acknowledge(any())
+            }
+        }
+    }
+
+    @Test
+    fun `GIVEN the banner moved to another alert WHEN a tap meant for the one before arrives THEN nothing is`() =
+        runTest {
+            turbineScope {
+                heardVehicle(VehicleLink.CONNECTED, heardAgo = Duration.ZERO)
+                activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = OCCURRENCE)))
+                viewModel.state.launchIn(backgroundScope)
+                delay(ACKNOWLEDGE_GUARD)
+                activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = NEXT_OCCURRENCE)))
+
+                viewModel.onAlertAcknowledged(occurrence = OCCURRENCE)
+
+                verifyNever {
+                    alertRepository.acknowledge(any())
+                }
+            }
+        }
+
+    @Test
+    fun `GIVEN the banner just moved to another alert WHEN the operator taps it at once THEN nothing is`() = runTest {
+        turbineScope {
+            heardVehicle(VehicleLink.CONNECTED, heardAgo = Duration.ZERO)
+            activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = OCCURRENCE)))
+            viewModel.state.launchIn(backgroundScope)
+            delay(ACKNOWLEDGE_GUARD)
+            activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = NEXT_OCCURRENCE)))
+
+            viewModel.onAlertAcknowledged(occurrence = NEXT_OCCURRENCE)
+
+            verifyNever {
+                alertRepository.acknowledge(any())
+            }
         }
     }
 
@@ -161,6 +224,7 @@ class HudViewModelAlertTest {
 private const val PORT = 14550
 private const val DATAGRAMS = 42L
 private const val OCCURRENCE = 4L
+private const val NEXT_OCCURRENCE = 7L
 private const val LOW_REMAINING = 18
 private val SYSTEM_ID = SystemId(1)
 private val GUIDED = FlightMode.Named("Guided")
