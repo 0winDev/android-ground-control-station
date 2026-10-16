@@ -352,6 +352,19 @@ class DefaultAlertRepositoryTest {
         }
 
     @Test
+    fun `GIVEN the boot battery WHEN the active vehicle is not heard THEN is taken as armed, an emergency`() =
+        testScope.runTest {
+            vehicles.value = emptyMap()
+            activeTelemetry.value = telemetry(BOOT_BATTERY)
+            repository.activeAlerts.launchIn(backgroundScope)
+
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(UNHEALTHY.raised(2), UNKNOWN.raised(1)))
+        }
+
+    @Test
     fun `GIVEN the alerts observed WHEN reading the vehicles THEN are observed, for the active one and its arming`() =
         testScope.runTest {
             repository.activeAlerts.launchIn(backgroundScope)
