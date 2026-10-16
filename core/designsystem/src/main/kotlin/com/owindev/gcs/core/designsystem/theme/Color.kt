@@ -11,7 +11,9 @@ internal val Night3 = Color(0xFF161B20)
 internal val Night4 = Color(0xFF1D242B)
 internal val Night5 = Color(0xFF232B33)
 internal val Line = Color(0xFF2A323A)
-internal val LineStrong = Color(0xFF3A444E)
+
+// At least 3:1 on the surfaces (WCAG non-text contrast), so a control outlined with it can be told apart.
+internal val LineStrong = Color(0xFF626E78)
 
 internal val TextPrimary = Color(0xFFE6EAED)
 internal val TextSecondary = Color(0xFFB4BDC4)
