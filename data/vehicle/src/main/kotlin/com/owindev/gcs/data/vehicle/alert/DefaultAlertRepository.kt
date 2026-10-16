@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -36,9 +38,10 @@ import kotlinx.coroutines.launch
 /**
  * The active vehicle's alerts, evaluated by [AlertRule] on its telemetry (REQ-028).
  *
- * The alerts are evaluated whenever the telemetry changes, and again when a value goes stale with nothing new
- * arriving ([AlertRule.untilNextStale]), so a stream that stops raises [Alert.TelemetryStale] on time. Each change
- * is logged once, which is what the SITL check reads.
+ * The alerts are evaluated whenever the telemetry changes, and again when a value goes stale or a value never
+ * received has had its time to arrive, with nothing new arriving ([AlertRule.untilNextEvaluation]), so a stream that
+ * stops raises [Alert.TelemetryStale] on time. That time counts from when the active vehicle's alerts started to be
+ * evaluated, on [timeSource]. Each change is logged once, which is what the SITL check reads.
  *
  * Known limit, as in `DefaultVehicleRepository`: the ages count deep sleep but `delay` does not, so after the
  * device wakes a value that went stale while it slept is judged on the next telemetry or when the timer ends,
@@ -55,6 +58,7 @@ internal class DefaultAlertRepository @Inject constructor(
     private val telemetryRepository: TelemetryRepository,
     vehicleRepository: VehicleRepository,
     private val rule: AlertRule,
+    private val timeSource: TimeSource.WithComparableMarks,
     @ApplicationScope scope: CoroutineScope,
 ) : AlertRepository {
 
@@ -65,21 +69,22 @@ internal class DefaultAlertRepository @Inject constructor(
     private val occurrences = AtomicLong()
 
     /** The active system ID is decided from the vehicles' HEARTBEATs, so they are observed with it. */
-    private val evaluations: Flow<Telemetry?> = vehicleRepository.vehicles
+    private val evaluations: Flow<Evaluation?> = vehicleRepository.vehicles
         .combine(vehicleRepository.activeSystemId) { _, systemId -> systemId }
         .distinctUntilChanged()
         .flatMapLatest { systemId -> if (systemId == null) flowOf(null) else evaluationsOfNewVehicle() }
 
     /** Starts from [Alerts.NotEvaluated], so nothing of the vehicle active before is carried over. */
-    private fun evaluationsOfNewVehicle(): Flow<Telemetry?> = flow {
+    private fun evaluationsOfNewVehicle(): Flow<Evaluation?> = flow {
         emit(null)
+        val evaluatingSince = timeSource.markNow()
         emitAll(
             telemetryRepository.activeTelemetry.flatMapLatest { telemetry ->
                 flow {
                     while (true) {
-                        emit(telemetry)
-                        val untilNextStale = telemetry?.let(rule::untilNextStale) ?: awaitCancellation()
-                        delay(untilNextStale)
+                        emit(telemetry?.let { Evaluation(it, evaluatingSince) })
+                        val untilNext = telemetry?.let { rule.untilNextEvaluation(it, evaluatingSince) }
+                        delay(untilNext ?: awaitCancellation())
                     }
                 }
             },
@@ -88,14 +93,8 @@ internal class DefaultAlertRepository @Inject constructor(
 
     override val activeAlerts: StateFlow<Alerts> = channelFlow {
         launch {
-            evaluations.collect { telemetry ->
-                change { previous ->
-                    if (telemetry == null) {
-                        Alerts.NotEvaluated
-                    } else {
-                        Alerts.Evaluated(rule.evaluate(previous.active(), telemetry, occurrences::incrementAndGet))
-                    }
-                }
+            evaluations.collect { evaluation ->
+                change { previous -> evaluation?.let { evaluate(previous, it) } ?: Alerts.NotEvaluated }
             }
         }
         try {
@@ -129,6 +128,15 @@ internal class DefaultAlertRepository @Inject constructor(
         }
     }
 
+    private fun evaluate(previous: Alerts, evaluation: Evaluation): Alerts = Alerts.Evaluated(
+        rule.evaluate(
+            previous = previous.active(),
+            telemetry = evaluation.telemetry,
+            evaluatingSince = evaluation.evaluatingSince,
+            nextOccurrence = occurrences::incrementAndGet,
+        ),
+    )
+
     /** What is active; nothing when not evaluated, which is never shown as all clear ([Alerts.NotEvaluated]). */
     private fun Alerts.active(): List<ActiveAlert> = (this as? Alerts.Evaluated)?.active.orEmpty()
 
@@ -144,6 +152,9 @@ internal class DefaultAlertRepository @Inject constructor(
 
     /** `BatteryLow (caution)`, `TelemetryStale(kind=GPS) (advisory)`. */
     private fun Alert.describe(): String = "$this (${level.name.lowercase()})"
+
+    /** The active vehicle's [telemetry], whose alerts have been evaluated since [evaluatingSince]. */
+    private data class Evaluation(val telemetry: Telemetry, val evaluatingSince: TimeMark)
 
     private companion object {
         const val TAG = "AlertRepository"

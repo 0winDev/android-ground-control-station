@@ -26,6 +26,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -67,6 +68,7 @@ class DefaultAlertRepositoryTest {
             telemetryRepository,
             vehicleRepository,
             AlertRule(),
+            clock,
             testScope.backgroundScope,
         )
     }
@@ -144,6 +146,32 @@ class DefaultAlertRepositoryTest {
             verifyOnce {
                 Log.i(TAG, "Alert raised: TelemetryStale(kind=GPS) (advisory)")
             }
+        }
+
+    @Test
+    fun `GIVEN a battery never received WHEN 1 ms is left to its threshold THEN is not unknown yet`() =
+        testScope.runTest {
+            activeTelemetry.value = gpsOnly()
+            repository.activeAlerts.launchIn(backgroundScope)
+
+            advanceTimeBy(BATTERY_STALE_AFTER - 1.milliseconds)
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(NONE)
+        }
+
+    @Test
+    fun `GIVEN a battery never received WHEN its threshold passes THEN is unknown with nothing new arriving`() =
+        testScope.runTest {
+            activeTelemetry.value = gpsOnly()
+            repository.activeAlerts.launchIn(backgroundScope)
+
+            advanceTimeBy(BATTERY_STALE_AFTER)
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(UNKNOWN.raised(1)))
         }
 
     @Test
@@ -299,6 +327,9 @@ class DefaultAlertRepositoryTest {
             result shouldBeEqualTo 1
         }
 
+    /** Only a GPS with a 3D fix, kept fresh: the battery never arrives. */
+    private fun gpsOnly(): Telemetry = Telemetry(gps = Timed(GPS_3D_FIX, clock.markNow() + LONG_AFTER))
+
     /** Battery and GPS with a 3D fix, received now. */
     private fun telemetry(remaining: Int): Telemetry {
         val now = clock.markNow()
@@ -315,8 +346,13 @@ private val NONE = emptyList<ActiveAlert>()
 private val LOW = Alert.BatteryLow
 private val CRITICAL = Alert.BatteryCritical
 private val STALE_GPS = Alert.TelemetryStale(TelemetryKind.GPS)
+private val UNKNOWN = Alert.BatteryUnknown
 
 private val GPS_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.GPS)
+private val BATTERY_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.BATTERY)
+
+/** Far enough ahead that a value marked then stays fresh for the whole test. */
+private val LONG_AFTER = 1.hours
 
 private val GPS_3D_FIX = GpsStatus(
     fixType = GpsFixType.Fix3d,

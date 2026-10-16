@@ -8,6 +8,7 @@ import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.domain.telemetry.isFix3d
 import kotlin.time.Duration
+import kotlin.time.TimeMark
 
 /**
  * Which alerts are active for the active vehicle's [Telemetry] (REQ-028).
@@ -26,13 +27,23 @@ class AlertRule(
 ) {
 
     /**
-     * The alerts active now, from those [previous]ly active and the [telemetry] as it is now. Each alert raised now
-     * takes the next number from [nextOccurrence], which must never give the same one twice.
+     * The alerts active now, from those [previous]ly active and the [telemetry] as it is now, for a vehicle whose
+     * alerts have been evaluated since [evaluatingSince]. Each alert raised now takes the next number from
+     * [nextOccurrence], which must never give the same one twice.
+     *
+     * A battery or GPS never received is unknown, never OK, but only once the vehicle has been evaluated for that
+     * value's staleness threshold: until then it has had no time to arrive, as when the link has just started and
+     * its streams were just requested, and an alert raised then would be a false one.
      */
-    fun evaluate(previous: List<ActiveAlert>, telemetry: Telemetry, nextOccurrence: () -> Long): List<ActiveAlert> {
+    fun evaluate(
+        previous: List<ActiveAlert>,
+        telemetry: Telemetry,
+        evaluatingSince: TimeMark,
+        nextOccurrence: () -> Long,
+    ): List<ActiveAlert> {
         val wasActive = previous.map(ActiveAlert::alert).toSet()
-        val active = batteryAlerts(telemetry.battery, wasActive) +
-            gpsAlerts(telemetry.gps, wasActive) +
+        val active = batteryAlerts(telemetry.battery, evaluatingSince, wasActive) +
+            gpsAlerts(telemetry.gps, evaluatingSince, wasActive) +
             staleAlerts(telemetry)
         val kept = previous.filter { it.alert in active }
         val raised = (active - wasActive).map { ActiveAlert(it, occurrence = nextOccurrence()) }
@@ -40,10 +51,17 @@ class AlertRule(
     }
 
     /**
-     * When the alerts must be evaluated again with nothing new arriving ([StalenessRule.untilNextStale]), or a value
-     * that stopped arriving would never raise [Alert.TelemetryStale].
+     * When the alerts must be evaluated again with nothing new arriving: when a value goes stale
+     * ([StalenessRule.untilNextStale]), or a value that stopped arriving would never raise [Alert.TelemetryStale],
+     * and when a value never received has had its time to arrive ([evaluate]).
      */
-    fun untilNextStale(telemetry: Telemetry): Duration? = staleness.untilNextStale(telemetry)
+    fun untilNextEvaluation(telemetry: Telemetry, evaluatingSince: TimeMark): Duration? {
+        val untilNeverReceived = NEVER_RECEIVED_ALERTED
+            .filter { kind -> telemetry[kind] == null }
+            .map { kind -> staleness.thresholdOf(kind) - evaluatingSince.elapsedNow() }
+            .filter { it > Duration.ZERO }
+        return (untilNeverReceived + listOfNotNull(staleness.untilNextStale(telemetry))).minOrNull()
+    }
 
     /**
      * [active] with the alert of [occurrence] acknowledged, unless it is an emergency: an emergency is never
@@ -53,15 +71,18 @@ class AlertRule(
         if (it.occurrence == occurrence && it.alert.level != AlertLevel.EMERGENCY) it.copy(acknowledged = true) else it
     }
 
-    private fun batteryAlerts(timed: Timed<Battery>?, wasActive: Set<Alert>): Set<Alert> = when {
-        // Nothing received yet is unknown, never OK.
-        timed == null -> setOf(Alert.BatteryUnknown)
+    private fun batteryAlerts(timed: Timed<Battery>?, evaluatingSince: TimeMark, wasActive: Set<Alert>): Set<Alert> =
+        when {
+            // Nothing received yet is unknown, never OK, once it has had its time to arrive.
+            timed == null && isLate(TelemetryKind.BATTERY, evaluatingSince) -> setOf(Alert.BatteryUnknown)
 
-        // What it said last may no longer be true: unknown, keeping what it raised until it is heard again.
-        isStale(timed, TelemetryKind.BATTERY) -> (wasActive intersect BATTERY_ALERTS) + Alert.BatteryUnknown
+            timed == null -> wasActive intersect BATTERY_ALERTS
 
-        else -> freshBatteryAlerts(timed.value, wasActive)
-    }
+            // What it said last may no longer be true: unknown, keeping what it raised until it is heard again.
+            isStale(timed, TelemetryKind.BATTERY) -> (wasActive intersect BATTERY_ALERTS) + Alert.BatteryUnknown
+
+            else -> freshBatteryAlerts(timed.value, wasActive)
+        }
 
     private fun freshBatteryAlerts(battery: Battery, wasActive: Set<Alert>): Set<Alert> = buildSet {
         val remaining = battery.remaining
@@ -92,16 +113,19 @@ class AlertRule(
         }
     }
 
-    private fun gpsAlerts(timed: Timed<GpsStatus>?, wasActive: Set<Alert>): Set<Alert> = when {
-        // Nothing received yet is no fix, never a fix.
-        timed == null -> setOf(Alert.GpsFixLost)
+    private fun gpsAlerts(timed: Timed<GpsStatus>?, evaluatingSince: TimeMark, wasActive: Set<Alert>): Set<Alert> =
+        when {
+            // Nothing received yet is no fix, never a fix, once it has had its time to arrive.
+            timed == null && isLate(TelemetryKind.GPS, evaluatingSince) -> setOf(Alert.GpsFixLost)
 
-        isStale(timed, TelemetryKind.GPS) -> wasActive intersect setOf(Alert.GpsFixLost)
+            timed == null -> wasActive intersect setOf(Alert.GpsFixLost)
 
-        timed.value.fixType.isFix3d -> emptySet()
+            isStale(timed, TelemetryKind.GPS) -> wasActive intersect setOf(Alert.GpsFixLost)
 
-        else -> setOf(Alert.GpsFixLost)
-    }
+            timed.value.fixType.isFix3d -> emptySet()
+
+            else -> setOf(Alert.GpsFixLost)
+        }
 
     private fun staleAlerts(telemetry: Telemetry): Set<Alert> = TelemetryKind.entries
         .filter { kind -> telemetry[kind]?.let { isStale(it, kind) } == true }
@@ -110,7 +134,14 @@ class AlertRule(
     private fun isStale(timed: Timed<*>, kind: TelemetryKind): Boolean =
         staleness.isStale(kind, timed.receivedAt.elapsedNow())
 
+    /** A value of [kind] never received is late once the vehicle has been evaluated for its staleness threshold. */
+    private fun isLate(kind: TelemetryKind, evaluatingSince: TimeMark): Boolean =
+        staleness.isStale(kind, evaluatingSince.elapsedNow())
+
     private companion object {
+        /** The values that raise an alert when never received, once they are late ([evaluate]). */
+        val NEVER_RECEIVED_ALERTED: Set<TelemetryKind> = setOf(TelemetryKind.BATTERY, TelemetryKind.GPS)
+
         val ENERGY_ALERTS: Set<Alert> = setOf(Alert.BatteryCritical, Alert.BatteryLow)
         val BATTERY_ALERTS: Set<Alert> = ENERGY_ALERTS + setOf(Alert.BatteryUnhealthy, Alert.BatteryUnknown)
     }
