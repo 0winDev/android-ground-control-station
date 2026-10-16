@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.geo.Mgrs
 import com.owindev.gcs.core.domain.telemetry.AirData
 import com.owindev.gcs.core.domain.telemetry.Attitude
@@ -253,7 +254,15 @@ private fun HudConnectedWithTelemetryPreview() {
                 datagramCount = 1234,
                 otherVehicles = emptyList(),
                 telemetry = PreviewPanel,
+                alert = AlertBanner.Showing(
+                    alert = Alert.BatteryLow,
+                    occurrence = 1,
+                    acknowledgeable = true,
+                    others = 1,
+                    batteryRemaining = 18,
+                ),
             ),
+            onAcknowledgeAlert = {},
         )
     }
 }

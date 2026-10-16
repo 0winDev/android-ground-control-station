@@ -27,20 +27,28 @@ import kotlin.time.Duration.Companion.seconds
 @Composable
 fun HudScreen(modifier: Modifier = Modifier, viewModel: HudViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    HudContent(state = state, modifier = modifier)
+    HudContent(state = state, onAcknowledgeAlert = viewModel::onAlertAcknowledged, modifier = modifier)
 }
 
 @Composable
-internal fun HudContent(state: HudUiState, modifier: Modifier = Modifier) {
+internal fun HudContent(
+    state: HudUiState,
+    onAcknowledgeAlert: (occurrence: Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     // Link lost replaces the whole HUD at once, never animated in: it must not be missed or delayed.
     when (state) {
         is HudUiState.LinkLost -> LinkLostContent(state = state, modifier = modifier)
-        else -> LinkContent(state = state, modifier = modifier)
+        else -> LinkContent(state = state, onAcknowledgeAlert = onAcknowledgeAlert, modifier = modifier)
     }
 }
 
 @Composable
-private fun LinkContent(state: HudUiState, modifier: Modifier = Modifier) {
+private fun LinkContent(
+    state: HudUiState,
+    onAcknowledgeAlert: (occurrence: Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -51,6 +59,8 @@ private fun LinkContent(state: HudUiState, modifier: Modifier = Modifier) {
         StatusBar(state = state)
         when (state) {
             is HudUiState.Connected -> {
+                // The vehicle's own alerts first: the banners below are about this device and the link.
+                AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
                 UnstableLinkBanner(linkUnstable = state.linkUnstable)
                 OtherVehiclesBanner(systemIds = state.otherVehicles)
             }
@@ -165,6 +175,7 @@ private fun HudContentConnectedPreview() {
                 datagramCount = 1234,
                 otherVehicles = listOf(2),
             ),
+            onAcknowledgeAlert = {},
         )
     }
 }
@@ -181,6 +192,7 @@ private fun HudContentConnectedUnstablePreview() {
                 otherVehicles = emptyList(),
                 linkUnstable = true,
             ),
+            onAcknowledgeAlert = {},
         )
     }
 }
@@ -189,7 +201,7 @@ private fun HudContentConnectedUnstablePreview() {
 @Composable
 private fun HudContentWaitingPreview() {
     GcsTheme {
-        HudContent(state = HudUiState.WaitingForVehicle(port = 14550, datagramCount = 0))
+        HudContent(state = HudUiState.WaitingForVehicle(port = 14550, datagramCount = 0), onAcknowledgeAlert = {})
     }
 }
 
@@ -203,6 +215,7 @@ private fun HudContentLinkLostPreview() {
                 sinceLastHeartbeat = 7.seconds,
                 otherVehicles = emptyList(),
             ),
+            onAcknowledgeAlert = {},
         )
     }
 }

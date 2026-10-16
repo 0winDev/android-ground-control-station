@@ -2,6 +2,8 @@ package com.owindev.gcs.feature.hud
 
 import app.cash.turbine.testIn
 import app.cash.turbine.turbineScope
+import com.owindev.gcs.core.domain.alert.AlertRepository
+import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.geo.Mgrs
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
@@ -58,6 +60,8 @@ class HudViewModelTest {
     private val vehicleRepository: VehicleRepository = mockk()
     private val activeTelemetry = MutableStateFlow<Telemetry?>(null)
     private val telemetryRepository: TelemetryRepository = mockk()
+    private val activeAlerts = MutableStateFlow<Alerts>(Alerts.NotEvaluated)
+    private val alertRepository: AlertRepository = mockk()
 
     private lateinit var viewModel: HudViewModel
 
@@ -67,8 +71,15 @@ class HudViewModelTest {
         every { vehicleRepository.activeSystemId } returns activeSystemId
         every { vehicleRepository.vehicles } returns vehicles
         every { telemetryRepository.activeTelemetry } returns activeTelemetry
-        viewModel =
-            HudViewModel(linkRepository, vehicleRepository, telemetryRepository, LinkLossRule(), StalenessRule())
+        every { alertRepository.activeAlerts } returns activeAlerts
+        viewModel = HudViewModel(
+            linkRepository,
+            vehicleRepository,
+            telemetryRepository,
+            alertRepository,
+            LinkLossRule(),
+            StalenessRule(),
+        )
     }
 
     @Tag("REQ-005")
@@ -381,6 +392,7 @@ class HudViewModelTest {
                     linkRepository,
                     vehicleRepository,
                     telemetryRepository,
+                    alertRepository,
                     LinkLossRule(timeout = CUSTOM_TIMEOUT),
                     StalenessRule(),
                 )

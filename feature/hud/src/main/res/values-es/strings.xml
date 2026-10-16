@@ -64,4 +64,30 @@
         <item quantity="many">Otros vehículos detectados (SYS %1$s)</item>
         <item quantity="other">Otros vehículos detectados (SYS %1$s)</item>
     </plurals>
+    <string name="hud_alert_level_advisory">Aviso</string>
+    <string name="hud_alert_level_caution">Precaución</string>
+    <string name="hud_alert_level_emergency">Emergencia</string>
+    <string name="hud_alert_battery_critical">Batería crítica</string>
+    <string name="hud_alert_battery_critical_percent">Batería crítica (%1$d %%)</string>
+    <string name="hud_alert_battery_low">Batería baja</string>
+    <string name="hud_alert_battery_low_percent">Batería baja (%1$d %%)</string>
+    <string name="hud_alert_battery_unhealthy">Batería con fallo o en failsafe</string>
+    <string name="hud_alert_battery_unknown">Estado de la batería desconocido</string>
+    <string name="hud_alert_gps_fix_lost">Sin fix GPS 3D</string>
+    <string name="hud_alert_stale_position">Datos de posición desactualizados</string>
+    <string name="hud_alert_stale_attitude">Datos de actitud desactualizados</string>
+    <string name="hud_alert_stale_air_data">Datos de velocidad desactualizados</string>
+    <string name="hud_alert_stale_battery">Datos de batería desactualizados</string>
+    <string name="hud_alert_stale_gps">Datos de GPS desactualizados</string>
+    <string name="hud_alert_acknowledge">Reconocer</string>
+    <plurals name="hud_alert_others_description">
+        <item quantity="one">%1$d alerta más activa</item>
+        <item quantity="many">%1$d alertas más activas</item>
+        <item quantity="other">%1$d alertas más activas</item>
+    </plurals>
+    <plurals name="hud_alerts_acknowledged">
+        <item quantity="one">%1$d alerta reconocida sigue activa</item>
+        <item quantity="many">%1$d alertas reconocidas siguen activas</item>
+        <item quantity="other">%1$d alertas reconocidas siguen activas</item>
+    </plurals>
 </resources>
