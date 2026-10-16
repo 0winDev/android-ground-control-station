@@ -94,25 +94,27 @@ internal class DefaultAlertRepository @Inject constructor(
 
     override val activeAlerts: StateFlow<Alerts> = channelFlow {
         launch {
-            // Each new evaluation cancels the wait of the one before.
-            evaluations.collectLatest { evaluation ->
-                if (evaluation == null) {
-                    change { Alerts.NotEvaluated }
-                    return@collectLatest
+            try {
+                // Each new evaluation cancels the wait of the one before.
+                evaluations.collectLatest { evaluation ->
+                    if (evaluation == null) {
+                        change { Alerts.NotEvaluated }
+                        return@collectLatest
+                    }
+                    while (true) {
+                        val active = change { previous -> evaluate(previous, evaluation) }.active()
+                        val untilNext =
+                            rule.untilNextEvaluation(active, evaluation.telemetry, evaluation.evaluatingSince)
+                        delay(untilNext ?: awaitCancellation())
+                    }
                 }
-                while (true) {
-                    val active = change { previous -> evaluate(previous, evaluation) }.active()
-                    val untilNext = rule.untilNextEvaluation(active, evaluation.telemetry, evaluation.evaluatingSince)
-                    delay(untilNext ?: awaitCancellation())
-                }
+            } finally {
+                // Nobody observes them any more: forgotten, not cleared, so nothing is logged. Reset here, once
+                // every evaluation has stopped, so none can write its alerts back after it.
+                alerts.value = Alerts.NotEvaluated
             }
         }
-        try {
-            alerts.collect(::send)
-        } finally {
-            // Nobody observes them any more: forgotten, not cleared, so nothing is logged.
-            alerts.value = Alerts.NotEvaluated
-        }
+        alerts.collect(::send)
     }
         .stateIn(
             scope = scope,
