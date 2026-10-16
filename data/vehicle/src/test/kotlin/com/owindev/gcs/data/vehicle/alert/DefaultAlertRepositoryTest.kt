@@ -338,14 +338,28 @@ class DefaultAlertRepositoryTest {
         }
 
     @Test
-    fun `GIVEN the alerts observed WHEN reading the vehicles THEN are observed too, deciding the active one`() =
+    fun `GIVEN the boot battery on a disarmed vehicle WHEN it arms THEN the battery is an emergency`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(BOOT_BATTERY)
+            repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
+
+            vehicles.value = mapOf(VEHICLE to vehicle(VEHICLE, clock.markNow(), armed = true))
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(UNHEALTHY.raised(2), UNKNOWN.raised(1)))
+        }
+
+    @Test
+    fun `GIVEN the alerts observed WHEN reading the vehicles THEN are observed, for the active one and its arming`() =
         testScope.runTest {
             repository.activeAlerts.launchIn(backgroundScope)
 
             runCurrent()
             val result = vehicles.subscriptionCount.value
 
-            result shouldBeEqualTo 1
+            result shouldBeEqualTo 2
         }
 
     @Test
@@ -368,7 +382,10 @@ class DefaultAlertRepositoryTest {
 
     /** Battery and GPS with a 3D fix, received [receivedAt]. */
     private fun telemetry(remaining: Int, receivedAt: TimeMark = clock.markNow()): Telemetry =
-        Telemetry(battery = Timed(battery(remaining), receivedAt), gps = Timed(GPS_3D_FIX, receivedAt))
+        telemetry(battery(remaining), receivedAt)
+
+    private fun telemetry(battery: Battery, receivedAt: TimeMark = clock.markNow()): Telemetry =
+        Telemetry(battery = Timed(battery, receivedAt), gps = Timed(GPS_3D_FIX, receivedAt))
 }
 
 private const val TAG = "AlertRepository"
@@ -381,6 +398,10 @@ private val LOW = Alert.BatteryLow
 private val CRITICAL = Alert.BatteryCritical
 private val STALE_GPS = Alert.TelemetryStale(TelemetryKind.GPS)
 private val UNKNOWN = Alert.BatteryUnknown
+private val UNHEALTHY = Alert.BatteryUnhealthy
+
+/** As TelemetryMapper maps the real boot frame `truncated/sys_status.bin` (TelemetryMapperTest). */
+private val BOOT_BATTERY = Battery(voltage = null, current = null, remaining = null, monitored = true, healthy = false)
 
 private val GPS_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.GPS)
 private val BATTERY_STALE_AFTER = StalenessRule.DEFAULT_THRESHOLDS.getValue(TelemetryKind.BATTERY)
@@ -400,8 +421,8 @@ private val GPS_3D_FIX = GpsStatus(
     yaw = null,
 )
 
-private fun vehicle(systemId: SystemId, heardAt: TimeMark) = Vehicle(
-    state = VehicleState(systemId, VehicleType.COPTER, FlightMode.Named("Stabilize"), armed = false),
+private fun vehicle(systemId: SystemId, heardAt: TimeMark, armed: Boolean = false) = Vehicle(
+    state = VehicleState(systemId, VehicleType.COPTER, FlightMode.Named("Stabilize"), armed = armed),
     link = VehicleLink.CONNECTED,
     lastHeartbeat = heardAt,
 )

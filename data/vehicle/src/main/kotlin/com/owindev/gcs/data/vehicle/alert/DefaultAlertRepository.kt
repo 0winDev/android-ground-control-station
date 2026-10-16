@@ -8,6 +8,7 @@ import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import java.util.concurrent.atomic.AtomicLong
@@ -58,7 +59,7 @@ import kotlinx.coroutines.launch
 @Singleton
 internal class DefaultAlertRepository @Inject constructor(
     private val telemetryRepository: TelemetryRepository,
-    vehicleRepository: VehicleRepository,
+    private val vehicleRepository: VehicleRepository,
     private val rule: AlertRule,
     private val timeSource: TimeSource.WithComparableMarks,
     @ApplicationScope scope: CoroutineScope,
@@ -74,15 +75,19 @@ internal class DefaultAlertRepository @Inject constructor(
     private val evaluations: Flow<Evaluation?> = vehicleRepository.vehicles
         .combine(vehicleRepository.activeSystemId) { _, systemId -> systemId }
         .distinctUntilChanged()
-        .flatMapLatest { systemId -> if (systemId == null) flowOf(null) else evaluationsOfNewVehicle() }
+        .flatMapLatest { systemId -> if (systemId == null) flowOf(null) else evaluationsOfNewVehicle(systemId) }
 
-    /** Starts from [Alerts.NotEvaluated], so nothing of the vehicle active before is carried over. */
-    private fun evaluationsOfNewVehicle(): Flow<Evaluation?> = flow {
+    /**
+     * Starts from [Alerts.NotEvaluated], so nothing of the vehicle active before is carried over. Its armed state
+     * comes from its HEARTBEAT; a vehicle not heard is taken as armed, so a failing monitor is never played down.
+     */
+    private fun evaluationsOfNewVehicle(systemId: SystemId): Flow<Evaluation?> = flow {
         emit(null)
         val evaluatingSince = timeSource.markNow()
+        val armed = vehicleRepository.vehicles.map { it[systemId]?.state?.armed ?: true }.distinctUntilChanged()
         emitAll(
-            telemetryRepository.activeTelemetry.map { telemetry ->
-                telemetry?.let { Evaluation(it, evaluatingSince) }
+            telemetryRepository.activeTelemetry.combine(armed) { telemetry, isArmed ->
+                telemetry?.let { Evaluation(it, isArmed, evaluatingSince) }
             },
         )
     }
@@ -140,6 +145,7 @@ internal class DefaultAlertRepository @Inject constructor(
         rule.evaluate(
             previous = previous.active(),
             telemetry = evaluation.telemetry,
+            armed = evaluation.armed,
             evaluatingSince = evaluation.evaluatingSince,
             nextOccurrence = occurrences::incrementAndGet,
         ),
@@ -161,8 +167,8 @@ internal class DefaultAlertRepository @Inject constructor(
     /** `BatteryLow (caution)`, `TelemetryStale(kind=GPS) (advisory)`. */
     private fun Alert.describe(): String = "$this (${level.name.lowercase()})"
 
-    /** The active vehicle's [telemetry], whose alerts have been evaluated since [evaluatingSince]. */
-    private data class Evaluation(val telemetry: Telemetry, val evaluatingSince: TimeMark)
+    /** The active vehicle's [telemetry], whether it is [armed], and since when its alerts have been evaluated. */
+    private data class Evaluation(val telemetry: Telemetry, val armed: Boolean, val evaluatingSince: TimeMark)
 
     private companion object {
         const val TAG = "AlertRepository"

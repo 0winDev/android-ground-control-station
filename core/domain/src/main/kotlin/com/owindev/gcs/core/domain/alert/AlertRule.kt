@@ -31,22 +31,29 @@ class AlertRule(
 ) {
 
     /**
-     * The alerts active now, from those [previous]ly active and the [telemetry] as it is now, for a vehicle whose
-     * alerts have been evaluated since [evaluatingSince]. Each alert raised now takes the next number from
-     * [nextOccurrence], which must never give the same one twice.
+     * The alerts active now, from those [previous]ly active and the [telemetry] as it is now, for a vehicle that is
+     * [armed] or not and whose alerts have been evaluated since [evaluatingSince]. Each alert raised now takes the
+     * next number from [nextOccurrence], which must never give the same one twice.
      *
      * A battery or GPS never received is unknown, never OK, but only once the vehicle has been evaluated for that
      * value's staleness threshold: until then it has had no time to arrive, as when the link has just started and
      * its streams were just requested, and an alert raised then would be a false one.
+     *
+     * A battery monitor that is not healthy is an emergency ([Alert.BatteryUnhealthy]), except while the vehicle is
+     * disarmed and the monitor has no voltage reading: ArduPilot can send that at boot, before the monitor has read
+     * anything (`truncated/sys_status.bin`, enabled, not healthy, 0 mV), and it is then only unknown
+     * ([Alert.BatteryUnknown]). Armed, a monitor that fails is always an emergency, reading or not. On ArduPilot's
+     * battery failsafe the voltage keeps arriving (#41), so it stays an emergency armed or not.
      */
     fun evaluate(
         previous: List<ActiveAlert>,
         telemetry: Telemetry,
+        armed: Boolean,
         evaluatingSince: TimeMark,
         nextOccurrence: () -> Long,
     ): List<ActiveAlert> {
         val wasActive = previous.map(ActiveAlert::alert).toSet()
-        val active = batteryAlerts(telemetry.battery, evaluatingSince, wasActive) +
+        val active = batteryAlerts(telemetry.battery, armed, evaluatingSince, wasActive) +
             gpsAlerts(telemetry.gps, evaluatingSince, wasActive) +
             staleAlerts(telemetry, previous)
         val kept = previous.filter { it.alert in active }
@@ -81,23 +88,29 @@ class AlertRule(
         if (it.occurrence == occurrence && it.alert.level != AlertLevel.EMERGENCY) it.copy(acknowledged = true) else it
     }
 
-    private fun batteryAlerts(timed: Timed<Battery>?, evaluatingSince: TimeMark, wasActive: Set<Alert>): Set<Alert> =
-        when {
-            // Nothing received yet is unknown, never OK, once it has had its time to arrive.
-            timed == null && isLate(TelemetryKind.BATTERY, evaluatingSince) -> setOf(Alert.BatteryUnknown)
+    private fun batteryAlerts(
+        timed: Timed<Battery>?,
+        armed: Boolean,
+        evaluatingSince: TimeMark,
+        wasActive: Set<Alert>,
+    ): Set<Alert> = when {
+        // Nothing received yet is unknown, never OK, once it has had its time to arrive.
+        timed == null && isLate(TelemetryKind.BATTERY, evaluatingSince) -> setOf(Alert.BatteryUnknown)
 
-            timed == null -> wasActive intersect BATTERY_ALERTS
+        timed == null -> wasActive intersect BATTERY_ALERTS
 
-            // What it said last may no longer be true: unknown, keeping what it raised until it is heard again.
-            isStale(timed, TelemetryKind.BATTERY) -> (wasActive intersect BATTERY_ALERTS) + Alert.BatteryUnknown
+        // What it said last may no longer be true: unknown, keeping what it raised until it is heard again.
+        isStale(timed, TelemetryKind.BATTERY) -> (wasActive intersect BATTERY_ALERTS) + Alert.BatteryUnknown
 
-            else -> freshBatteryAlerts(timed.value, wasActive)
-        }
+        else -> freshBatteryAlerts(timed.value, armed, wasActive)
+    }
 
-    private fun freshBatteryAlerts(battery: Battery, wasActive: Set<Alert>): Set<Alert> = buildSet {
+    private fun freshBatteryAlerts(battery: Battery, armed: Boolean, wasActive: Set<Alert>): Set<Alert> = buildSet {
         val remaining = battery.remaining
         if (!battery.monitored || battery.voltage == null || remaining == null) add(Alert.BatteryUnknown)
-        if (battery.monitored && !battery.healthy) add(Alert.BatteryUnhealthy)
+        // Disarmed with no reading yet, as at boot, an unhealthy monitor is only unknown (added above).
+        val failing = battery.monitored && !battery.healthy
+        if (failing && (armed || battery.voltage != null)) add(Alert.BatteryUnhealthy)
         // Without a monitor or a remaining energy, the energy alerts stay as they were. An unhealthy monitor still
         // drives them: ArduPilot sends no remaining energy (-1) when the monitor itself fails, so a percentage from
         // an unhealthy one is real, sent after the battery failsafe has triggered and while the battery goes on

@@ -41,7 +41,7 @@ class AlertRuleTest {
         val energies = listOf(21, 20, 11, 10)
 
         val result = energies.map { remaining ->
-            rule.evaluate(NONE, telemetry(battery(remaining = remaining)), evaluatingSince, ::nextOccurrence)
+            rule.evaluate(NONE, telemetry(battery(remaining = remaining)), ARMED, evaluatingSince, ::nextOccurrence)
         }
 
         result shouldBeEqualTo listOf(NONE, listOf(LOW.raised(1)), listOf(LOW.raised(2)), listOf(CRITICAL.raised(3)))
@@ -55,6 +55,7 @@ class AlertRuleTest {
             rule.evaluate(
                 listOf(LOW.raised(PREVIOUS)),
                 telemetry(battery(remaining = remaining)),
+                ARMED,
                 evaluatingSince,
                 ::nextOccurrence,
             )
@@ -71,6 +72,7 @@ class AlertRuleTest {
             rule.evaluate(
                 listOf(CRITICAL.raised(PREVIOUS)),
                 telemetry(battery(remaining = remaining)),
+                ARMED,
                 evaluatingSince,
                 ::nextOccurrence,
             )
@@ -87,6 +89,7 @@ class AlertRuleTest {
             rule.evaluate(
                 listOf(CRITICAL.raised(PREVIOUS)),
                 telemetry(battery(remaining = remaining)),
+                ARMED,
                 evaluatingSince,
                 ::nextOccurrence,
             )
@@ -100,7 +103,7 @@ class AlertRuleTest {
         val energies = listOf(0, 100)
 
         val result = energies.map { remaining ->
-            rule.evaluate(NONE, telemetry(battery(remaining = remaining)), evaluatingSince, ::nextOccurrence)
+            rule.evaluate(NONE, telemetry(battery(remaining = remaining)), ARMED, evaluatingSince, ::nextOccurrence)
         }
 
         result shouldBeEqualTo listOf(listOf(CRITICAL.raised(1)), NONE)
@@ -110,7 +113,13 @@ class AlertRuleTest {
     fun `GIVEN an acknowledged low battery WHEN it reaches critical THEN is a new alert, not acknowledged`() {
         val previous = listOf(LOW.raised(PREVIOUS, acknowledged = true))
 
-        val result = rule.evaluate(previous, telemetry(battery(remaining = 10)), evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(
+            previous,
+            telemetry(battery(remaining = 10)),
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo listOf(CRITICAL.raised(1))
     }
@@ -119,7 +128,13 @@ class AlertRuleTest {
     fun `GIVEN an acknowledged low battery WHEN it is still low THEN stays acknowledged`() {
         val previous = listOf(LOW.raised(PREVIOUS, acknowledged = true))
 
-        val result = rule.evaluate(previous, telemetry(battery(remaining = 15)), evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(
+            previous,
+            telemetry(battery(remaining = 15)),
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo previous
     }
@@ -127,9 +142,21 @@ class AlertRuleTest {
     @Test
     fun `GIVEN an acknowledged alert that cleared WHEN it is raised again THEN is a new one, not acknowledged`() {
         val previous = listOf(LOW.raised(PREVIOUS, acknowledged = true))
-        val cleared = rule.evaluate(previous, telemetry(battery(remaining = 50)), evaluatingSince, ::nextOccurrence)
+        val cleared = rule.evaluate(
+            previous,
+            telemetry(battery(remaining = 50)),
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
 
-        val result = rule.evaluate(cleared, telemetry(battery(remaining = 20)), evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(
+            cleared,
+            telemetry(battery(remaining = 20)),
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo listOf(LOW.raised(1))
     }
@@ -139,7 +166,7 @@ class AlertRuleTest {
         val telemetry = telemetry(battery(remaining = 100), gps = gps(), receivedAt = clock.markNow())
         clock += BATTERY_STALE_AFTER
 
-        val result = rule.evaluate(listOf(LOW.raised(PREVIOUS)), telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(listOf(LOW.raised(PREVIOUS)), telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(
             LOW.raised(PREVIOUS),
@@ -154,7 +181,7 @@ class AlertRuleTest {
         val telemetry = telemetry(battery(remaining = 5), gps = gps(), receivedAt = clock.markNow())
         clock += BATTERY_STALE_AFTER
 
-        val result = rule.evaluate(NONE, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNKNOWN.raised(1), STALE_BATTERY.raised(2), STALE_GPS.raised(3))
     }
@@ -166,6 +193,7 @@ class AlertRuleTest {
         val result = rule.evaluate(
             NONE,
             Telemetry(battery = battery, gps = Timed(gps(), clock.markNow())),
+            ARMED,
             evaluatingSince,
             ::nextOccurrence,
         )
@@ -182,7 +210,7 @@ class AlertRuleTest {
             gps = Timed(gps(), clock.markNow()),
         )
 
-        val result = rule.evaluate(previous, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(previous, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(
             UNKNOWN.raised(1),
@@ -195,7 +223,13 @@ class AlertRuleTest {
     fun `GIVEN a critical battery WHEN the energy becomes unknown THEN stays critical and is unknown`() {
         val telemetry = telemetry(battery(remaining = null))
 
-        val result = rule.evaluate(listOf(CRITICAL.raised(PREVIOUS)), telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(
+            listOf(CRITICAL.raised(PREVIOUS)),
+            telemetry,
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo listOf(CRITICAL.raised(PREVIOUS), UNKNOWN.raised(1))
     }
@@ -204,7 +238,7 @@ class AlertRuleTest {
     fun `GIVEN a vehicle without a battery monitor WHEN evaluating it THEN the battery is unknown`() {
         val telemetry = telemetry(battery(remaining = null, monitored = false))
 
-        val result = rule.evaluate(NONE, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNKNOWN.raised(1))
     }
@@ -213,7 +247,7 @@ class AlertRuleTest {
     fun `GIVEN a monitored battery without a voltage WHEN evaluating it THEN the battery is unknown, never OK`() {
         val telemetry = telemetry(battery(remaining = 50, voltage = null))
 
-        val result = rule.evaluate(NONE, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNKNOWN.raised(1))
     }
@@ -222,7 +256,7 @@ class AlertRuleTest {
     fun `GIVEN no battery received yet WHEN evaluating it THEN the battery is unknown, never OK`() {
         val telemetry = Telemetry(gps = Timed(gps(), clock.markNow()))
 
-        val result = rule.evaluate(NONE, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNKNOWN.raised(1))
     }
@@ -231,7 +265,7 @@ class AlertRuleTest {
     fun `GIVEN a low battery WHEN the vehicle reports it unhealthy THEN is an emergency and stays low`() {
         val telemetry = telemetry(battery(remaining = 15, healthy = false))
 
-        val result = rule.evaluate(listOf(LOW.raised(PREVIOUS)), telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(listOf(LOW.raised(PREVIOUS)), telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNHEALTHY.raised(1), LOW.raised(PREVIOUS))
     }
@@ -240,7 +274,13 @@ class AlertRuleTest {
     fun `GIVEN a battery failsafe WHEN the battery keeps draining to critical THEN is critical too`() {
         val telemetry = telemetry(battery(remaining = 10, healthy = false))
 
-        val result = rule.evaluate(listOf(UNHEALTHY.raised(PREVIOUS)), telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(
+            listOf(UNHEALTHY.raised(PREVIOUS)),
+            telemetry,
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo listOf(CRITICAL.raised(1), UNHEALTHY.raised(PREVIOUS))
     }
@@ -249,7 +289,7 @@ class AlertRuleTest {
     fun `GIVEN a low battery WHEN an unhealthy monitor sends no remaining energy THEN stays low`() {
         val telemetry = telemetry(battery(remaining = null, healthy = false))
 
-        val result = rule.evaluate(listOf(LOW.raised(PREVIOUS)), telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(listOf(LOW.raised(PREVIOUS)), telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNHEALTHY.raised(2), LOW.raised(PREVIOUS), UNKNOWN.raised(1))
     }
@@ -258,9 +298,45 @@ class AlertRuleTest {
     fun `GIVEN no alert WHEN the vehicle reports a critical battery unhealthy THEN both emergencies are raised`() {
         val telemetry = telemetry(battery(remaining = 5, healthy = false))
 
-        val result = rule.evaluate(NONE, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNHEALTHY.raised(1), CRITICAL.raised(2))
+    }
+
+    @Test
+    fun `GIVEN the boot battery without a reading WHEN the vehicle is disarmed THEN is unknown, not an emergency`() {
+        val telemetry = telemetry(BOOT_BATTERY)
+
+        val result = rule.evaluate(NONE, telemetry, DISARMED, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo listOf(UNKNOWN.raised(1))
+    }
+
+    @Test
+    fun `GIVEN the boot battery without a reading WHEN the vehicle is armed THEN is an emergency`() {
+        val telemetry = telemetry(BOOT_BATTERY)
+
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo listOf(UNHEALTHY.raised(2), UNKNOWN.raised(1))
+    }
+
+    @Test
+    fun `GIVEN a healthy reading WHEN the armed vehicle's monitor fails with no reading THEN is an emergency`() {
+        val healthy = rule.evaluate(NONE, telemetry(battery(remaining = 80)), ARMED, evaluatingSince, ::nextOccurrence)
+
+        val result = rule.evaluate(healthy, telemetry(BOOT_BATTERY), ARMED, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo listOf(UNHEALTHY.raised(2), UNKNOWN.raised(1))
+    }
+
+    @Test
+    fun `GIVEN a battery failsafe on a disarmed vehicle WHEN the voltage keeps arriving THEN is an emergency`() {
+        val telemetry = telemetry(battery(remaining = 50, healthy = false))
+
+        val result = rule.evaluate(NONE, telemetry, DISARMED, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo listOf(UNHEALTHY.raised(1))
     }
 
     @Test
@@ -268,6 +344,7 @@ class AlertRuleTest {
         val active = rule.evaluate(
             NONE,
             telemetry(battery(remaining = 100, healthy = false)),
+            ARMED,
             evaluatingSince,
             ::nextOccurrence,
         )
@@ -293,7 +370,7 @@ class AlertRuleTest {
         )
 
         val result = fixTypes.associateWith { fixType ->
-            rule.evaluate(NONE, telemetry(battery(remaining = 100), gps(fixType)), evaluatingSince) { 1 }
+            rule.evaluate(NONE, telemetry(battery(remaining = 100), gps(fixType)), ARMED, evaluatingSince) { 1 }
         }
 
         result shouldBeEqualTo fixTypes.associateWith { if (it in FIX_3D) NONE else listOf(GPS_LOST.raised(1)) }
@@ -303,7 +380,7 @@ class AlertRuleTest {
     fun `GIVEN no GPS received yet WHEN evaluating it THEN the fix is lost, never OK`() {
         val telemetry = Telemetry(battery = Timed(battery(remaining = 100), clock.markNow()))
 
-        val result = rule.evaluate(NONE, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(GPS_LOST.raised(1))
     }
@@ -313,7 +390,13 @@ class AlertRuleTest {
         val telemetry = telemetry(battery(remaining = 100), gps(GpsFixType.Fix3d), receivedAt = clock.markNow())
         clock += GPS_STALE_AFTER
 
-        val result = rule.evaluate(listOf(GPS_LOST.raised(PREVIOUS)), telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(
+            listOf(GPS_LOST.raised(PREVIOUS)),
+            telemetry,
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo listOf(GPS_LOST.raised(PREVIOUS), STALE_GPS.raised(1))
     }
@@ -326,6 +409,7 @@ class AlertRuleTest {
         val result = rule.evaluate(
             NONE,
             telemetry(battery(remaining = 100)).copy(attitude = attitude),
+            ARMED,
             evaluatingSince,
             ::nextOccurrence,
         )
@@ -341,6 +425,7 @@ class AlertRuleTest {
         val result = rule.evaluate(
             NONE,
             telemetry(battery(remaining = 100)).copy(attitude = attitude),
+            ARMED,
             evaluatingSince,
             ::nextOccurrence,
         )
@@ -377,7 +462,7 @@ class AlertRuleTest {
         val since = clock.markNow()
         clock += BATTERY_STALE_AFTER - 1.milliseconds
 
-        val result = rule.evaluate(NONE, Telemetry(gps = Timed(gps(), clock.markNow())), since, ::nextOccurrence)
+        val result = rule.evaluate(NONE, Telemetry(gps = Timed(gps(), clock.markNow())), ARMED, since, ::nextOccurrence)
 
         result shouldBeEqualTo NONE
     }
@@ -387,7 +472,7 @@ class AlertRuleTest {
         val since = clock.markNow()
         clock += BATTERY_STALE_AFTER
 
-        val result = rule.evaluate(NONE, Telemetry(gps = Timed(gps(), clock.markNow())), since, ::nextOccurrence)
+        val result = rule.evaluate(NONE, Telemetry(gps = Timed(gps(), clock.markNow())), ARMED, since, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(UNKNOWN.raised(1))
     }
@@ -400,6 +485,7 @@ class AlertRuleTest {
         val result = rule.evaluate(
             NONE,
             Telemetry(battery = Timed(battery(100), clock.markNow())),
+            ARMED,
             since,
             ::nextOccurrence,
         )
@@ -415,6 +501,7 @@ class AlertRuleTest {
         val result = rule.evaluate(
             NONE,
             Telemetry(battery = Timed(battery(100), clock.markNow())),
+            ARMED,
             since,
             ::nextOccurrence,
         )
@@ -428,7 +515,7 @@ class AlertRuleTest {
         clock += AlertRule.STALE_MINIMUM_HOLD - 1.milliseconds
         val telemetry = telemetry(battery(remaining = 100)).copy(attitude = Timed(ATTITUDE, clock.markNow()))
 
-        val result = rule.evaluate(previous, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(previous, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo previous
     }
@@ -439,7 +526,7 @@ class AlertRuleTest {
         clock += AlertRule.STALE_MINIMUM_HOLD
         val telemetry = telemetry(battery(remaining = 100)).copy(attitude = Timed(ATTITUDE, clock.markNow()))
 
-        val result = rule.evaluate(previous, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(previous, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo NONE
     }
@@ -449,7 +536,7 @@ class AlertRuleTest {
         val previous = listOf(STALE_ATTITUDE.raised(PREVIOUS, acknowledged = true, raisedAt = clock.markNow()))
         val telemetry = telemetry(battery(remaining = 100)).copy(attitude = Timed(ATTITUDE, clock.markNow()))
 
-        val result = rule.evaluate(previous, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(previous, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo previous
     }
@@ -470,7 +557,7 @@ class AlertRuleTest {
             attitude = Timed(ATTITUDE, clock.markNow() - ATTITUDE_STALE_AFTER),
         )
 
-        val result = rule.evaluate(NONE, telemetry, evaluatingSince, ::nextOccurrence)
+        val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(CRITICAL.raised(1), GPS_LOST.raised(2), STALE_ATTITUDE.raised(3))
     }
@@ -482,6 +569,7 @@ class AlertRuleTest {
         val result = rule.evaluate(
             previous,
             telemetry(battery(remaining = 20), gps(GpsFixType.NoFix)),
+            ARMED,
             evaluatingSince,
             ::nextOccurrence,
         )
@@ -534,7 +622,7 @@ class AlertRuleTest {
         val custom = AlertRule(StalenessRule(), BatteryThresholds(low = 30, critical = 15, hysteresis = 5), clock)
 
         val result = listOf(31, 30, 15).map { remaining ->
-            custom.evaluate(NONE, telemetry(battery(remaining)), evaluatingSince, ::nextOccurrence)
+            custom.evaluate(NONE, telemetry(battery(remaining)), ARMED, evaluatingSince, ::nextOccurrence)
         }
 
         result shouldBeEqualTo listOf(NONE, listOf(LOW.raised(1)), listOf(CRITICAL.raised(2)))
@@ -588,6 +676,15 @@ private val GPS_LOST = Alert.GpsFixLost
 private val STALE_ATTITUDE = Alert.TelemetryStale(TelemetryKind.ATTITUDE)
 private val STALE_BATTERY = Alert.TelemetryStale(TelemetryKind.BATTERY)
 private val STALE_GPS = Alert.TelemetryStale(TelemetryKind.GPS)
+
+private const val ARMED = true
+private const val DISARMED = false
+
+/**
+ * The battery TelemetryMapper maps the real boot frame `truncated/sys_status.bin` to (TelemetryMapperTest): the
+ * monitor enabled but not healthy, with no voltage, current or remaining energy.
+ */
+private val BOOT_BATTERY = Battery(voltage = null, current = null, remaining = null, monitored = true, healthy = false)
 
 /** Longer than any staleness threshold. */
 private val SETTLED = 1.minutes
