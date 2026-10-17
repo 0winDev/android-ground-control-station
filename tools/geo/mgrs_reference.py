@@ -90,7 +90,7 @@ GEOGRAPHIC_POINTS = [
 ]
 
 # The only point where the references differ by definition: GeographicLib uses UTM for -80 <= latitude < 84 and UPS
-# from 84N, GEOTRANS includes 84N in UTM (35X). The domain follows GeographicLib (owner's decision, #40): exactly at
+# from 84N, GEOTRANS includes 84N in UTM (35X). The domain follows GeographicLib (decided in #40): exactly at
 # the limit it says "not available" rather than give a value one reference rejects. Maps the point to what each
 # reference must return; anything else still stops the script.
 KNOWN_DISAGREEMENTS = {
