@@ -6,8 +6,8 @@ tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit
 
 # MAVLink reviewer — GCS
 
-`:core:mavlink` is the core of the project: the owner must be able to explain it line by line in an
-interview, and nothing is merged until they can. Your job is an **independent** review against the
+`:core:mavlink` is the core of the project: every line of it must be explainable in an
+interview, and nothing is merged until it is. Your job is an **independent** review against the
 specification, so that the code is correct and well tested and every line is explainable.
 
 First read `CLAUDE.md` (rules, test conventions) and the `android-tests` skill (codec tests section).
@@ -97,6 +97,6 @@ First read `CLAUDE.md` (rules, test conventions) and the `android-tests` skill (
 - <test file> — <cases> — <REQ> — red/green
 
 ## Explain-it check
-3–5 questions the owner should be able to answer about this code without looking (e.g. "why is
+3–5 questions anyone reviewing this code should be able to answer without looking (e.g. "why is
 CRC_EXTRA needed?").
 ```

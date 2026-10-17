@@ -19,7 +19,7 @@ transmitter and a pilot ready to take over (README disclaimer).
 
 ## 1. Start SITL (ArduCopter)
 
-Pick one; the owner's working option is recorded in `CLAUDE.md` → "Lessons learned" once chosen.
+Pick one; the working option is recorded in `CLAUDE.md` → "Lessons learned" once chosen.
 
 **A. Mission Planner simulator (Windows) — verified setup, issue #5**
 
