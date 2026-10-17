@@ -177,85 +177,81 @@ No Robolectric. Details and examples: `android-tests` skill.
 
 ## Lessons learned
 
-Add one line per closed issue: what surprised us and what to do differently.
+What surprised us and what to do differently, by topic. After each issue, add a line under its topic or append
+the issue number to an existing one.
 
-- #5 SITL: Mission Planner's simulator works on the owner's PC (no WSL/Docker needed). Its MAVLink
-  Mirror binds the port it sends to and only one mirror works at a time, so QGroundControl connects
-  to SITL directly over TCP 5762. Stable ArduCopter wasn't selectable: record the exact version
-  (AUTOPILOT_VERSION) with every capture. HEARTBEAT never truncates; truncation fixtures come from
-  other messages.
-- #6 UDP count: QGroundControl's UDP AutoConnect holds host port 14550, which silently breaks the
-  emulator redirect. Redirect a free host port instead (`adb emu redir add udp:14560:14550`) and
-  mirror to it; check who holds a port with `netstat -ano` before blaming the app.
-- #8 Checksum: HEARTBEAT is defined in `minimal.xml`, not `common.xml`, so a parser that skips the
-  includes misses it. Claude Code's auto mode silently denies edits under `.claude/` (permissions,
-  agents, commands); leave auto mode for those instead of retrying.
-- #9 Parser: a false start marker with a plausible header keeps the parser waiting for a full claimed
-  frame, so frames at the very end of a test stream only come out once more bytes arrive; tests that
-  inject noise must keep the stream going. Derive edge-case frames (signed, odd flags) with pymavlink
-  and a regeneration script, never by hand or with our own codec.
-- #10 Decoder: Kluent compares maps in iteration order, so count maps must be sorted on both sides.
-  The truncation tests only make sense through the parser (CRC over the wire bytes, then zero-fill).
-- #11 Vehicle state: a `SharedFlow` with replay hands an old message to a late subscriber as if it were
-  new; keep messages without replay and put what late subscribers need (bind failure, counts) in a
-  separate `StateFlow`. `stateIn` keeps its last value after it stops, so time-based state must not
-  depend on observers to stay current.
-- #13 HUD: `adb emu redir` rules die with the emulator, so after a restart nothing reaches the app; run
-  `adb emu redir list` first. A `stateIn` value outlives its upstream, so a screen that resubscribes can
-  draw a stale CONNECTED: let the state expire to a neutral `Starting` (`replayExpiration = ZERO`).
-- #14 GCS HEARTBEAT: on the API 36 emulator Android blocks a background app's network after about 5 s
-  (`sendto` → `EPERM`), sooner than our own stop timeouts; measure in SITL before documenting timings.
-  Mission Planner's mirror kept feeding the emulator on a second redirect, so the app followed whichever
-  route spoke last: remove stale redirects. On Windows `NUL` claims to be a terminal, so scripts started
-  in the background need an explicit flag instead of `isatty()`.
-- #25 Transport recovery: a `try/catch` around `collect` also catches what `emit` throws downstream;
-  catch only the upstream with `.catch`. `shareIn` does not hand upstream crashes to subscribers, so a
-  "crashes on purpose" test needs its own scope with a handler. In airplane mode the emulator's bound UDP
-  socket never fails, so a real transport failure could not be reproduced in SITL.
-- #35 COMMAND_LONG/ACK: extension fields keep XML order on the wire (only base fields are sorted by size),
-  and zero-fill cannot produce a field's "invalid" value (COMMAND_ACK `progress` unknown is 255), so the data
-  layer must not read a restored 0 as real. List an existing capture with pymavlink before planning a new one:
-  `session.tlog` already had the MAVLink 2 commands. ktlint and detekt skip KDoc line length; check it by hand.
-- #36 Telemetry streams: ArduPilot keeps message rates per channel, so Mission Planner's requests on TCP 5760
-  never reach the relay's 5763; measure a baseline on the app's own channel. A trigger derived from StateFlows
-  can conflate LOST → CONNECTED into nothing; let the single writer send each transition through a Channel. In
-  virtual time, a timeout and an answer due at the same instant race: keep test timings off each other's edges.
-- #37 Telemetry decoding: GLOBAL_POSITION_INT now lives in `standard.xml` on master (included by `common.xml`), like
-  HEARTBEAT in `minimal.xml`: search every include before saying a message is missing. Truncation cuts bytes, not
-  fields (throttle 65 = `41 00` gives LEN 19), so take expected LENs from pymavlink, never by hand. Adding messages
-  to the table changes tests that borrowed one as "unknown": pick an unknown example the roadmap will never decode.
-- #38 Battery and GPS: an old fixture is not always what its folder suggests (`truncated/sys_status.bin` is a boot frame
-  with no battery reading, from outside `session.tlog`): decode every fixture you reuse with pymavlink first. Read each
-  field's `invalid` attribute in the XML, not only the issue: GPS_RAW_INT `yaw` has two "unknown" values (0 and UINT16_MAX).
-- #39 Telemetry age: anything that waits for an answer subscribes to the shared `messages` and reopens a closed socket, so
-  gate every background send on "the link is listened to", not only on CONNECTED. The XML is not the whole story:
-  ArduPilot sends `voltage_battery` 0, not UINT16_MAX, without a battery monitor. Mission Planner's SITL updated itself
-  to V4.7.2 official, and the emulator's clock ran 7 s behind the host: query AUTOPILOT_VERSION every session and match
-  logcat to the relay log by events, not timestamps.
-- #31 Flapping link: a StateFlow conflates a status that is set and replaced in the same instant, so tests check statuses
-  by type or by time, never by `take(n)`. A state held to avoid flicker needs a time limit, or a silent socket keeps it
-  forever (found by `safety-reviewer`).
-- #40 MGRS: exactly on a 1 m boundary a nanometre decides the digit, so reference points that do not test truncation stay
-  at least 1 cm off one; GEOTRANS 2.4.2 is not sub-mm accurate, and the two references disagree at exactly 84°N (UPS vs
-  35X). Take expected letters from the reference output, never by hand: two reasons in the CSV were wrong at first.
-- #41 Alerts: a `WhileSubscribed` repository with no consumer evaluates nothing, so a SITL check before its UI needs a
-  temporary, uncommitted observer. ArduPilot only streams to a TCP channel it hears from and forgets channel rates on
-  reboot: SITL tools send their own HEARTBEAT and request their streams again. Read the vehicle's code, not only the docs:
-  its battery failsafe clears the health bit but keeps the voltage and percentage coming. Mission Planner's SITL updated
-  again (git fbd0a316).
-- #49 Out-of-range telemetry: rejecting a value must never erase state. An invalid frame is dropped, not turned
-  into a `null` part, or the stale alert goes quiet (found by `safety-reviewer`). Compare ±π ranges as float32,
-  so a real float ±π reading is kept, and integer ranges with `in`, not `abs()` (`abs(Int.MIN_VALUE)` overflows).
-- #42 HUD: a fresh message is not a fresh value. ArduPilot sends GLOBAL_POSITION_INT 0°, 0° before a position and
-  the last one frozen after losing it, so a position needs a fresh 3D GPS fix, and never 0°, 0°. Check
-  QGroundControl's UI in its docs for the installed version before giving steps, and compare against its MAVLink
-  Inspector. pymavlink's TCP `autoreconnect` gives up after 3 tries: pass `retries` when the autopilot reboots.
-  On Windows a UDP `recvfrom` raises `WinError 10054` after sending to a port nobody holds (emulator not up yet),
-  which silently killed the relay's uplink. A quick-boot emulator snapshot can leave `system_server` dying in a
-  loop: cold boot it with `-no-snapshot-load`.
-- #56 Alert banner: an occurrence id fixes the race in the repository, not the one on screen: a banner that swaps
-  alerts under a finger needs a guard, and an acknowledged caution must still show its level beside a newer
-  advisory (both found by `safety-reviewer`). Changing `BATT_CAPACITY` does not recharge SITL's battery: relaunch
-  the simulator. Two `uiautomator dump` loops at once make each other fail, and Python on Windows writes CRLF
-  unless `newline="
-"`, which ktlint rejects.
+**Protocol and XML**
+- Messages hide in includes: HEARTBEAT is in `minimal.xml`, GLOBAL_POSITION_INT in `standard.xml`; search every
+  include before saying a message is missing (#8, #37).
+- Extension fields keep XML order on the wire; only base fields are sorted by size (#35).
+- Zero-fill cannot produce a field's "invalid" value (COMMAND_ACK `progress` unknown is 255), and a field can have
+  two (GPS_RAW_INT `yaw`: 0 and UINT16_MAX): read each `invalid` attribute and never take a restored 0 as real
+  (#35, #38).
+- Truncation cuts bytes, not fields (throttle 65 = `41 00` gives LEN 19), HEARTBEAT never truncates, and truncation
+  only makes sense through the parser: CRC over the wire bytes, then zero-fill (#5, #10, #37).
+- The XML is not the whole story; read ArduPilot's code. It sends `voltage_battery` 0 without a monitor, keeps the
+  voltage coming after its battery failsafe clears the health bit, and sends GLOBAL_POSITION_INT 0°, 0° before a
+  position and frozen after losing it: a fresh message is not a fresh value (#39, #41, #42).
+- ArduPilot keeps message rates per channel, streams only to a TCP channel it hears from and forgets the rates on
+  reboot: measure on the app's own channel and request the streams again (#36, #41).
+- Rejecting a value must never erase state: drop the invalid frame instead of turning it into a `null` part. Compare
+  ±π ranges as float32 and integer ranges with `in`, not `abs()` (`abs(Int.MIN_VALUE)` overflows) (#49).
+
+**Test data and references**
+- Edge-case frames (signed, odd flags, out of range) and expected LENs come from pymavlink and a regeneration script;
+  MGRS letters from the reference converters' output. By hand, two of #40's reasons were wrong (#9, #37, #40).
+- Decode every fixture you reuse with pymavlink first, and list existing captures before planning a new one: a
+  fixture is not always what its folder suggests (#35, #38).
+- A false start marker with a plausible header keeps the parser waiting for a full frame: noise tests must keep the
+  stream going (#9).
+- Adding a message to the table breaks tests that borrowed it as "unknown": pick one the roadmap will never decode
+  (#37).
+- Kluent compares maps in iteration order: sort both sides (#10).
+- On a 1 m boundary a nanometre decides the MGRS digit, so reference points stay at least 1 cm off one; GEOTRANS
+  2.4.2 is not sub-mm accurate and disagrees with GeoConvert at exactly 84°N (#40).
+
+**Flow and time**
+- A `SharedFlow` with replay hands an old message to a late subscriber as new: messages go without replay, what late
+  subscribers need goes in a `StateFlow` (#11).
+- `stateIn` keeps its last value after it stops and `WhileSubscribed` with no consumer evaluates nothing: time-based
+  state must not depend on observers, screens let their state expire (`replayExpiration = ZERO`), and a SITL check
+  before the UI exists needs a temporary, uncommitted observer (#11, #13, #41).
+- A `StateFlow` conflates a status set and replaced in the same instant: the single writer sends transitions through
+  a `Channel`, and tests check statuses by type or time, never by `take(n)` (#31, #36).
+- In virtual time a timeout and an answer due at the same instant race: keep test timings off each other's edges
+  (#36).
+- A `try/catch` around `collect` also catches what `emit` throws downstream: catch the upstream with `.catch`.
+  `shareIn` does not hand upstream crashes to subscribers, so such a test needs its own scope with a handler (#25).
+- Anything that waits for an answer subscribes to `messages` and reopens a closed socket: gate background sends on
+  "the link is listened to", not only on CONNECTED (#39).
+
+**Safety review**
+- A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
+- An occurrence id fixes a race in the repository, not on screen: a banner that swaps alerts under a finger needs a
+  guard, and an acknowledged caution keeps its level beside a newer advisory (#56).
+
+**SITL and QGroundControl**
+- Mission Planner's simulator on Windows is enough (no WSL/Docker). Its mirror binds the port it sends to and only one
+  works at a time, so QGroundControl connects to SITL directly on TCP 5762 (#5).
+- The simulator updates itself: query AUTOPILOT_VERSION every session and record it with every capture (#5, #39,
+  #41).
+- SITL tools send their own HEARTBEAT and request their streams; pymavlink's TCP `autoreconnect` gives up after 3
+  tries, so pass `retries` when the autopilot reboots (#41, #42).
+- Changing `BATT_CAPACITY` does not recharge the battery: relaunch the simulator (#56).
+- Check QGroundControl's UI in the docs for the installed version, and compare values against its MAVLink Inspector
+  (#42).
+- Measure timings in SITL before documenting them: on the API 36 emulator Android blocks a background app's network
+  after about 5 s (`sendto` → `EPERM`) (#14).
+- In airplane mode the emulator's bound UDP socket never fails, so a transport failure cannot be reproduced there
+  (#25).
+
+**Emulator, Windows and tooling**
+- `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first and
+  remove old redirects (#13, #14).
+- QGroundControl's UDP AutoConnect holds host port 14550: redirect a free port (`adb emu redir add udp:14560:14550`)
+  and check who holds a port with `netstat -ano` (#6).
+- The emulator's clock can run seconds behind the host: match logcat to the relay log by events (#39).
+- On Windows `NUL` claims to be a terminal (scripts in the background need an explicit flag instead of `isatty()`),
+  and Python writes CRLF unless `newline="\n"`, which ktlint rejects (#14, #56).
+- ktlint and detekt skip KDoc line length: check it by hand (#35).
+- Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those instead of retrying (#8).
