@@ -2,7 +2,7 @@ package com.owindev.gcs.core.domain.telemetry
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** The telemetry of the vehicles heard on the link. Implemented in `:data:vehicle`, bound in `:app`. */
+/** The telemetry of the vehicles heard on the link. Implemented in `:data:vehicle` and bound there with Hilt. */
 interface TelemetryRepository {
 
     /**
