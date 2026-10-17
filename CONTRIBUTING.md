@@ -38,7 +38,7 @@ and are done **test-first**:
    `core/mavlink/src/test/resources/`, with expected values from a reference decoder.
 2. The implementation follows until the tests pass.
 3. The `mavlink-reviewer` agent reviews it against the official MAVLink specification.
-4. The owner reviews every line; nothing is merged that the owner cannot explain line by line.
+4. Every line is reviewed; nothing is merged that cannot be explained line by line.
 
 Red tests only live on the feature branch; `main`'s protection only lets a PR merge once CI is green.
 
