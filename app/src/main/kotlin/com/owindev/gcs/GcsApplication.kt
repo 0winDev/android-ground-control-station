@@ -3,6 +3,9 @@ package com.owindev.gcs
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
 
-/** Hilt composition root: `:app` wires the `:core:domain` contracts to their `:data:vehicle` implementations. */
+/**
+ * Hilt's root. The `:core:domain` contracts are bound in `:data:vehicle` (`VehicleDataModule`) and the app's own
+ * settings in `AppModule`.
+ */
 @HiltAndroidApp
 class GcsApplication : Application()

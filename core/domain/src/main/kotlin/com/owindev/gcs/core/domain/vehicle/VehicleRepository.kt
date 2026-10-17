@@ -2,7 +2,7 @@ package com.owindev.gcs.core.domain.vehicle
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** The vehicles heard on the link. Implemented in `:data:vehicle`, bound in `:app`. */
+/** The vehicles heard on the link. Implemented in `:data:vehicle` and bound there with Hilt. */
 interface VehicleRepository {
 
     /**

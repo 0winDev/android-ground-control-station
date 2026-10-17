@@ -12,7 +12,6 @@ class ThemeViewModel @Inject constructor(private val preferences: ThemePreferenc
 
     val palette: StateFlow<GcsPalette> = preferences.palette
 
-    /** One tap switches at once: night to day, day to night. */
     fun onThemeToggled() {
         preferences.set(if (palette.value == GcsPalette.NIGHT) GcsPalette.DAY else GcsPalette.NIGHT)
     }
