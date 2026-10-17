@@ -40,7 +40,7 @@ First read `CLAUDE.md` and the `android-modularization` skill (module map, depen
    needs an agreed issue + ADR).
 5. **Risk-assess each move**: `verifyModuleGraph` allowlist, Hilt bindings still reachable from
    `:app`, `internal` visibility, `:core:mavlink` purity, codec review (moves that touch
-   `core/mavlink/src/main/` need the owner's line-by-line review).
+   `core/mavlink/src/main/` need line-by-line review).
 6. **Order** the moves so each step compiles (leaves first).
 
 ## Output format

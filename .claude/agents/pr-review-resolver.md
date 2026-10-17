@@ -31,7 +31,7 @@ First read `CLAUDE.md` (rules, tone) and `CONTRIBUTING.md` (workflow).
 4. **Classify each comment:**
    - **Auto-apply** — unambiguous (rename, missing null check, extract constant, typo, missing
      assertion). Apply with `Edit`. **Exception: anything under `core/mavlink/src/main/` is never
-     auto-applied** — draft the change and its explanation for the owner's line-by-line review.
+     auto-applied** — draft the change and its explanation for line-by-line review.
    - **Draft a reply** — opinion-based, needs context, or you disagree with reasoning.
    - **Ask the user** — depends on a product/safety decision you cannot infer.
    - **Out of scope** — propose a new issue (`out-of-scope` label) instead of growing the PR.
@@ -53,7 +53,7 @@ First read `CLAUDE.md` (rules, tone) and `CONTRIBUTING.md` (workflow).
 - <file:line> — <comment summary>
   Draft reply: "<text>"
 
-## Codec changes for the owner (<Z>)
+## Codec changes for line-by-line review (<Z>)
 - <file:line> — <what to change and why, with spec link>
 
 ## Blocked on user (<W>)

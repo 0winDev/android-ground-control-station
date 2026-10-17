@@ -60,4 +60,4 @@ If `$ARGUMENTS` is empty, ask for a title and stop.
 - Title in English, ≤ 70 chars, no prefix, no trailing period.
 - No "Generated with" footer.
 - Do not assign anyone unless asked. Do not invent labels.
-- A `codec-review` issue states the test-first flow and the line-by-line owner review before merge.
+- A `codec-review` issue states the test-first flow and the line-by-line review before merge.

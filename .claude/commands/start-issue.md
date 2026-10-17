@@ -81,7 +81,7 @@ If the issue is `codec-review`, remind the flow before planning:
 - Test-first: **red** tests from **real** SITL captures (fixtures under
   `core/mavlink/src/test/resources/`), with expected values from a reference decoder.
 - Then the implementation until the tests pass; `mavlink-reviewer` reviews it against the spec.
-- Nothing is merged until the owner has reviewed it line by line and can explain every line.
+- Nothing is merged until every line has been reviewed and can be explained.
 
 ## 8. Plan
 
