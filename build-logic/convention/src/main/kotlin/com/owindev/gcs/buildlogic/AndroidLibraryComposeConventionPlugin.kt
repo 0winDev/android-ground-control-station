@@ -5,7 +5,7 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
 
-/** Android library with Compose. */
+/** Android library + Compose, without Hilt: shared UI such as `:core:designsystem`. */
 class AndroidLibraryComposeConventionPlugin : Plugin<Project> {
 
     override fun apply(target: Project) {

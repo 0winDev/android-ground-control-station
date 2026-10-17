@@ -16,7 +16,7 @@ import org.gradle.kotlin.dsl.register
 /**
  * The architecture rules, as data. Dependencies only flow one way:
  * features → :core:domain + :core:designsystem; :data:vehicle → :core:domain + :core:mavlink +
- * :core:transport; every other :core module → nothing. :app wires everything.
+ * :core:transport; every other :core module → nothing. :app may depend on everything.
  * Changing this allowlist is an architecture decision (ADR), not a build fix.
  */
 internal object ModuleGraphRules {
