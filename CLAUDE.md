@@ -29,8 +29,8 @@ Security checklist: `docs/security.md`.
 1. **The MAVLink codec (`:core:mavlink`) is built test-first.** Every change to framing, CRC,
    parsing or signing starts with red tests from real packets captured from ArduPilot SITL; the
    implementation follows until they pass; the `mavlink-reviewer` agent reviews it against the
-   official specification; and nothing is merged until the owner has reviewed it line by line and
-   can explain every line.
+   official specification; and nothing is merged until every line has been reviewed and can be
+   explained.
 2. **`:core:mavlink` is pure Kotlin (JVM)**: no Android dependencies, no external MAVLink library.
    `verifyModuleGraph` enforces it.
 3. **Never invent** MAVLink message fields, IDs, enums, CRC_EXTRA values, ArduPilot parameters or
@@ -51,12 +51,12 @@ Security checklist: `docs/security.md`.
 | Piece | How | Why |
 |---|---|---|
 | Gradle, modules, CI, detekt, Compose UI | Reviewed in the PR | Already mastered in a previous project |
-| MAVLink codec (framing, CRC, parsing, signing) | Test-first from SITL captures, `mavlink-reviewer` review, **owner reviews every line** | The core of the interview |
+| MAVLink codec (framing, CRC, parsing, signing) | Test-first from SITL captures, `mavlink-reviewer` review, **every line reviewed and explained** | The core of the interview |
 | Mission upload state machine | The state diagram is drawn first; the code follows it | Must be drawable on a whiteboard |
 | Geo math (distances, bearings, MGRS) | Every formula is explained with its source in the PR | Learn just enough georeferencing |
 | README, ADRs, diagrams | Each ADR records context, decision and consequences, and is reviewed in its PR | Every decision must be defensible |
 
-**Control rule:** if the owner cannot explain a PR without looking at it, it is not merged.
+**Control rule:** a PR that cannot be explained without looking at it is not merged.
 
 ## Architecture
 
@@ -90,7 +90,7 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 3. Start every issue with `/start-issue <n>` (checks, summary, assignment, branch, required reading,
    plan); get the plan approved before writing code.
 4. `codec-review` issues: red tests from SITL captures → implementation → `mavlink-reviewer`
-   review → line-by-line review by the owner.
+   review → line-by-line review.
 5. Verify: `./gradlew ktlintCheck detekt verifyModuleGraph lintDebug test assembleDebug`; SITL vs
    QGroundControl (`sitl-verify`) for protocol/telemetry/commands; `safety-reviewer` for failsafe,
    commands, missions or signing; always update the REQ → test matrix.
