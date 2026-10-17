@@ -3,8 +3,8 @@ package com.owindev.gcs.feature.hud
 import com.owindev.gcs.core.domain.telemetry.Battery
 
 /**
- * What the battery chip says (REQ-029), decided apart from Compose so it can be tested. The alert banner is #56,
- * so until then the chip itself must never show an unknown or unhealthy battery as an ordinary reading (#41).
+ * What the battery chip says (REQ-029), decided apart from Compose so it can be tested. The chip never shows an
+ * unknown or unhealthy battery as an ordinary reading (#41), even while the alert banner shows another alert.
  */
 internal sealed interface BatteryChipState {
 
