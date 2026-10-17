@@ -77,5 +77,5 @@ GitHub until the owner approves the full draft.**
 
 - English, no "Generated with" footer.
 - `codec-review` issues say "test-first (red tests from SITL captures), then the implementation,
-  review by `mavlink-reviewer`, line-by-line review by the owner before merge".
+  review by `mavlink-reviewer`, line-by-line review before merge".
 - Don't pull in dependencies of later phases (MapLibre before v0.3, Room before v0.5, …).
