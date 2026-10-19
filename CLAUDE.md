@@ -134,7 +134,27 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Meaningful names; short functions; multiline formatting when a call or constructor has more than
   one argument.
 - Extract repeated literals to named constants; no magic numbers in protocol or safety code.
-- Comments explain *why*, not *what*; KDoc on public APIs of `:core:*` modules.
+
+## Comments and documentation
+
+Write as little as the reader needs, once.
+
+**Code**
+- The code explains itself: clear names and small functions before comments.
+- Comment only what the code cannot say: a non-obvious reason, a spec citation, a known pitfall. No comments that
+  restate the line, narrate steps, or tell history or changes.
+- KDoc only on public APIs of `:core:*` modules, in one or two sentences: what it does and what it guarantees. Do not
+  repeat the name or obvious parameters.
+- Tests: the name explains the case; no comments inside unless there is a real pitfall.
+
+**Documentation**
+- PR description: what changes, why, and how it was verified; about 15 lines at most. No review chronicle, no tables
+  of everything.
+- Commits: subject, plus a short body only when the reason is not obvious.
+- ADR: one page (context, decision, consequences).
+- Fixture README: one table (file, origin, what it proves), no prose.
+- Requirements matrix: one line per row.
+- Lessons learned: only what prevents a future mistake, one line each.
 
 ## Testing rules
 
@@ -211,6 +231,10 @@ the issue number to an existing one.
 - Kluent compares maps in iteration order: sort both sides (#10).
 - pymavlink and the C library drop every byte a corrupted LEN claims after a bad checksum, while our parser drops
   only the start marker: pymavlink proves a corrupted frame is invalid, not which frames come after it (#67).
+- A reader that does not check checksums cannot anchor a plausibility window on one record: a false record taken
+  from garbage would anchor a timestamp no real record is near. Anchor on two consecutive records (#68).
+- A test of a tolerant reader can pass for the wrong reason (another recovery path masked the rule): check it with a
+  mutation of the rule it guards (#68).
 - On a 1 m boundary a nanometre decides the MGRS digit, so reference points stay at least 1 cm off one; GEOTRANS
   2.4.2 is not sub-mm accurate and disagrees with GeoConvert at exactly 84°N (#40).
 
