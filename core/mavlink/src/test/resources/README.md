@@ -176,9 +176,9 @@ unknown/scaled-pressure.bin             fd 0e 00 00 3b 01 01 1d 00 00 e9 0f 06 0
 `derived/session-stream.bin` as a parser input (counts from pymavlink, printed by `derive_fixtures.py`): 5,524 frames, 5,522 MAVLink 2 frames (all incompat `0x00`, 39 message
 IDs including ArduPilot-dialect ones), 133 of them HEARTBEAT, plus 2 MAVLink 1 frames (`0xFE`, COMMAND_LONG, 41 bytes each, no `0xFD` inside). With a
 lookup that knows only HEARTBEAT, the other 5,389 MAVLink 2 frames are unknown message IDs.
-With the full message table (#10, #35, #37, #38): 133 HEARTBEAT, 325 SYS_STATUS, 325 GPS_RAW_INT, 260
-ATTITUDE, 130 GLOBAL_POSITION_INT, 130 SERVO_OUTPUT_RAW, 260 VFR_HUD, 325 POWER_STATUS, 11 COMMAND_LONG and
-13 COMMAND_ACK frames are known, and the other 3,610 MAVLink 2 frames are unknown message IDs.
+With the full message table (#10, #35, #37, #38, #66): 133 HEARTBEAT, 325 SYS_STATUS, 325 GPS_RAW_INT, 260
+ATTITUDE, 130 GLOBAL_POSITION_INT, 130 SERVO_OUTPUT_RAW, 260 VFR_HUD, 325 POWER_STATUS, 11 COMMAND_LONG, 13
+COMMAND_ACK and 1 HOME_POSITION frames are known, and the other 3,609 MAVLink 2 frames are unknown message IDs.
 
 ## `command/` and the COMMAND fixtures in `derived/` (#35)
 
@@ -433,3 +433,53 @@ MAVLink 2 telemetry frames carry each value the app maps (a documented "unknown"
 applied): 130 GLOBAL_POSITION_INT, all with a heading; 260 ATTITUDE with roll, pitch and yaw; 260 VFR_HUD with
 airspeed, groundspeed, climb and throttle; 325 GPS_RAW_INT, all with a course and none with a yaw (no
 dual-antenna GPS in SITL).
+
+## HOME_POSITION (#66)
+
+HOME_POSITION (242), defined in `common.xml` (not in `minimal.xml` or `standard.xml`). `heartbeat/session.tlog`
+already holds one from ArduCopter V4.7.2-beta1 (`383331ff`, from AUTOPILOT_VERSION, see "How they were captured";
+system 1, component 1, seq 114), MAVLink 2 and sent once home was set, so no
+new capture was needed; the capture of a home set again when arming is #69's. The `derived/` frames are re-packed
+**by pymavlink 2.4.50** from it (same seq, system and component). Regenerate with
+`py tools/fixtures/derive_fixtures.py` (same bytes).
+
+Wire layout (`mavparse` over pymavlink 2.4.50's `common.xml` and over `mavlink/mavlink` master `2e2b6af`: CRC_EXTRA
+104 and the same offsets on both). LEN 52 without its extension, full LEN 60:
+
+- `latitude`, `longitude` (int32 degE7, 0, 4), `altitude` (int32 mm, MSL, 8), `x`, `y`, `z` (float m, 12–20),
+  `q` (float[4], 24–36), `approach_x`, `approach_y`, `approach_z` (float m, 40–48). All base fields are 4 bytes,
+  so the XML order is also the wire order.
+- Then the extension `time_usec` (uint64 µs, **52**): an extension keeps its XML place after the base fields, never
+  moved to the front by its 8-byte size.
+
+What ArduPilot sends (`GCS_MAVLINK::send_home_position` in `libraries/GCS_MAVLink/GCS_Common.cpp`, master): nothing
+until home is set; `q` always NaN (master's `common.xml` gives `invalid="[NaN]"`, but zero-fill restores a
+truncated `q` as 0); approach 0, 0, 0; `x`, `y`, `z` NaN without an EKF origin; `time_usec` from
+`AP_HAL::micros64()`, time since boot, so below 2⁵⁶ and always truncated. Only a `time_usec` of 2⁵⁶ or more keeps
+the full LEN 60.
+
+| File | How it was made | Fields (pymavlink) | Used for |
+|---|---|---|---|
+| `telemetry/home-position.bin` | The only real HOME_POSITION (seq 114) of the session | latitude -353633514, longitude 1491652411, altitude 587130, x 0.0111318845, y -0.009078031, z 0.02, q [NaN, NaN, NaN, NaN], approach 0, 0, 0, time_usec 443979837. LEN **56**: `time_usec` fits 4 bytes, its 4 zero high bytes are truncated | Decoder: a real HOME_POSITION, the extension cut inside (REQ-013, REQ-032) |
+| `derived/home-position-full.bin` | The HOME_POSITION re-packed with a distinct value in every field | latitude -353633514, longitude -1491652411, altitude -12345, x 1.5, y -2.25, z 0.75, q [0.5, -0.25, 0.125, -0.0625], approach 3.5, -4.5, 5.25, time_usec 72623859790382856 (`08 07 06 05 04 03 02 01`). LEN 60, nothing truncated | Decoder: every offset, the extension at 52 and the byte order of the uint64 (REQ-032) |
+| `derived/home-position-no-extension.bin` | The HOME_POSITION re-packed with time_usec 0 and approach_z -1.5 | as the real one, approach_z -1.5 (`00 00 c0 bf`), time_usec 0. LEN 52: the extension is truncated whole | Decoder: a frame without its extension reads time_usec 0 (REQ-013, REQ-032) |
+| `derived/home-position-cut-after-q.bin` | The HOME_POSITION re-packed with time_usec 0 | as the real one, time_usec 0. LEN 40: the zero approach and the extension are truncated after the NaN `q` (`00 00 c0 7f`) | Decoder: zero-fill restores whole base fields and the extension (REQ-013, REQ-032) |
+
+Raw bytes:
+
+```
+telemetry/home-position.bin             fd 38 00 00 72 01 01 f2 00 00 16 fb eb ea 3b cf e8 58 7a f5 08 00
+                                        82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
+                                        c0 7f 00 00 c0 7f 00 00 00 00 00 00 00 00 00 00 00 00 3d 98 76 1a
+                                        6c fe
+derived/home-position-full.bin          fd 3c 00 00 72 01 01 f2 00 00 16 fb eb ea c5 30 17 a7 c7 cf ff ff
+                                        00 00 c0 3f 00 00 10 c0 00 00 40 3f 00 00 00 3f 00 00 80 be 00 00
+                                        00 3e 00 00 80 bd 00 00 60 40 00 00 90 c0 00 00 a8 40 08 07 06 05
+                                        04 03 02 01 6a 14
+derived/home-position-no-extension.bin  fd 34 00 00 72 01 01 f2 00 00 16 fb eb ea 3b cf e8 58 7a f5 08 00
+                                        82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
+                                        c0 7f 00 00 c0 7f 00 00 00 00 00 00 00 00 00 00 c0 bf 89 9b
+derived/home-position-cut-after-q.bin   fd 28 00 00 72 01 01 f2 00 00 16 fb eb ea 3b cf e8 58 7a f5 08 00
+                                        82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
+                                        c0 7f 00 00 c0 7f 44 cc
+```
