@@ -255,3 +255,5 @@ the issue number to an existing one.
   and Python writes CRLF unless `newline="\n"`, which ktlint rejects (#14, #56).
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those instead of retrying (#8).
+- CI never runs `check`: its Coverage step calls each module's `koverVerify` by name, so a module with a new
+  minimum must be added there too, or the minimum only fails locally (#63).
