@@ -134,7 +134,27 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Meaningful names; short functions; multiline formatting when a call or constructor has more than
   one argument.
 - Extract repeated literals to named constants; no magic numbers in protocol or safety code.
-- Comments explain *why*, not *what*; KDoc on public APIs of `:core:*` modules.
+
+## Comments and documentation
+
+Write as little as the reader needs, once.
+
+**Code**
+- The code explains itself: clear names and small functions before comments.
+- Comment only what the code cannot say: a non-obvious reason, a spec citation, a known pitfall. No comments that
+  restate the line, narrate steps, or tell history or changes.
+- KDoc only on public APIs of `:core:*` modules, in one or two sentences: what it does and what it guarantees. Do not
+  repeat the name or obvious parameters.
+- Tests: the name explains the case; no comments inside unless there is a real pitfall.
+
+**Documentation**
+- PR description: what changes, why, and how it was verified; about 15 lines at most. No review chronicle, no tables
+  of everything.
+- Commits: subject, plus a short body only when the reason is not obvious.
+- ADR: one page (context, decision, consequences).
+- Fixture README: one table (file, origin, what it proves), no prose.
+- Requirements matrix: one line per row.
+- Lessons learned: only what prevents a future mistake, one line each.
 
 ## Testing rules
 
