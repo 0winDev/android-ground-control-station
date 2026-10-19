@@ -52,7 +52,7 @@ jobs:
         run: >-
           ./gradlew
           :core:mavlink:koverXmlReport :core:mavlink:koverHtmlReport :core:mavlink:koverVerify
-          :core:domain:koverXmlReport :core:domain:koverHtmlReport
+          :core:domain:koverXmlReport :core:domain:koverHtmlReport :core:domain:koverVerify
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug
