@@ -322,6 +322,59 @@ sealed interface MavlinkMessage {
     }
 
     /**
+     * HOME_POSITION (id 242), as defined in https://mavlink.io/en/messages/common.html#HOME_POSITION: "Contains the
+     * home position. The home position is the default position that the system will return to and land on."
+     *
+     * Raw fields in the units of the definition; converting them is up to `:data:vehicle`. Field descriptions
+     * quote `common.xml` on `mavlink/mavlink` master. [altitude] is above mean sea level, not above home.
+     *
+     * [timeUsec] is a MAVLink 2 extension: a sender may omit or truncate it, and then it reads as 0 (the wire rule).
+     * [q1] to [q4] are the four elements of the `q` array in order. Its `invalid` value is NaN in all four, which
+     * zero-fill cannot produce: a truncated `q` reads as 0, 0, 0, 0.
+     *
+     * ArduPilot (`send_home_position` in `libraries/GCS_MAVLink/GCS_Common.cpp`) sends nothing until home is set,
+     * always NaN in `q`, 0 in the approach, NaN in [x], [y], [z] without an EKF origin and [timeUsec] since boot.
+     *
+     * @property latitude "Latitude (WGS84)" in degE7.
+     * @property longitude "Longitude (WGS84)" in degE7.
+     * @property altitude "Altitude (MSL). Positive for up." in mm.
+     * @property x "Local X position of this position in the local coordinate frame (NED)" in m.
+     * @property y "Local Y position of this position in the local coordinate frame (NED)" in m.
+     * @property z "Local Z position of this position in the local coordinate frame (NED: positive "down")" in m.
+     * @property q1 `q[0]` of the "Quaternion indicating world-to-surface-normal and heading transformation of the
+     * takeoff position"; "All fields should be set to NaN if an accurate quaternion for both heading and surface
+     * slope cannot be supplied."
+     * @property q2 `q[1]`, as [q1].
+     * @property q3 `q[2]`, as [q1].
+     * @property q4 `q[3]`, as [q1].
+     * @property approachX "Local X position of the end of the approach vector…" in m (the definition goes on with
+     * how each vehicle type should set it).
+     * @property approachY "Local Y position of the end of the approach vector…" in m, as [approachX].
+     * @property approachZ "Local Z position of the end of the approach vector…" in m, as [approachX].
+     * @property timeUsec "Timestamp (UNIX Epoch time or time since system boot)" in µs, a uint64 read as a [Long]:
+     * the magnitude tells which of the two it is. A negative value means the sender put 2⁶³ or more, out of range.
+     */
+    // One property per field of the message definition (one per element of `q`); grouping them would hide that
+    // mapping.
+    @Suppress("LongParameterList")
+    data class HomePosition(
+        val latitude: Int,
+        val longitude: Int,
+        val altitude: Int,
+        val x: Float,
+        val y: Float,
+        val z: Float,
+        val q1: Float,
+        val q2: Float,
+        val q3: Float,
+        val q4: Float,
+        val approachX: Float,
+        val approachY: Float,
+        val approachZ: Float,
+        val timeUsec: Long,
+    ) : MavlinkMessage
+
+    /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.
      *
