@@ -31,7 +31,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | ID | Requirement | Method |
 |---|---|---|
 | REQ-010 | The codec shall extract MAVLink v2 frames from a byte stream (start marker, header, payload, checksum, optional signature), re-synchronising after invalid bytes, frames split across datagrams and several frames in one datagram. | T |
-| REQ-011 | The codec shall validate each frame's checksum, including the message's CRC_EXTRA; frames with an invalid checksum or an unknown message ID shall be dropped and counted. | T |
+| REQ-011 | The codec shall validate each frame's checksum, including the message's CRC_EXTRA; frames with an invalid checksum shall be dropped and counted, and frames with an unknown message ID shall be counted and never decoded. | T |
 | REQ-012 | The codec shall never throw on any input (corrupted, truncated or random bytes); invalid input shall be dropped and counted by reason. | T |
 | REQ-013 | The codec shall accept MAVLink 2 payloads truncated of trailing zero bytes, restoring them before decoding. | T |
 | REQ-014 | The codec shall drop frames whose incompatibility flags it does not support. | T |
@@ -63,6 +63,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | ID | Requirement | Method |
 |---|---|---|
 | REQ-032 | The codec shall decode HOME_POSITION as defined in the MAVLink `common` dialect. | T |
+| REQ-036 | The GCS shall record every MAVLink frame received and sent on the link, unknown message IDs included, to a .tlog file in app-private storage (an 8-byte big-endian timestamp in microseconds since the Unix epoch, then the frame), readable by pymavlink, QGroundControl and Mission Planner; the recording shall stay open through link loss and close when the session stops or after 10 min without link. | T, S |
 
 ## Requirement → verification matrix
 
@@ -75,9 +76,9 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-005 | `core/transport/.../UdpTransportTest`; `data/vehicle/.../DefaultLinkRepositoryTest`; `feature/hud/.../HudViewModelTest`. **S:** PR #18 | Verified |
 | REQ-006 | Android Lint `MissingTranslation` (error by default) on `lintDebug`; `values/` + `values-es/` | Verified |
 | REQ-007 | `core/designsystem/.../GcsSizesTest` | Verified |
-| REQ-010 | `core/mavlink/.../MavlinkParserTest` (real SITL frames: several per datagram, split, byte by byte, whole session in random datagrams, false long starts, signed) | Verified |
-| REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA); `core/mavlink/.../MavlinkParserTest` (bad checksum and unknown message ID dropped and counted) | Verified |
-| REQ-012 | `core/mavlink/.../MavlinkParserTest` (1 MB of fixed-seed random bytes, empty datagram, noise counted as skipped bytes, LEN 0 dropped and counted) | Verified |
+| REQ-010 | `core/mavlink/.../MavlinkParserTest` (real SITL frames: several per datagram, split, byte by byte, whole session in random datagrams, false long starts, signed); `core/mavlink/.../MavlinkParserRawTest` (the same frames with their exact bytes, a corrupted LEN raised to 255 or lowered to 1 before real frames) | Verified |
+| REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA); `core/mavlink/.../MavlinkParserTest` (bad checksum and unknown message ID dropped and counted); `core/mavlink/.../MavlinkParserRawTest` (a bad checksum never handed out; unknown message IDs handed out only as bytes, never as a frame to decode) | Verified |
+| REQ-012 | `core/mavlink/.../MavlinkParserTest` (1 MB of fixed-seed random bytes, empty datagram, noise counted as skipped bytes, LEN 0 dropped and counted); `core/mavlink/.../MavlinkParserRawTest` (the same 1 MB through `parseRaw()`) | Verified |
 | REQ-013 | `core/mavlink/.../MavlinkDecoderTest` (real truncated POWER_STATUS, SERVO_OUTPUT_RAW, VFR_HUD, SYS_STATUS, GPS_RAW_INT and HOME_POSITION zero-filled to the full length, also cut inside a field; extra extension byte ignored; whole session); `core/mavlink/.../MavlinkMessagesTest` (full lengths) | Verified |
 | REQ-014 | `core/mavlink/.../MavlinkParserTest` (unsupported incompatibility flag dropped and counted; unknown compatibility flag ignored) | Verified |
 | REQ-015 | `core/mavlink/.../MavlinkDecoderTest` (real SITL HEARTBEATs, armed and disarmed in three modes; largest `custom_mode`; whole session) | Verified |
@@ -98,3 +99,4 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-030 | `core/designsystem/.../ContrastTest` (WCAG 2.2 AA for every text in both palettes, AAA for the day palette's main text, outlines at least 3:1); `app/.../ThemePreferencesTest` and `ThemeViewModelTest` (the choice stored, restored and toggled). **S:** PR #60. **Known limit:** before Android 12 a day launch shows the night starting window for an instant | Verified |
 | REQ-031 | `data/vehicle/.../TelemetryMapperTest` (out-of-range values in pymavlink frames give no value, an impossible position drops the frame, the range edges are kept); `data/vehicle/.../TelemetryStoreTest` (a dropped position goes stale, never vanishes); `data/vehicle/.../TelemetrySessionTest` (the whole SITL session keeps every value pymavlink decodes). Ranges from `common.xml`, `standard.xml` and WGS84. In the HUD: REQ-029 | Verified |
 | REQ-032 | `core/mavlink/.../MavlinkDecoderTest` (ArduCopter's real HOME_POSITION with the values pymavlink decodes, NaN `q` and `time_usec` cut inside; a full pymavlink frame with every field distinct; without its extension; truncated after `q`; the whole session); `core/mavlink/.../MavlinkMessagesTest` (CRC_EXTRA and full length, checked against `mavlink/mavlink` master). **Known limit:** zero-fill restores a truncated `q` as 0, not its `invalid` NaN; the data layer takes NaN and all-zero alike as no orientation (#69) | Verified |
+| REQ-036 | `core/mavlink/.../MavlinkParserRawSessionTest` (the exact bytes of every MAVLink 2 frame of the SITL session in random datagrams, against pymavlink's, with its counts); `core/mavlink/.../MavlinkParserRawTest` (valid frames with their signature; unknown message IDs whole, signed or with `0xFD` inside, still counted; a known message with a bad checksum never handed out; a corrupted LEN; the valid frames and counters equal to `parse()`'s on 1 MB of random bytes, as on the session). Decided in ADR 0006: MAVLink 1 frames are not recorded; signatures are stripped and SETUP_SIGNING omitted (#70). **Known limit:** MAVLink 1 frames from other stations are missing from the log at any time, not only at boot (in the SITL session, Mission Planner's 2 broadcast `MAV_CMD_REQUEST_MESSAGE` at 23 s and 61 s; ArduPilot sent none). Recording to a file: #70 | In progress |
