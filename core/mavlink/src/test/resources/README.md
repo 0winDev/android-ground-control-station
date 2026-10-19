@@ -436,34 +436,15 @@ dual-antenna GPS in SITL).
 
 ## HOME_POSITION (#66)
 
-HOME_POSITION (242), defined in `common.xml` (not in `minimal.xml` or `standard.xml`). `heartbeat/session.tlog`
-already holds one from ArduCopter V4.7.2-beta1 (`383331ff`, from AUTOPILOT_VERSION, see "How they were captured";
-system 1, component 1, seq 114), MAVLink 2 and sent once home was set, so no
-new capture was needed; the capture of a home set again when arming is #69's. The `derived/` frames are re-packed
-**by pymavlink 2.4.50** from it (same seq, system and component). Regenerate with
-`py tools/fixtures/derive_fixtures.py` (same bytes).
+Extracted from `heartbeat/session.tlog` and re-packed by `py tools/fixtures/derive_fixtures.py` (pymavlink 2.4.50);
+`mavparse` (`common.xml` master `2e2b6af`): CRC_EXTRA 104, LEN 52, 60 with `time_usec` at 52.
 
-Wire layout (`mavparse` over pymavlink 2.4.50's `common.xml` and over `mavlink/mavlink` master `2e2b6af`: CRC_EXTRA
-104 and the same offsets on both). LEN 52 without its extension, full LEN 60:
-
-- `latitude`, `longitude` (int32 degE7, 0, 4), `altitude` (int32 mm, MSL, 8), `x`, `y`, `z` (float m, 12–20),
-  `q` (float[4], 24–36), `approach_x`, `approach_y`, `approach_z` (float m, 40–48). All base fields are 4 bytes,
-  so the XML order is also the wire order.
-- Then the extension `time_usec` (uint64 µs, **52**): an extension keeps its XML place after the base fields, never
-  moved to the front by its 8-byte size.
-
-What ArduPilot sends (`GCS_MAVLINK::send_home_position` in `libraries/GCS_MAVLink/GCS_Common.cpp`, master): nothing
-until home is set; `q` always NaN (master's `common.xml` gives `invalid="[NaN]"`, but zero-fill restores a
-truncated `q` as 0); approach 0, 0, 0; `x`, `y`, `z` NaN without an EKF origin; `time_usec` from
-`AP_HAL::micros64()`, time since boot, so below 2⁵⁶ and always truncated. Only a `time_usec` of 2⁵⁶ or more keeps
-the full LEN 60.
-
-| File | How it was made | Fields (pymavlink) | Used for |
-|---|---|---|---|
-| `telemetry/home-position.bin` | The only real HOME_POSITION (seq 114) of the session | latitude -353633514, longitude 1491652411, altitude 587130, x 0.0111318845, y -0.009078031, z 0.02, q [NaN, NaN, NaN, NaN], approach 0, 0, 0, time_usec 443979837. LEN **56**: `time_usec` fits 4 bytes, its 4 zero high bytes are truncated | Decoder: a real HOME_POSITION, the extension cut inside (REQ-013, REQ-032) |
-| `derived/home-position-full.bin` | The HOME_POSITION re-packed with a distinct value in every field | latitude -353633514, longitude -1491652411, altitude -12345, x 1.5, y -2.25, z 0.75, q [0.5, -0.25, 0.125, -0.0625], approach 3.5, -4.5, 5.25, time_usec 72623859790382856 (`08 07 06 05 04 03 02 01`). LEN 60, nothing truncated | Decoder: every offset, the extension at 52 and the byte order of the uint64 (REQ-032) |
-| `derived/home-position-no-extension.bin` | The HOME_POSITION re-packed with time_usec 0 and approach_z -1.5 | as the real one, approach_z -1.5 (`00 00 c0 bf`), time_usec 0. LEN 52: the extension is truncated whole | Decoder: a frame without its extension reads time_usec 0 (REQ-013, REQ-032) |
-| `derived/home-position-cut-after-q.bin` | The HOME_POSITION re-packed with time_usec 0 | as the real one, time_usec 0. LEN 40: the zero approach and the extension are truncated after the NaN `q` (`00 00 c0 7f`) | Decoder: zero-fill restores whole base fields and the extension (REQ-013, REQ-032) |
+| File | Origin | What it proves |
+|---|---|---|
+| `telemetry/home-position.bin` | the real frame (seq 114, ArduCopter V4.7.2-beta1), LEN 56, NaN `q` | a real frame, extension cut inside (REQ-013, REQ-032) |
+| `derived/home-position-full.bin` | distinct value in every field, `time_usec` `0x0102030405060708`, LEN 60 | every offset and the uint64 byte order (REQ-032) |
+| `derived/home-position-no-extension.bin` | `time_usec` 0, `approach_z` -1.5, LEN 52 | a missing extension reads 0 (REQ-013, REQ-032) |
+| `derived/home-position-cut-after-q.bin` | `time_usec` 0, LEN 40 | zero-fill after the NaN `q` (REQ-013, REQ-032) |
 
 Raw bytes:
 
