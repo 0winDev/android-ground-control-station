@@ -59,6 +59,10 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
         return frames ?: emptyList()
     }
 
+    // A stub so the tests compile red; the implementation follows in the next commit.
+    @Suppress("UnusedParameter")
+    fun parseRaw(datagram: ByteArray): List<RawFrame> = TODO("#67")
+
     /**
      * Consumes every complete frame at the start of the buffer; stops when more bytes are needed.
      * Returns [found] plus the new frames; the list is created on the first valid frame, so datagrams
