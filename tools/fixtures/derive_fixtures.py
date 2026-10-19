@@ -146,6 +146,13 @@ Writes:
                                                 truncated whole, LEN 52
   <out>/derived/home-position-cut-after-q.bin   the real one with time_usec 0: the zero approach and extension
                                                 are truncated after ArduPilot's NaN q, LEN 40
+  <out>/derived/session-mavlink2-stream.bin     heartbeat/session.tlog's MAVLink 2 frames only, in order, as on
+                                                the wire: what the parser hands out of session-stream.bin
+  <out>/derived/heartbeat-corrupted-len-raised.bin
+                                                heartbeat/disarmed-stabilize.bin with LEN set to 255, checksum
+                                                not recomputed: a corrupted LEN that claims a maximum frame
+  <out>/derived/heartbeat-corrupted-len-lowered.bin
+                                                the same with LEN set to 1: a corrupted LEN that cuts the frame
 
 checks each output with pymavlink before writing it, prints the decoded fields of the telemetry fixtures
 (floats as the shortest decimal text that is the same float32), the session counts the tests expect and, for
@@ -349,6 +356,11 @@ FULL_HOME_POSITION_LENGTH = 60
 HOME_POSITION_BASE_LENGTH = 52
 TRUNCATED_HOME_POSITION_LENGTH = 56  # time_usec 443979837 fits 4 bytes: its 4 zero high bytes are truncated
 HOME_POSITION_AFTER_Q_LENGTH = 40  # ArduPilot's NaN q ends in 7f; the zero approach and time_usec go
+# A corrupted LEN, the checksum left as it was: the largest LEN makes a receiver wait for a maximum frame, the
+# smallest valid one cuts the frame short.
+CORRUPTED_LEN_RAISED = 255
+CORRUPTED_LEN_LOWERED = 1
+SESSION_MAVLINK2_FRAMES = 5522
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -543,6 +555,35 @@ def session_stream(session: Path) -> bytes:
             return b"".join(frames)
         assert msg.get_type() != "BAD_DATA", "the session must decode cleanly"
         frames.append(bytes(msg.get_msgbuf()))
+
+
+def session_mavlink2_stream(session: Path) -> bytes:
+    """The session's MAVLink 2 frames only, in order, as on the wire, without the .tlog timestamps."""
+    log = mavutil.mavlink_connection(str(session), dialect="ardupilotmega", robust_parsing=True)
+    frames = []
+    while True:
+        msg = log.recv_match(blocking=False)
+        if msg is None:
+            return b"".join(frames)
+        frame = bytes(msg.get_msgbuf())
+        if frame[0] == START_MARKER:
+            frames.append(frame)
+
+
+def with_length(frame: bytes, length: int) -> bytes:
+    """[frame] with its LEN byte replaced and nothing else changed: the checksum no longer matches."""
+    out = bytearray(frame)
+    out[1] = length
+    return bytes(out)
+
+
+def rejected_then_decoded(corrupted: bytes, following: bytes) -> list:
+    """What pymavlink makes of [corrupted] followed by [following], with robust parsing. It only proves the
+    corrupted frame is invalid (it comes out as BAD_DATA, never as a message): pymavlink drops every byte the
+    corrupted LEN claims, so the real frames it recovers are not a reference for our parser's rescan."""
+    mav = common.MAVLink(io.BytesIO())
+    mav.robust_parsing = True
+    return mav.parse_buffer(corrupted + following) or []
 
 
 def session_counts(session: Path) -> dict:
@@ -745,6 +786,9 @@ def main() -> None:
         derived_dir / "home-position-cut-after-q.bin": with_message_fields(
             home_position, **HOME_POSITION_CUT_AFTER_Q
         ),
+        derived_dir / "session-mavlink2-stream.bin": session_mavlink2_stream(session),
+        derived_dir / "heartbeat-corrupted-len-raised.bin": with_length(source, CORRUPTED_LEN_RAISED),
+        derived_dir / "heartbeat-corrupted-len-lowered.bin": with_length(source, CORRUPTED_LEN_LOWERED),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -859,6 +903,22 @@ def main() -> None:
         assert all(same(getattr(derived, field), value) for field, value in fields.items()), name
         unchanged = [field for field in real_home.get_fieldnames() if field not in fields]
         assert all(same(getattr(derived, field), getattr(real_home, field)) for field in unchanged), name
+    mavlink2 = outputs[derived_dir / "session-mavlink2-stream.bin"]
+    mav = common.MAVLink(io.BytesIO())
+    mav.robust_parsing = True
+    mavlink2_msgs = [msg for msg in mav.parse_buffer(mavlink2) or [] if msg.get_type() != "BAD_DATA"]
+    assert len(mavlink2_msgs) == SESSION_MAVLINK2_FRAMES, f"got {len(mavlink2_msgs)} MAVLink 2 frames"
+    assert b"".join(bytes(msg.get_msgbuf()) for msg in mavlink2_msgs) == mavlink2, "frames must be whole and in order"
+    # Enough real frames after the corrupted one to fill a maximum frame, so a receiver waiting for LEN 255 gets
+    # its bytes and keeps going (lesson #9).
+    following = [(args.out / name).read_bytes() for name in (SOURCE, LOITER) * 8]
+    corrupted_len_recovered = {}
+    for name in ("heartbeat-corrupted-len-raised.bin", "heartbeat-corrupted-len-lowered.bin"):
+        msgs = rejected_then_decoded(outputs[derived_dir / name], b"".join(following))
+        assert msgs and msgs[0].get_type() == "BAD_DATA", f"{name}: pymavlink must reject the corrupted frame"
+        decoded = [bytes(msg.get_msgbuf()) for msg in msgs if msg.get_type() != "BAD_DATA"]
+        assert decoded == following[len(following) - len(decoded):], f"{name}: only real frames may come out"
+        corrupted_len_recovered[name] = f"{len(decoded)} of {len(following)}"
 
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
@@ -907,6 +967,7 @@ def main() -> None:
     print()
     print(f"session counts (pymavlink): {session_counts(args.out / SESSION)}")
     print(f"session telemetry values (pymavlink): {session_telemetry_counts(args.out / SESSION)}")
+    print(f"real HEARTBEATs pymavlink recovers after a corrupted LEN: {corrupted_len_recovered}")
 
 
 if __name__ == "__main__":

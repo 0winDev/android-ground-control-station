@@ -483,3 +483,29 @@ derived/home-position-cut-after-q.bin   fd 28 00 00 72 01 01 f2 00 00 16 fb eb e
                                         82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
                                         c0 7f 00 00 c0 7f 44 cc
 ```
+
+## Raw frames for the flight log (#67)
+
+The parser hands out the exact bytes of every MAVLink 2 frame it delimits, unknown message IDs included (ADR 0006).
+The unknown-ID cases reuse fixtures above: `unknown/scaled-pressure.bin`, `unknown/attitude-fd-in-payload.bin`
+(`0xFD` in its payload), `derived/attitude-signed.bin` (signed) and `truncated/power_status.bin`, unknown to the
+parser tests' HEARTBEAT-only lookup. The new ones come from `py tools/fixtures/derive_fixtures.py` (same bytes):
+
+| File | How it was made | Used for |
+|---|---|---|
+| `derived/session-mavlink2-stream.bin` | `heartbeat/session.tlog`'s 5,522 MAVLink 2 frames only, in order, as pymavlink delimits them; 187,618 bytes, `derived/session-stream.bin` without its 82 bytes of MAVLink 1 | Parser: the bytes it hands out of the whole session, concatenated, are exactly these (REQ-010, REQ-036) |
+| `derived/heartbeat-corrupted-len-raised.bin` | `heartbeat/disarmed-stabilize.bin` with LEN 255 (`ff`), checksum not recomputed | Parser: a corrupted LEN claiming a maximum frame; the real frames after it still come out (REQ-010) |
+| `derived/heartbeat-corrupted-len-lowered.bin` | the same with LEN 1 | Parser: a corrupted LEN cutting the frame short (REQ-010) |
+
+pymavlink 2.4.50 with robust parsing rejects both corrupted frames (BAD_DATA, never a message), which is all it is
+used for here. It resynchronises differently from our parser: after a bad checksum it drops every byte the LEN
+claims, so behind the LEN 255 frame it recovers only 4 of 16 real HEARTBEATs (the script prints it). Our parser
+drops only the start marker and scans again, so the frames expected after a corrupted LEN are the real frames that
+follow it, from their own fixtures.
+
+Raw bytes:
+
+```
+derived/heartbeat-corrupted-len-raised.bin   fd ff 00 00 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 8e b2
+derived/heartbeat-corrupted-len-lowered.bin  fd 01 00 00 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 8e b2
+```
