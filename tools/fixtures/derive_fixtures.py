@@ -137,6 +137,15 @@ Writes:
                                                 pitch -infinity and yaw 0.5
   <out>/derived/attitude-past-pi.bin            the same ATTITUDE with roll pi (the float32 closest to it, the
                                                 end of the range), pitch -0.25 and yaw 3.1416, past it
+  <out>/telemetry/home-position.bin             the only real HOME_POSITION (not derived) of the session: q NaN,
+                                                approach 0, the zero high bytes of time_usec truncated, LEN 56
+  <out>/derived/home-position-full.bin          that HOME_POSITION re-packed by pymavlink with a distinct value
+                                                in every field and time_usec 0x0102030405060708: nothing is
+                                                truncated, LEN 60
+  <out>/derived/home-position-no-extension.bin  the same with time_usec 0 and approach_z -1.5: the extension is
+                                                truncated whole, LEN 52
+  <out>/derived/home-position-cut-after-q.bin   the real one with time_usec 0: the zero approach and extension
+                                                are truncated after ArduPilot's NaN q, LEN 40
 
 checks each output with pymavlink before writing it, prints the decoded fields of the telemetry fixtures
 (floats as the shortest decimal text that is the same float32), the session counts the tests expect and, for
@@ -192,6 +201,7 @@ TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_POWER_STATUS: "power_status",
     common.MAVLINK_MSG_ID_COMMAND_LONG: "command_long",
     common.MAVLINK_MSG_ID_COMMAND_ACK: "command_ack",
+    common.MAVLINK_MSG_ID_HOME_POSITION: "home_position",
 }
 SET_MESSAGE_INTERVAL = common.MAV_CMD_SET_MESSAGE_INTERVAL
 MAV_COMP_ID_MISSIONPLANNER = 190
@@ -317,6 +327,28 @@ ATTITUDE_PAST_PI = {"roll": math.pi, "pitch": -0.25, "yaw": 3.1416}
 FLOAT32_PI = struct.unpack("<f", struct.pack("<f", math.pi))[0]
 VEHICLE_SYSTEM_ID = 1
 MAV_COMP_ID_AUTOPILOT1 = 1
+# A distinct value in every field, exact in float32, negative latitude, longitude and altitude; time_usec has 8
+# distinct bytes and a non-zero top one, the only way the extension keeps all 8 (any value below 2^56 is cut).
+HOME_POSITION_FULL = {
+    "latitude": -353633514,
+    "longitude": -1491652411,
+    "altitude": -12345,
+    "x": 1.5,
+    "y": -2.25,
+    "z": 0.75,
+    "q": [0.5, -0.25, 0.125, -0.0625],
+    "approach_x": 3.5,
+    "approach_y": -4.5,
+    "approach_z": 5.25,
+    "time_usec": 0x0102_0304_0506_0708,
+}
+# approach_z -1.5 is 00 00 c0 bf: its top byte keeps the base fields whole while the zero extension goes.
+HOME_POSITION_NO_EXTENSION = {"time_usec": 0, "approach_z": -1.5}
+HOME_POSITION_CUT_AFTER_Q = {"time_usec": 0}
+FULL_HOME_POSITION_LENGTH = 60
+HOME_POSITION_BASE_LENGTH = 52
+TRUNCATED_HOME_POSITION_LENGTH = 56  # time_usec 443979837 fits 4 bytes: its 4 zero high bytes are truncated
+HOME_POSITION_AFTER_Q_LENGTH = 40  # ArduPilot's NaN q ends in 7f; the zero approach and time_usec go
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -488,12 +520,16 @@ def float32_text(value: float) -> str:
 
 
 def fields_text(frame: bytes) -> str:
-    """The fields of [frame] as pymavlink decodes them, floats as float32 text."""
+    """The fields of [frame] as pymavlink decodes them, floats as float32 text (each element of a float array)."""
     msg = decode(frame)
     values = []
     for name, kind in zip(msg.get_fieldnames(), msg.fieldtypes):
         value = getattr(msg, name)
-        values.append(f"{name}={float32_text(value) if kind == 'float' else value}")
+        if kind == "float" and isinstance(value, list):
+            text = "[" + ", ".join(float32_text(element) for element in value) + "]"
+        else:
+            text = float32_text(value) if kind == "float" else value
+        values.append(f"{name}={text}")
     return ", ".join(values)
 
 
@@ -533,7 +569,10 @@ def session_counts(session: Path) -> dict:
 
 
 def same(decoded, expected) -> bool:
-    """[decoded] equals [expected] as pymavlink packs it: NaN for NaN, float32 for floats."""
+    """[decoded] equals [expected] as pymavlink packs it: NaN for NaN, float32 for floats, element by element
+    for arrays."""
+    if isinstance(expected, list):
+        return len(decoded) == len(expected) and all(same(d, e) for d, e in zip(decoded, expected))
     if isinstance(expected, float):
         if math.isnan(expected):
             return math.isnan(decoded)
@@ -612,6 +651,7 @@ def main() -> None:
     unhealthy = {
         "onboard_control_sensors_health": battery_msg.onboard_control_sensors_health & ~MAV_SYS_STATUS_SENSOR_BATTERY,
     }
+    home_position = session_frame(session, "HOME_POSITION", lambda m: True)
 
     outputs = {
         derived_dir / "heartbeat-signed.bin": signed(source),
@@ -697,6 +737,14 @@ def main() -> None:
         derived_dir / "vfr-hud-throttle-100.bin": with_message_fields(vfr_hud, **VFR_HUD_THROTTLE_MAX),
         derived_dir / "attitude-out-of-range.bin": with_message_fields(attitude, **ATTITUDE_OUT_OF_RANGE),
         derived_dir / "attitude-past-pi.bin": with_message_fields(attitude, **ATTITUDE_PAST_PI),
+        telemetry_dir / "home-position.bin": home_position,
+        derived_dir / "home-position-full.bin": with_message_fields(home_position, **HOME_POSITION_FULL),
+        derived_dir / "home-position-no-extension.bin": with_message_fields(
+            home_position, **HOME_POSITION_NO_EXTENSION
+        ),
+        derived_dir / "home-position-cut-after-q.bin": with_message_fields(
+            home_position, **HOME_POSITION_CUT_AFTER_Q
+        ),
     }
 
     for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
@@ -797,6 +845,20 @@ def main() -> None:
         assert all(same(getattr(derived, field), getattr(original, field)) for field in unchanged), name
     assert decode(outputs[derived_dir / "attitude-past-pi.bin"]).roll == FLOAT32_PI
     assert decode(outputs[derived_dir / "attitude-past-pi.bin"]).yaw > FLOAT32_PI
+    real_home = decode(home_position)
+    assert home_position[1] == TRUNCATED_HOME_POSITION_LENGTH and real_home.time_usec != 0
+    assert all(math.isnan(element) for element in real_home.q), "ArduPilot sends q as NaN"
+    for name, fields, length in (
+        ("home-position-full.bin", HOME_POSITION_FULL, FULL_HOME_POSITION_LENGTH),
+        ("home-position-no-extension.bin", HOME_POSITION_NO_EXTENSION, HOME_POSITION_BASE_LENGTH),
+        ("home-position-cut-after-q.bin", HOME_POSITION_CUT_AFTER_Q, HOME_POSITION_AFTER_Q_LENGTH),
+    ):
+        frame = outputs[derived_dir / name]
+        assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
+        derived = decode(frame)
+        assert all(same(getattr(derived, field), value) for field, value in fields.items()), name
+        unchanged = [field for field in real_home.get_fieldnames() if field not in fields]
+        assert all(same(getattr(derived, field), getattr(real_home, field)) for field in unchanged), name
 
     print(f"Reference: pymavlink {pymavlink.__version__}\n")
     for path, frame in outputs.items():
@@ -835,6 +897,10 @@ def main() -> None:
         derived_dir / "vfr-hud-throttle-100.bin",
         derived_dir / "attitude-out-of-range.bin",
         derived_dir / "attitude-past-pi.bin",
+        telemetry_dir / "home-position.bin",
+        derived_dir / "home-position-full.bin",
+        derived_dir / "home-position-no-extension.bin",
+        derived_dir / "home-position-cut-after-q.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")

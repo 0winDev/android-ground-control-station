@@ -8,7 +8,8 @@ package com.owindev.gcs.core.mavlink
  * (GLOBAL_POSITION_INT) and `common.xml` (the others), which includes both, in
  * https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked against
  * `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK (#35), ATTITUDE, GLOBAL_POSITION_INT and
- * VFR_HUD (#37) and SYS_STATUS and GPS_RAW_INT (#38) computed with pymavlink's `mavparse` from both.
+ * VFR_HUD (#37), SYS_STATUS and GPS_RAW_INT (#38) and HOME_POSITION (#66) computed with pymavlink's `mavparse`
+ * from both.
  * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG is only sent by the
  * codec, so a received one stays undecoded.
  */
@@ -24,6 +25,7 @@ object MavlinkMessages : CrcExtraLookup {
     private const val POWER_STATUS_ID = 125
     private const val COMMAND_LONG_ID = 76
     private const val COMMAND_ACK_ID = 77
+    private const val HOME_POSITION_ID = 242
 
     private val heartbeat = Definition(crcExtra = 50, fullLength = 9)
 
@@ -43,6 +45,9 @@ object MavlinkMessages : CrcExtraLookup {
     // 3 bytes without its extensions (progress, result_param2, target_system, target_component).
     private val commandAck = Definition(crcExtra = 143, fullLength = 10)
 
+    // 52 bytes without its extension (time_usec).
+    private val homePosition = Definition(crcExtra = 104, fullLength = 60)
+
     override fun crcExtraFor(msgId: Int): Int? = definitionOf(msgId)?.crcExtra
 
     /** Full payload length of [msgId] in bytes, extension fields included, or `null` if not supported. */
@@ -60,6 +65,7 @@ object MavlinkMessages : CrcExtraLookup {
         POWER_STATUS_ID -> powerStatus
         COMMAND_LONG_ID -> commandLong
         COMMAND_ACK_ID -> commandAck
+        HOME_POSITION_ID -> homePosition
         else -> null
     }
 

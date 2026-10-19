@@ -5,6 +5,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
+import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
 import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
@@ -128,6 +129,26 @@ object MavlinkDecoder {
     private const val ACK_TARGET_SYSTEM_OFFSET = 8
     private const val ACK_TARGET_COMPONENT_OFFSET = 9
 
+    private const val HOME_POSITION_ID = 242
+
+    // HOME_POSITION wire layout: every base field is 4 bytes, so the XML order holds: the three int32s, the
+    // floats x, y, z, the four of q and the three of the approach, then the extension time_usec (uint64), last
+    // although it is the largest.
+    private const val HOME_LATITUDE_OFFSET = 0
+    private const val HOME_LONGITUDE_OFFSET = 4
+    private const val HOME_ALTITUDE_OFFSET = 8
+    private const val HOME_X_OFFSET = 12
+    private const val HOME_Y_OFFSET = 16
+    private const val HOME_Z_OFFSET = 20
+    private const val HOME_Q1_OFFSET = 24
+    private const val HOME_Q2_OFFSET = 28
+    private const val HOME_Q3_OFFSET = 32
+    private const val HOME_Q4_OFFSET = 36
+    private const val HOME_APPROACH_X_OFFSET = 40
+    private const val HOME_APPROACH_Y_OFFSET = 44
+    private const val HOME_APPROACH_Z_OFFSET = 48
+    private const val HOME_TIME_USEC_OFFSET = 52
+
     fun decode(frame: MavlinkFrame): MavlinkMessage {
         val fullLength = MavlinkMessages.fullLengthOf(frame.messageId)
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
@@ -139,6 +160,7 @@ object MavlinkDecoder {
             GLOBAL_POSITION_INT_ID -> globalPositionInt(frame.payload)
             VFR_HUD_ID -> vfrHud(frame.payload)
             COMMAND_ACK_ID -> commandAck(frame.payload)
+            HOME_POSITION_ID -> homePosition(frame.payload)
             else -> Undecoded(frame.messageId, frame.payload.copyOf(fullLength))
         }
     }
@@ -228,5 +250,22 @@ object MavlinkDecoder {
         resultParam2 = payload.int32(ACK_RESULT_PARAM2_OFFSET),
         targetSystem = payload.uint8(ACK_TARGET_SYSTEM_OFFSET),
         targetComponent = payload.uint8(ACK_TARGET_COMPONENT_OFFSET),
+    )
+
+    private fun homePosition(payload: ByteArray) = HomePosition(
+        latitude = payload.int32(HOME_LATITUDE_OFFSET),
+        longitude = payload.int32(HOME_LONGITUDE_OFFSET),
+        altitude = payload.int32(HOME_ALTITUDE_OFFSET),
+        x = payload.float(HOME_X_OFFSET),
+        y = payload.float(HOME_Y_OFFSET),
+        z = payload.float(HOME_Z_OFFSET),
+        q1 = payload.float(HOME_Q1_OFFSET),
+        q2 = payload.float(HOME_Q2_OFFSET),
+        q3 = payload.float(HOME_Q3_OFFSET),
+        q4 = payload.float(HOME_Q4_OFFSET),
+        approachX = payload.float(HOME_APPROACH_X_OFFSET),
+        approachY = payload.float(HOME_APPROACH_Y_OFFSET),
+        approachZ = payload.float(HOME_APPROACH_Z_OFFSET),
+        timeUsec = payload.uint64(HOME_TIME_USEC_OFFSET),
     )
 }

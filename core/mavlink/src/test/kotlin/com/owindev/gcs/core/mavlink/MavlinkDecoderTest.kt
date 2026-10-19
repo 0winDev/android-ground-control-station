@@ -6,6 +6,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
+import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
 import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
@@ -438,6 +439,64 @@ class MavlinkDecoderTest {
         result shouldBeEqualTo sitlVfrHud(throttle = 65, climb = -2.5f)
     }
 
+    @Tag("REQ-013")
+    @Tag("REQ-032")
+    @Test
+    fun `GIVEN a real SITL HOME_POSITION cut inside time_usec WHEN decoding THEN has the fields pymavlink decodes`() {
+        val frame = parsedFrame(HOME_POSITION)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo sitlHomePosition
+    }
+
+    @Tag("REQ-032")
+    @Test
+    fun `GIVEN a full HOME_POSITION with a distinct value in every field WHEN decoding THEN each lands in its field`() {
+        val frame = parsedFrame(HOME_POSITION_FULL)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo HomePosition(
+            latitude = SITL_LAT,
+            longitude = -1_491_652_411,
+            altitude = -12_345,
+            x = 1.5f,
+            y = -2.25f,
+            z = 0.75f,
+            q1 = 0.5f,
+            q2 = -0.25f,
+            q3 = 0.125f,
+            q4 = -0.0625f,
+            approachX = 3.5f,
+            approachY = -4.5f,
+            approachZ = 5.25f,
+            timeUsec = 0x0102_0304_0506_0708L,
+        )
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-032")
+    @Test
+    fun `GIVEN a HOME_POSITION without its extension WHEN decoding THEN time_usec reads as zero`() {
+        val frame = parsedFrame(HOME_POSITION_NO_EXTENSION)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo sitlHomePosition.copy(approachZ = -1.5f, timeUsec = 0)
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-032")
+    @Test
+    fun `GIVEN a HOME_POSITION truncated after q WHEN decoding THEN the approach and time_usec read as zero`() {
+        val frame = parsedFrame(HOME_POSITION_CUT_AFTER_Q)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo sitlHomePosition.copy(timeUsec = 0)
+    }
+
     @Tag("REQ-012")
     @Test
     fun `GIVEN frames with random IDs and payloads of any size WHEN decoding THEN nothing is thrown`() {
@@ -472,6 +531,7 @@ class MavlinkDecoderTest {
     @Tag("REQ-015")
     @Tag("REQ-024")
     @Tag("REQ-025")
+    @Tag("REQ-032")
     @Test
     fun `GIVEN the SITL session WHEN parsing and decoding THEN each table message comes out as pymavlink counts`() {
         val parser = MavlinkParser(MavlinkMessages)
@@ -515,6 +575,7 @@ class MavlinkDecoderTest {
         is VfrHud -> "VFR_HUD"
         is CommandAck -> "COMMAND_ACK"
         is CommandLong -> "COMMAND_LONG"
+        is HomePosition -> "HOME_POSITION"
         is Undecoded -> "$messageId/${payload.size}"
     }
 
@@ -541,6 +602,10 @@ class MavlinkDecoderTest {
         const val SESSION_STREAM = "derived/session-stream.bin"
         const val SET_MESSAGE_INTERVAL_ACK = "command/set-message-interval-ack.bin"
         const val ACK_EXTENSIONS = "derived/command-ack-extensions.bin"
+        const val HOME_POSITION = "telemetry/home-position.bin"
+        const val HOME_POSITION_FULL = "derived/home-position-full.bin"
+        const val HOME_POSITION_NO_EXTENSION = "derived/home-position-no-extension.bin"
+        const val HOME_POSITION_CUT_AFTER_Q = "derived/home-position-cut-after-q.bin"
 
         // Field values of the COMMAND_ACK fixtures as pymavlink decodes them (see the fixtures README).
         const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
@@ -584,7 +649,7 @@ class MavlinkDecoderTest {
         const val FUZZ_FRAMES = 10_000
         const val MAX_PAYLOAD = 255
         const val MAX_MESSAGE_ID = 0xFF_FFFF
-        val FUZZ_IDS = listOf(0, 1, 24, 30, 33, 36, 74, 76, 77, 125)
+        val FUZZ_IDS = listOf(0, 1, 24, 30, 33, 36, 74, 76, 77, 125, 242)
         const val SCALED_PRESSURE_ID = 29
         const val QUADROTOR = 2
         const val ARDUPILOTMEGA = 3
@@ -592,7 +657,7 @@ class MavlinkDecoderTest {
         const val MAVLINK_VERSION = 3
         const val DISARMED_STABILIZE_BASE_MODE = 81
         const val MAX_UINT32 = 4_294_967_295L
-        const val SESSION_UNKNOWN = 3_610L
+        const val SESSION_UNKNOWN = 3_609L
         const val SESSION_MAVLINK1_BYTES = 82L
         const val HEADER_LENGTH = 10
         const val LEN_INDEX = 1
@@ -613,6 +678,26 @@ class MavlinkDecoderTest {
             "125/6" to 325,
             "76/33" to 11,
             "COMMAND_ACK" to 13,
+            "HOME_POSITION" to 1,
+        )
+
+        // telemetry/home-position.bin as pymavlink decodes it: ArduPilot sends q as NaN and the approach as 0; the
+        // zero high bytes of time_usec are truncated and restored.
+        val sitlHomePosition = HomePosition(
+            latitude = SITL_LAT,
+            longitude = SITL_LON,
+            altitude = 587_130,
+            x = 0.0111318845f,
+            y = -0.009078031f,
+            z = 0.02f,
+            q1 = Float.NaN,
+            q2 = Float.NaN,
+            q3 = Float.NaN,
+            q4 = Float.NaN,
+            approachX = 0f,
+            approachY = 0f,
+            approachZ = 0f,
+            timeUsec = 443_979_837L,
         )
 
         // Vcc = 5000 (0x1388, little-endian), Vservo = 0, flags = 0, as pymavlink decodes it.

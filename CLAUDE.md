@@ -189,6 +189,8 @@ the issue number to an existing one.
   (#35, #38).
 - Truncation cuts bytes, not fields (throttle 65 = `41 00` gives LEN 19), HEARTBEAT never truncates, and truncation
   only makes sense through the parser: CRC over the wire bytes, then zero-fill (#5, #10, #37).
+- A uint64 extension below 2⁵⁶ always truncates (a boot-time `time_usec` cuts HOME_POSITION to LEN 56): a
+  full-length fixture needs its top byte non-zero (#66).
 - The XML is not the whole story; read ArduPilot's code. It sends `voltage_battery` 0 without a monitor, keeps the
   voltage coming after its battery failsafe clears the health bit, and sends GLOBAL_POSITION_INT 0°, 0° before a
   position and frozen after losing it: a fresh message is not a fresh value (#39, #41, #42).
