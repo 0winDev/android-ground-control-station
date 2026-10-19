@@ -131,9 +131,7 @@ object MavlinkDecoder {
 
     private const val HOME_POSITION_ID = 242
 
-    // HOME_POSITION wire layout: every base field is 4 bytes, so the XML order holds: the three int32s, the
-    // floats x, y, z, the four of q and the three of the approach, then the extension time_usec (uint64), last
-    // although it is the largest.
+    // HOME_POSITION: every base field is 4 bytes, so XML order is wire order; the uint64 extension still comes last.
     private const val HOME_LATITUDE_OFFSET = 0
     private const val HOME_LONGITUDE_OFFSET = 4
     private const val HOME_ALTITUDE_OFFSET = 8
