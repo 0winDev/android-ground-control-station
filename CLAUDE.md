@@ -211,6 +211,10 @@ the issue number to an existing one.
 - Kluent compares maps in iteration order: sort both sides (#10).
 - pymavlink and the C library drop every byte a corrupted LEN claims after a bad checksum, while our parser drops
   only the start marker: pymavlink proves a corrupted frame is invalid, not which frames come after it (#67).
+- A reader that does not check checksums cannot anchor a plausibility window on one record: a false record taken
+  from garbage would anchor a timestamp no real record is near. Anchor on two consecutive records (#68).
+- A test of a tolerant reader can pass for the wrong reason (another recovery path masked the rule): check it with a
+  mutation of the rule it guards (#68).
 - On a 1 m boundary a nanometre decides the MGRS digit, so reference points stay at least 1 cm off one; GEOTRANS
   2.4.2 is not sub-mm accurate and disagrees with GeoConvert at exactly 84°N (#40).
 
