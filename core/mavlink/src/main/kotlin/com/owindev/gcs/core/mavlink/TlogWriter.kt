@@ -1,13 +1,9 @@
 package com.owindev.gcs.core.mavlink
 
 /**
- * Writes the records of a telemetry log (.tlog) as pymavlink does (`mavutil.py`): an 8-byte big-endian timestamp in
- * µs since the Unix epoch with its two low bits cleared, which pymavlink reads back as link 0, then exactly one
- * MAVLink frame (ADR 0006). One frame per record: a whole datagram after one timestamp would break readers at the
- * next record.
- *
- * Its callers are the GCS's own code, so a frame that is not exactly one MAVLink 1 or 2 frame, or a negative
- * timestamp, is a bug: rejected with [IllegalArgumentException], never written.
+ * Writes .tlog records as pymavlink's `mavutil.py` does: the timestamp with its two low bits (pymavlink's link ID)
+ * cleared, then exactly one frame, since a whole datagram after one timestamp breaks readers (ADR 0006). A negative
+ * timestamp or bytes that are not exactly one MAVLink 1 or 2 frame are a caller bug: [IllegalArgumentException].
  */
 object TlogWriter {
 

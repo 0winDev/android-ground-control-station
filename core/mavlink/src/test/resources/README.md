@@ -512,41 +512,21 @@ derived/heartbeat-corrupted-len-lowered.bin  fd 01 00 00 3b 01 01 00 00 00 00 00
 
 ## Telemetry logs (#68)
 
-A .tlog holds, for each frame, an 8-byte big-endian timestamp in µs since the Unix epoch, then the frame. pymavlink
-2.4.50 reads it with `struct.unpack('>Q', ...)` and takes the two low bits as a link ID (`mavlogfile.pre_message`),
-and writes `int(time.time() * 1.0e6) & ~3` before each message (`mavutil.py`). The fixtures come from
-`py tools/fixtures/tlog_fixtures.py <qgroundcontrol.tlog> <mission-planner.tlog>` (same bytes for the same logs),
-which also checks that none holds SETUP_SIGNING (msgid 256), none does, and that none keeps a signature: logs must
-not (ADR 0006).
+Made by `py tools/fixtures/tlog_fixtures.py <qgroundcontrol.tlog> <mission-planner.tlog>` (pymavlink 2.4.50, same
+bytes each run). Records are numbered from 0.
 
-| File | Source | Records (pymavlink) |
+| File | Origin | What it proves |
 |---|---|---|
-| `tlog/qgroundcontrol.tlog` | QGroundControl's `Telemetry/2026-10-15 21-10-20.tlog` against Mission Planner's SITL (ArduCopter 4.7.2, `FIRMWARE_VERSION_TYPE_OFFICIAL`, git `fbd0a316`, from AUTOPILOT_VERSION); the records from 25 s to 35 s, byte for byte (`write_excerpt`) | 1,079: 1,078 MAVLink 2 and 1 MAVLink 1 (a COMMAND_LONG QGroundControl sent); every timestamp a whole millisecond, so the low bits are 0 |
-| `tlog/mission-planner.tlog` | Mission Planner's `logs/SITL/QUADROTOR/1/2026-10-16 17-09-58.tlog` (same firmware), every record but one: a STATUSTEXT Mission Planner sent signed, left out with its signature since the key may not be a throwaway one | 2,417: 1,042 MAVLink 2 and 1,375 MAVLink 1 (1,370 PARAM_VALUE from the vehicle in the first 5 s, 5 from Mission Planner); the low two bits are not cleared, so pymavlink reads links 0 to 3 |
-| `heartbeat/session.tlog` | see "How they were captured" | 5,524: 5,522 MAVLink 2 and 2 MAVLink 1 |
-
-For each, `tlog/<name>.records.csv` has one line per record with the timestamp pymavlink reads, in µs as stored (low
-bits included; pymavlink's float seconds are exact in µs at this magnitude), and the frame's length; and
-`tlog/<name>.frames.bin` has the frames pymavlink reads, concatenated. For `session.tlog` that is
-`derived/session-stream.bin`, checked equal and not written twice.
-
-Damaged files, from the first 10 records of `heartbeat/session.tlog`; what a tolerant reader must recover follows
-from how they were made:
-
-| File | How it was made |
-|---|---|
-| `derived/tlog-garbage-between-records.bin` | 7 bytes of `0x55` between the first and the second record |
-| `derived/tlog-garbage-before-first-record.bin` | the same 7 bytes before the first record, when there is no last good timestamp yet |
-| `derived/tlog-false-start-before-first-record.bin` | 8 bytes of `0x55` and `0xFE` before the first record: before any anchor a reader takes them for a MAVLink 1 record whose LEN is 0, the top byte of the first timestamp, so it ends 7 bytes into that timestamp and costs the first record; the records after it must still come out |
-| `derived/tlog-timestamp-without-frame.bin` | a lone 8-byte timestamp after the fifth record |
-| `derived/tlog-false-start-after-lone-timestamp.bin` | records 418 to 440 of the session with a lone timestamp before record 421, the first of the session whose own timestamp holds a start marker where a one-byte resync looks (offset 7); the 8 bytes before that marker are no timestamp within 3 days of record 420's, and without that check the false record it starts would complete and swallow real ones (the script checks both) |
-| `derived/tlog-truncated-last-record.bin` | the last record cut to 23 of its 38 bytes (inside its frame) |
-| `derived/tlog-timestamp-at-end.bin` | a lone 8-byte timestamp after the last record |
-| `derived/tlog-false-start-at-end.bin` | the 10 records, the last one's timestamp again with a HEARTBEAT header claiming LEN 255 (`fd ff 00 00 00 01 01 00 00 00`), then records 10 to 12: too few bytes for the false record to complete, so they are only found when the end is scanned again |
-
-For the other gaps the script checks that no byte a one-byte resynchronisation would look at, 8 bytes past the gap,
-is a start marker (`0xFD` or `0xFE`), so the expected recovery does not depend on the reader. While resynchronising, a
-reader only takes a start marker after a timestamp within 3 days of an anchor, as pymavlink's
-`mavlogfile.scan_timestamp` does. The anchor is the timestamp of a record that came right after another one within 3
-days of it: one record alone could be a false one taken from garbage, which pymavlink, checking checksums, never
-takes. Before the first anchor there is none to compare with.
+| `tlog/qgroundcontrol.tlog` | QGroundControl, SITL ArduCopter 4.7.2 `fbd0a316`, 25 s to 35 s | 1,079 records (1 MAVLink 1); whole-ms timestamps; no SETUP_SIGNING or signature (ADR 0006) |
+| `tlog/mission-planner.tlog` | Mission Planner, same SITL, its one signed record left out (the key may not be a throwaway) | 2,417 records (1,375 MAVLink 1); low bits set; no SETUP_SIGNING or signature (ADR 0006) |
+| `heartbeat/session.tlog` | see "How they were captured" | 5,524 records (2 MAVLink 1); round trip |
+| `tlog/<name>.records.csv` | pymavlink: timestamp as stored, frame length, one line per record | expected records |
+| `tlog/<name>.frames.bin` | pymavlink: the frames concatenated (the session's are `derived/session-stream.bin`) | expected frames |
+| `derived/tlog-garbage-between-records.bin` | 7 × `0x55` after the first of the session's first 10 records | garbage is skipped; no start marker 8 bytes past it |
+| `derived/tlog-garbage-before-first-record.bin` | the same 7 bytes before the first record | garbage before any anchor is skipped; no start marker 8 bytes past it |
+| `derived/tlog-false-start-before-first-record.bin` | 8 × `0x55` and `0xFE` before the first record | one false record never anchors |
+| `derived/tlog-timestamp-without-frame.bin` | a lone timestamp after the fifth record | a lone timestamp is skipped; no start marker 8 bytes past it |
+| `derived/tlog-false-start-after-lone-timestamp.bin` | records 418 to 440, a lone timestamp before 421, whose timestamp holds a start marker | the 3-day window rejects a false start |
+| `derived/tlog-truncated-last-record.bin` | the last record cut to 23 of 38 bytes | a truncated record is counted |
+| `derived/tlog-timestamp-at-end.bin` | a lone timestamp after the last record | a lone tail timestamp is counted |
+| `derived/tlog-false-start-at-end.bin` | the 10 records, the last timestamp again with `fd ff 00 00 00 01 01 00 00 00` (LEN 255), then records 10 to 12 | `finish()` finds hidden records |

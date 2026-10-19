@@ -185,8 +185,7 @@ def main() -> None:
     before_first = GARBAGE + b"".join(parts)
     check_no_false_start("garbage before the first record", before_first, 0, len(GARBAGE))
 
-    # The first record after the session's start whose timestamp holds a start marker: behind a lone timestamp, a
-    # one-byte resync inspects exactly those bytes. Found in the session, not made up.
+    # A real record whose timestamp holds a start marker: a one-byte resync after a lone timestamp meets it.
     k = next(
         index for index, (stamp, _) in enumerate(all_session_recs)
         if index > FALSE_START_RECORDS and any(b in START_MARKERS for b in struct.pack(">Q", stamp))
@@ -210,13 +209,11 @@ def main() -> None:
 
     hidden = all_session_recs[DAMAGED_RECORDS:DAMAGED_RECORDS + FALSE_START_RECORDS]
     hidden_bytes = b"".join(record_bytes(s, f) for s, f in hidden)
-    # Unsigned LEN 255: the false frame is a 10-byte header, 255 bytes of payload and a 2-byte checksum.
     false_frame_length = len(FALSE_HEADER) + FALSE_HEADER[1] + CHECKSUM_LENGTH
     assert len(FALSE_HEADER) + len(hidden_bytes) < false_frame_length, "the false record must not complete"
     at_end_false = b"".join(parts) + struct.pack(">Q", session_recs[-1][0]) + FALSE_HEADER + hidden_bytes
 
-    # Before any anchor the false record is taken: MAVLink 1, LEN the first byte of record 0's timestamp, so it ends
-    # 7 bytes into that timestamp. The resync after it must meet no start marker before record 1.
+    # The false MAVLink 1 record ends 7 bytes into record 0's timestamp; no start marker may follow before record 1.
     poisoned = FALSE_PREFIX + b"".join(parts)
     assert poisoned[len(FALSE_PREFIX)] == 0, "the false MAVLink 1 frame takes LEN 0 from the timestamp's top byte"
     false_end = TIMESTAMP_LENGTH + 6 + 0 + CHECKSUM_LENGTH

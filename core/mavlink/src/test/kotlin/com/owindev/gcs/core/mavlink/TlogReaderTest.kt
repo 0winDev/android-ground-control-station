@@ -13,12 +13,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 
-/**
- * The .tlog reader against real logs saved from ArduPilot SITL by QGroundControl and Mission Planner, the
- * record-by-record excerpt of a Mission Planner session (`heartbeat/session.tlog`), and damaged logs derived from it
- * (see `src/test/resources/README.md`). Expected records are what pymavlink reads (`tlog/<name>.records.csv` and the
- * frames concatenated), or follow from how a damaged log was made; never from the reader.
- */
 class TlogReaderTest {
 
     private lateinit var reader: TlogReader
@@ -205,7 +199,7 @@ class TlogReaderTest {
         const val TIMESTAMP_AT_END = "derived/tlog-timestamp-at-end.bin"
         const val FALSE_START_AT_END = "derived/tlog-false-start-at-end.bin"
 
-        // How the damaged logs were made (tools/fixtures/tlog_fixtures.py, which prints them).
+        // From tools/fixtures/tlog_fixtures.py, which made the damaged logs.
         const val DAMAGED_RECORDS = 10
         const val GARBAGE_LENGTH = 7L
         const val TIMESTAMP_LENGTH = 8L
@@ -220,8 +214,8 @@ class TlogReaderTest {
         val sessionRecords = expectedRecords(SESSION_RECORDS, SESSION_FRAMES)
         val firstSessionRecords = sessionRecords.take(DAMAGED_RECORDS)
 
-        // Before any anchor, 8 bytes of 0x55 and 0xFE are taken for a MAVLink 1 record. Its LEN is 0, the top byte of
-        // record 0's timestamp, so its 8-byte frame is 0xFE and the first 7 bytes of that timestamp.
+        // Before any anchor, the false MAVLink 1 record takes LEN 0 from record 0's top timestamp byte, so it ends 7
+        // bytes into it.
         const val GARBAGE_TIMESTAMP = 0x5555_5555_5555_5555L
         const val MAVLINK1_START: Byte = 0xFE.toByte()
         const val FALSE_FRAME_TIMESTAMP_BYTES = 7
@@ -231,7 +225,6 @@ class TlogReaderTest {
                 bigEndian(firstSessionRecords[0].timestampMicros).copyOf(FALSE_FRAME_TIMESTAMP_BYTES),
         )
 
-        // What the false record leaves of record 0, skipped up to record 1: its last timestamp byte and its frame.
         val restOfFirstRecord = TIMESTAMP_LENGTH - FALSE_FRAME_TIMESTAMP_BYTES + firstSessionRecords[0].frame.size
     }
 }
@@ -240,7 +233,6 @@ private fun bigEndian(value: Long): ByteArray = ByteArray(Long.SIZE_BYTES) { ind
     (value shr (Long.SIZE_BYTES - 1 - index) * Byte.SIZE_BITS).toByte()
 }
 
-/** The records pymavlink reads: one `timestamp,length` line per record, and their frames concatenated. */
 private fun expectedRecords(records: String, frames: String): List<TlogRecord> {
     val bytes = readFixture(frames)
     var offset = 0

@@ -8,11 +8,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
-/**
- * The .tlog writer against real records (see `src/test/resources/README.md`): QGroundControl's timestamps are whole
- * milliseconds, so their low two bits are already 0 and its records come back byte for byte; Mission Planner's
- * session leaves them set, so its records come back with only those two bits cleared, as pymavlink writes them.
- */
 class TlogWriterTest {
 
     private lateinit var writer: TlogWriter
@@ -103,7 +98,7 @@ class TlogWriterTest {
         const val TIMESTAMP_LENGTH = 8
         const val CUT_FRAME_LENGTH = 15
 
-        // The first line of tlog/qgroundcontrol.records.csv (pymavlink).
+        // tlog/qgroundcontrol.records.csv, line 1.
         const val QGROUNDCONTROL_FIRST_TIMESTAMP = 1_792_091_306_747_000L
         const val QGROUNDCONTROL_FIRST_FRAME = 36
 
@@ -113,13 +108,11 @@ class TlogWriterTest {
 
         fun bytes(vararg values: Int): ByteArray = ByteArray(values.size) { values[it].toByte() }
 
-        /** The frame length of each record of the session, as pymavlink reads them (`tlog/session.records.csv`). */
         fun sessionFrameSizes(): List<Int> = String(readFixture(SESSION_RECORDS), Charsets.UTF_8)
             .lines()
             .filter { it.isNotEmpty() }
             .map { it.substringAfter(",").toInt() }
 
-        /** [tlog] with the two low bits of each record's timestamp cleared; records found by their frames' sizes. */
         fun lowBitsCleared(tlog: ByteArray, frameSizes: List<Int>): ByteArray {
             val cleared = tlog.copyOf()
             var offset = 0
