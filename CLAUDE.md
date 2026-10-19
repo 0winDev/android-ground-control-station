@@ -209,6 +209,8 @@ the issue number to an existing one.
 - Adding a message to the table breaks tests that borrowed it as "unknown": pick one the roadmap will never decode
   (#37).
 - Kluent compares maps in iteration order: sort both sides (#10).
+- pymavlink and the C library drop every byte a corrupted LEN claims after a bad checksum, while our parser drops
+  only the start marker: pymavlink proves a corrupted frame is invalid, not which frames come after it (#67).
 - On a 1 m boundary a nanometre decides the MGRS digit, so reference points stay at least 1 cm off one; GEOTRANS
   2.4.2 is not sub-mm accurate and disagrees with GeoConvert at exactly 84°N (#40).
 
