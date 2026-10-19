@@ -69,6 +69,24 @@ class PositionTrustTest {
     }
 
     @Test
+    fun `GIVEN a fresh 3D fix and no position received yet WHEN judging the position THEN is not verified`() {
+        val telemetry = Telemetry(gps = Timed(gps(GpsFixType.Fix3d), clock.markNow()))
+
+        val result = telemetry.isPositionVerified(staleness)
+
+        result.shouldBeFalse()
+    }
+
+    @Test
+    fun `GIVEN a 3D fix on the equator or the prime meridian WHEN judging the position THEN is verified`() {
+        val positions = listOf(EQUATOR, PRIME_MERIDIAN)
+
+        val result = positions.map { telemetry(gps(GpsFixType.Fix3d), it).isPositionVerified(staleness) }
+
+        result shouldBeEqualTo listOf(true, true)
+    }
+
+    @Test
     fun `GIVEN a 3D fix 1 ms under the GPS threshold WHEN judging the position THEN is verified`() {
         val telemetry = telemetry(gps(GpsFixType.Fix3d))
         clock += GPS_STALE_AFTER - 1.milliseconds
@@ -88,10 +106,10 @@ class PositionTrustTest {
         result.shouldBeFalse()
     }
 
-    /** A position and [gps], both received now. */
-    private fun telemetry(gps: GpsStatus): Telemetry {
+    /** [position] and [gps], both received now. */
+    private fun telemetry(gps: GpsStatus, position: GlobalPosition = CANBERRA): Telemetry {
         val now = clock.markNow()
-        return Telemetry(position = Timed(CANBERRA, now), gps = Timed(gps, now))
+        return Telemetry(position = Timed(position, now), gps = Timed(gps, now))
     }
 }
 
@@ -114,6 +132,10 @@ private val CANBERRA = position(latitude = -35.3633514, longitude = 149.1652411)
 
 /** What ArduPilot SITL sent before its first GPS fix (#42): lat 0, lon 0, relative_alt 0. */
 private val NULL_ISLAND = position(latitude = 0.0, longitude = 0.0)
+
+/** Only one coordinate at 0: real places, unlike ArduPilot's uninitialised 0°, 0°. */
+private val EQUATOR = position(latitude = 0.0, longitude = 32.5)
+private val PRIME_MERIDIAN = position(latitude = 51.4779, longitude = 0.0)
 
 private fun position(latitude: Double, longitude: Double) = GlobalPosition(
     latitude = latitude,

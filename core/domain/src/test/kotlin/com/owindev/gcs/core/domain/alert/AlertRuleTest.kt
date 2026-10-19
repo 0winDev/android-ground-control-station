@@ -561,6 +561,16 @@ class AlertRuleTest {
     }
 
     @Test
+    fun `GIVEN a stale alert held past its hold WHEN asking when to evaluate again THEN skips the past deadline`() {
+        val active = listOf(STALE_ATTITUDE.raised(PREVIOUS, raisedAt = clock.markNow()))
+        clock += AlertRule.STALE_MINIMUM_HOLD + 500.milliseconds
+
+        val result = rule.untilNextEvaluation(active, telemetry(battery(remaining = 100)), evaluatingSince)
+
+        result shouldBeEqualTo GPS_STALE_AFTER
+    }
+
+    @Test
     fun `GIVEN alerts of every level WHEN evaluating them THEN the most urgent comes first`() {
         val telemetry = telemetry(battery(remaining = 5), gps(GpsFixType.NoFix)).copy(
             attitude = Timed(ATTITUDE, clock.markNow() - ATTITUDE_STALE_AFTER),
@@ -640,6 +650,15 @@ class AlertRuleTest {
     @Test
     fun `GIVEN a critical threshold not below the low one WHEN creating the thresholds THEN is rejected`() {
         val creating = { BatteryThresholds(low = 20, critical = 20) }
+
+        val result = invoking(creating)
+
+        result shouldThrow IllegalArgumentException::class
+    }
+
+    @Test
+    fun `GIVEN a negative critical threshold WHEN creating the thresholds THEN is rejected`() {
+        val creating = { BatteryThresholds(critical = -1) }
 
         val result = invoking(creating)
 
