@@ -58,6 +58,12 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-030 | The GCS shall offer a night theme and a high-contrast day theme, switchable by the operator. | T, S |
 | REQ-031 | Telemetry values outside their documented range shall be treated as no value, never shown or used as current. | T |
 
+## v0.3 — Map and recording
+
+| ID | Requirement | Method |
+|---|---|---|
+| REQ-032 | The codec shall decode HOME_POSITION as defined in the MAVLink `common` dialect. | T |
+
 ## Requirement → verification matrix
 
 | ID | Verified by | Status |
@@ -72,7 +78,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-010 | `core/mavlink/.../MavlinkParserTest` (real SITL frames: several per datagram, split, byte by byte, whole session in random datagrams, false long starts, signed) | Verified |
 | REQ-011 | `core/mavlink/.../MavlinkCrcTest` (checksum + CRC_EXTRA from real SITL frames, flipped bit, wrong CRC_EXTRA); `core/mavlink/.../MavlinkParserTest` (bad checksum and unknown message ID dropped and counted) | Verified |
 | REQ-012 | `core/mavlink/.../MavlinkParserTest` (1 MB of fixed-seed random bytes, empty datagram, noise counted as skipped bytes, LEN 0 dropped and counted) | Verified |
-| REQ-013 | `core/mavlink/.../MavlinkDecoderTest` (real truncated POWER_STATUS, SERVO_OUTPUT_RAW, VFR_HUD, SYS_STATUS and GPS_RAW_INT zero-filled to the full length, also cut inside a field; extra extension byte ignored; whole session); `core/mavlink/.../MavlinkMessagesTest` (full lengths) | Verified |
+| REQ-013 | `core/mavlink/.../MavlinkDecoderTest` (real truncated POWER_STATUS, SERVO_OUTPUT_RAW, VFR_HUD, SYS_STATUS, GPS_RAW_INT and HOME_POSITION zero-filled to the full length, also cut inside a field; extra extension byte ignored; whole session); `core/mavlink/.../MavlinkMessagesTest` (full lengths) | Verified |
 | REQ-014 | `core/mavlink/.../MavlinkParserTest` (unsupported incompatibility flag dropped and counted; unknown compatibility flag ignored) | Verified |
 | REQ-015 | `core/mavlink/.../MavlinkDecoderTest` (real SITL HEARTBEATs, armed and disarmed in three modes; largest `custom_mode`; whole session) | Verified |
 | REQ-016 | `data/vehicle/.../DefaultVehicleRepositoryTest` (real SITL HEARTBEATs from two system IDs kept apart; ground-station HEARTBEAT ignored); `data/vehicle/.../HeartbeatMapperTest` (only the autopilot component describes the vehicle); `data/vehicle/.../LinkSessionTest` | Verified |
@@ -91,3 +97,4 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-029 | `feature/hud/.../HudViewModelTest` (every value of the active vehicle in the HUD state, MGRS, staleness and its age, no panel while the link is lost); `core/domain/.../PositionTrustTest` (only a fresh 3D fix with a position verifies it, never 0°, 0°, while one coordinate at 0 does); `feature/hud/.../DisplayRoundingTest`; `feature/hud/.../BatteryChipStateTest`. **S:** PR #57, PR #58. **Known limit:** navigation without GPS shows as not verified and a frozen position with a GPS fix is not caught (EKF_STATUS_REPORT, a future issue) | Verified |
 | REQ-030 | `core/designsystem/.../ContrastTest` (WCAG 2.2 AA for every text in both palettes, AAA for the day palette's main text, outlines at least 3:1); `app/.../ThemePreferencesTest` and `ThemeViewModelTest` (the choice stored, restored and toggled). **S:** PR #60. **Known limit:** before Android 12 a day launch shows the night starting window for an instant | Verified |
 | REQ-031 | `data/vehicle/.../TelemetryMapperTest` (out-of-range values in pymavlink frames give no value, an impossible position drops the frame, the range edges are kept); `data/vehicle/.../TelemetryStoreTest` (a dropped position goes stale, never vanishes); `data/vehicle/.../TelemetrySessionTest` (the whole SITL session keeps every value pymavlink decodes). Ranges from `common.xml`, `standard.xml` and WGS84. In the HUD: REQ-029 | Verified |
+| REQ-032 | `core/mavlink/.../MavlinkDecoderTest` (ArduCopter's real HOME_POSITION with the values pymavlink decodes, NaN `q` and `time_usec` cut inside; a full pymavlink frame with every field distinct; without its extension; truncated after `q`; the whole session); `core/mavlink/.../MavlinkMessagesTest` (CRC_EXTRA and full length, checked against `mavlink/mavlink` master). **Known limit:** zero-fill restores a truncated `q` as 0, not its `invalid` NaN; the data layer takes NaN and all-zero alike as no orientation (#69) | Verified |
