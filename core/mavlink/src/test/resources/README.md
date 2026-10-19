@@ -509,3 +509,24 @@ Raw bytes:
 derived/heartbeat-corrupted-len-raised.bin   fd ff 00 00 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 8e b2
 derived/heartbeat-corrupted-len-lowered.bin  fd 01 00 00 3b 01 01 00 00 00 00 00 00 00 02 03 51 03 03 8e b2
 ```
+
+## Telemetry logs (#68)
+
+Made by `py tools/fixtures/tlog_fixtures.py <qgroundcontrol.tlog> <mission-planner.tlog>` (pymavlink 2.4.50, same
+bytes each run). Records are numbered from 0.
+
+| File | Origin | What it proves |
+|---|---|---|
+| `tlog/qgroundcontrol.tlog` | QGroundControl, SITL ArduCopter 4.7.2 `fbd0a316`, 25 s to 35 s | 1,079 records (1 MAVLink 1); whole-ms timestamps; no SETUP_SIGNING or signature (ADR 0006) |
+| `tlog/mission-planner.tlog` | Mission Planner, same SITL, its one signed record left out (the key may not be a throwaway) | 2,417 records (1,375 MAVLink 1); low bits set; no SETUP_SIGNING or signature (ADR 0006) |
+| `heartbeat/session.tlog` | see "How they were captured" | 5,524 records (2 MAVLink 1); round trip |
+| `tlog/<name>.records.csv` | pymavlink: timestamp as stored, frame length, one line per record | expected records |
+| `tlog/<name>.frames.bin` | pymavlink: the frames concatenated (the session's are `derived/session-stream.bin`) | expected frames |
+| `derived/tlog-garbage-between-records.bin` | 7 × `0x55` after the first of the session's first 10 records | garbage is skipped; no start marker 8 bytes past it |
+| `derived/tlog-garbage-before-first-record.bin` | the same 7 bytes before the first record | garbage before any anchor is skipped; no start marker 8 bytes past it |
+| `derived/tlog-false-start-before-first-record.bin` | 8 × `0x55` and `0xFE` before the first record | one false record never anchors |
+| `derived/tlog-timestamp-without-frame.bin` | a lone timestamp after the fifth record | a lone timestamp is skipped; no start marker 8 bytes past it |
+| `derived/tlog-false-start-after-lone-timestamp.bin` | records 418 to 440, a lone timestamp before 421, whose timestamp holds a start marker | the 3-day window rejects a false start |
+| `derived/tlog-truncated-last-record.bin` | the last record cut to 23 of 38 bytes | a truncated record is counted |
+| `derived/tlog-timestamp-at-end.bin` | a lone timestamp after the last record | a lone tail timestamp is counted |
+| `derived/tlog-false-start-at-end.bin` | the 10 records, the last timestamp again with `fd ff 00 00 00 01 01 00 00 00` (LEN 255), then records 10 to 12 | `finish()` finds hidden records |
