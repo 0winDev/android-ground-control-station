@@ -9,14 +9,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
-/**
- * The whole SITL session through `parseRaw()` with the codec's full message table, for the flight log (ADR 0006).
- * Expected bytes and counts come from pymavlink (`derived/session-mavlink2-stream.bin` and the counts printed by
- * `tools/fixtures/derive_fixtures.py`, see `src/test/resources/README.md`).
- *
- * The equivalence test compares `parseRaw()` with `parse()` on the same datagrams. That reference is the parser's
- * own, but `MavlinkParserTest` and `MavlinkDecoderTest` tie `parse()` to pymavlink on this same session.
- */
 class MavlinkParserRawSessionTest {
 
     private lateinit var parser: MavlinkParser
@@ -43,6 +35,7 @@ class MavlinkParserRawSessionTest {
         )
     }
 
+    // parse() as the reference is the parser's own; MavlinkParserTest ties it to pymavlink.
     @Tag("REQ-010")
     @Tag("REQ-036")
     @Test

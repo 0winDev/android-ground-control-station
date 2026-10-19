@@ -15,15 +15,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 
-/**
- * The exact bytes the parser hands out for the flight log (ADR 0006), from real ArduPilot SITL frames and frames
- * derived from them by pymavlink (see `src/test/resources/README.md`). Expected bytes are the fixtures themselves,
- * never the parser's output. The lookup knows only HEARTBEAT (CRC_EXTRA 50, from `minimal.xml`).
- *
- * The fuzz test compares `parseRaw()` with `parse()` on the same bytes. That reference is the parser's own, but
- * `MavlinkParserTest` ties `parse()` to pymavlink, and the test also checks an invariant that needs no reference:
- * every unknown-ID frame handed out is one counted.
- */
 class MavlinkParserRawTest {
 
     private lateinit var parser: MavlinkParser
@@ -125,6 +116,7 @@ class MavlinkParserRawTest {
         parser.stats shouldBeEqualTo ParserStats(badChecksum = 1, skippedBytes = HEARTBEAT_FRAME_SIZE)
     }
 
+    // parse() as the reference is the parser's own; MavlinkParserTest ties it to pymavlink.
     @Tag("REQ-012")
     @Tag("REQ-036")
     @Test

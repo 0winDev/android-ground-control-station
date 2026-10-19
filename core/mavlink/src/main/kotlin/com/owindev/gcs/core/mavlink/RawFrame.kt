@@ -1,18 +1,15 @@
 package com.owindev.gcs.core.mavlink
 
 /**
- * One MAVLink 2 frame as [MavlinkParser.parseRaw] delimits it, for the flight log (ADR 0006).
- *
- * [bytes] are the frame exactly as received: start marker, header, payload as sent (truncation kept), checksum
- * and, when signed, the 13-byte signature. Not data classes: they hold arrays, so equality compares their
- * contents explicitly.
+ * One MAVLink 2 frame as [MavlinkParser.parseRaw] delimits it, with its exact bytes on the wire, signature included
+ * (ADR 0006).
  */
+// Not data classes: they hold arrays, so equality compares contents explicitly.
 sealed interface RawFrame {
 
-    /** The frame's exact bytes on the wire. */
     val bytes: ByteArray
 
-    /** A frame whose checksum matched with its message's CRC_EXTRA: [frame] is what [MavlinkParser.parse] yields. */
+    /** A frame whose checksum matched: [frame] is what [MavlinkParser.parse] yields. */
     class Valid(val frame: MavlinkFrame, override val bytes: ByteArray) : RawFrame {
 
         override fun equals(other: Any?): Boolean =
@@ -24,9 +21,8 @@ sealed interface RawFrame {
     }
 
     /**
-     * A frame whose message ID has no CRC_EXTRA in the lookup: delimited by its LEN and never checked, so only its
-     * length is trusted. It holds no [MavlinkFrame], so it can never be decoded or change vehicle state; it still
-     * counts in [ParserStats.unknownMessageId].
+     * A frame whose message ID has no CRC_EXTRA, delimited by its LEN and never checked; still counted in
+     * [ParserStats.unknownMessageId]. It holds no [MavlinkFrame], so it can never be decoded or change vehicle state.
      */
     class UnknownMessage(val messageId: Int, override val bytes: ByteArray) : RawFrame {
 

@@ -29,8 +29,7 @@ import com.owindev.gcs.core.mavlink.RawFrame.Valid
  *
  * @param crcExtraLookup must return CRC_EXTRA values in 0..255 (they come from the codec's message table).
  */
-// One small function per step of a frame (header, checksum, extraction, consumption), so each can be read and
-// reviewed on its own; merging them to pass the count would hide those steps.
+// One small function per step of a frame, so each can be reviewed on its own.
 @Suppress("TooManyFunctions")
 class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
 
@@ -63,10 +62,9 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
     )
 
     /**
-     * Feeds one datagram and returns every frame it completes, in order, with its exact bytes, for the flight log
-     * (ADR 0006): the valid frames [parse] would return, and the frames with an unknown message ID, delimited by
-     * their LEN and never checked. Drops and counts the rest exactly as [parse] does; the two share one parser
-     * state, so a stream is fed through one of them only.
+     * Feeds one datagram and returns, with their exact bytes, the frames [parse] would return plus the frames with an
+     * unknown message ID, for the flight log (ADR 0006); drops and counts the rest as [parse] does. It shares
+     * [parse]'s state, so a stream goes through one of them only.
      */
     fun parseRaw(datagram: ByteArray): List<RawFrame> = feed(
         datagram,
@@ -74,12 +72,8 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
         onUnknown = { length -> UnknownMessage(messageId(), buffer.copyOfRange(0, length)) },
     )
 
-    /**
-     * Buffers [datagram] byte by byte, extracting the frames each byte completes, and returns what [onValid] and
-     * [onUnknown] make of them (`null` leaves a frame out). Inline, and the list is passed along instead of captured,
-     * so neither lambda nor any reference is allocated: the per-byte loop allocates nothing, and the list is created
-     * on the first frame kept, so a datagram without one allocates nothing either.
-     */
+    // Inline, with the list passed along instead of captured and created on the first frame kept, so neither the
+    // per-byte loop nor a datagram without a kept frame allocates.
     private inline fun <T : Any> feed(
         datagram: ByteArray,
         onValid: (frameLength: Int) -> T?,
@@ -97,11 +91,7 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
         return frames ?: emptyList()
     }
 
-    /**
-     * Consumes every complete frame at the start of the buffer; returns when more bytes are needed. [onValid] and
-     * [onUnknown] get the frame's length while it is still at the start of the buffer, before it is consumed.
-     * Returns [found] plus what they make of the new frames.
-     */
+    // The callbacks get the frame's length while it is still at the start of the buffer.
     private inline fun <T : Any> extractFrames(
         found: MutableList<T>?,
         onValid: (frameLength: Int) -> T?,
@@ -162,7 +152,6 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
         return computed == received
     }
 
-    /** The valid frame at the start of the buffer. */
     private fun frame(): MavlinkFrame {
         val incompatFlags = unsigned(INCOMPAT_FLAGS_INDEX)
         val payloadEnd = HEADER_LENGTH + unsigned(LEN_INDEX)
@@ -229,6 +218,5 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
     }
 }
 
-/** [this] plus [kept], the list created on the first frame kept; unchanged when [kept] is `null`. */
 private fun <T : Any> MutableList<T>?.plusKept(kept: T?): MutableList<T>? =
     if (kept == null) this else (this ?: mutableListOf()).apply { add(kept) }
