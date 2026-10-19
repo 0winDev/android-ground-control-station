@@ -1,5 +1,8 @@
 package com.owindev.gcs.core.mavlink
 
+import com.owindev.gcs.core.mavlink.RawFrame.UnknownMessage
+import com.owindev.gcs.core.mavlink.RawFrame.Valid
+
 /**
  * Extracts MAVLink 2 frames from a stream of datagrams (https://mavlink.io/en/guide/serialization.html).
  *
@@ -10,8 +13,9 @@ package com.owindev.gcs.core.mavlink
  *   LEN 0 is invalid because "The first byte of the payload is never truncated, even if the payload
  *   consists entirely of zeros" (serialization.html, Empty-Byte Payload Truncation); the same page's
  *   "minimum packet length is 12 bytes for acknowledgment packets without payload" names no message;
- * - an unknown message ID cannot be validated, so the whole frame is skipped by its LEN, as the
- *   reference C library does; a `0xFD` inside its payload starts no false frame. The cost: a false
+ * - an unknown message ID cannot be validated, so the whole frame is delimited by its LEN, as the
+ *   reference C library does: [parse] skips it, [parseRaw] hands it out as bytes only (ADR 0006); a
+ *   `0xFD` inside its payload starts no false frame. The cost: a false
  *   `0xFD` in noise that reads as an unknown message skips up to one maximum frame unchecked, losing
  *   any real frame inside that span (those bytes count in [ParserStats.unknownMessageId], not in
  *   [ParserStats.skippedBytes]).
@@ -25,6 +29,9 @@ package com.owindev.gcs.core.mavlink
  *
  * @param crcExtraLookup must return CRC_EXTRA values in 0..255 (they come from the codec's message table).
  */
+// One small function per step of a frame (header, checksum, extraction, consumption), so each can be read and
+// reviewed on its own; merging them to pass the count would hide those steps.
+@Suppress("TooManyFunctions")
 class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
 
     private val buffer = ByteArray(MAX_FRAME_LENGTH)
@@ -45,30 +52,61 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
             emptyPayload = emptyPayload,
         )
 
-    /** Feeds one datagram and returns the valid frames it completes, in order. */
-    fun parse(datagram: ByteArray): List<MavlinkFrame> {
-        var frames: MutableList<MavlinkFrame>? = null
+    /**
+     * Feeds one datagram and returns the valid frames it completes, in order. Copies only each frame's payload and
+     * signature, never its whole bytes.
+     */
+    fun parse(datagram: ByteArray): List<MavlinkFrame> = feed(
+        datagram,
+        onValid = { frame() },
+        onUnknown = { null },
+    )
+
+    /**
+     * Feeds one datagram and returns every frame it completes, in order, with its exact bytes, for the flight log
+     * (ADR 0006): the valid frames [parse] would return, and the frames with an unknown message ID, delimited by
+     * their LEN and never checked. Drops and counts the rest exactly as [parse] does; the two share one parser
+     * state, so a stream is fed through one of them only.
+     */
+    fun parseRaw(datagram: ByteArray): List<RawFrame> = feed(
+        datagram,
+        onValid = { length -> Valid(frame(), buffer.copyOfRange(0, length)) },
+        onUnknown = { length -> UnknownMessage(messageId(), buffer.copyOfRange(0, length)) },
+    )
+
+    /**
+     * Buffers [datagram] byte by byte, extracting the frames each byte completes, and returns what [onValid] and
+     * [onUnknown] make of them (`null` leaves a frame out). Inline, and the list is passed along instead of captured,
+     * so neither lambda nor any reference is allocated: the per-byte loop allocates nothing, and the list is created
+     * on the first frame kept, so a datagram without one allocates nothing either.
+     */
+    private inline fun <T : Any> feed(
+        datagram: ByteArray,
+        onValid: (frameLength: Int) -> T?,
+        onUnknown: (frameLength: Int) -> T?,
+    ): List<T> {
+        var frames: MutableList<T>? = null
         for (byte in datagram) {
             if (buffered == 0 && byte != START_MARKER) {
                 skippedBytes++
                 continue
             }
             buffer[buffered++] = byte
-            frames = extractFrames(frames)
+            frames = extractFrames(frames, onValid, onUnknown)
         }
         return frames ?: emptyList()
     }
 
-    // A stub so the tests compile red; the implementation follows in the next commit.
-    @Suppress("UnusedParameter")
-    fun parseRaw(datagram: ByteArray): List<RawFrame> = TODO("#67")
-
     /**
-     * Consumes every complete frame at the start of the buffer; stops when more bytes are needed.
-     * Returns [found] plus the new frames; the list is created on the first valid frame, so datagrams
-     * without one allocate nothing.
+     * Consumes every complete frame at the start of the buffer; returns when more bytes are needed. [onValid] and
+     * [onUnknown] get the frame's length while it is still at the start of the buffer, before it is consumed.
+     * Returns [found] plus what they make of the new frames.
      */
-    private fun extractFrames(found: MutableList<MavlinkFrame>?): MutableList<MavlinkFrame>? {
+    private inline fun <T : Any> extractFrames(
+        found: MutableList<T>?,
+        onValid: (frameLength: Int) -> T?,
+        onUnknown: (frameLength: Int) -> T?,
+    ): MutableList<T>? {
         var frames = found
         while (buffered >= HEADER_LENGTH) {
             val incompatFlags = unsigned(INCOMPAT_FLAGS_INDEX)
@@ -84,6 +122,7 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
             when {
                 crcExtra == null -> {
                     unknownMessageId++
+                    frames = frames.plusKept(onUnknown(frameLength))
                     consume(frameLength)
                 }
 
@@ -93,8 +132,7 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
                 }
 
                 else -> {
-                    val valid = frame(payloadLength, incompatFlags, signatureLength)
-                    frames = (frames ?: mutableListOf()).apply { add(valid) }
+                    frames = frames.plusKept(onValid(frameLength))
                     consume(frameLength)
                 }
             }
@@ -124,12 +162,14 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
         return computed == received
     }
 
-    private fun frame(payloadLength: Int, incompatFlags: Int, signatureLength: Int): MavlinkFrame {
-        val payloadEnd = HEADER_LENGTH + payloadLength
+    /** The valid frame at the start of the buffer. */
+    private fun frame(): MavlinkFrame {
+        val incompatFlags = unsigned(INCOMPAT_FLAGS_INDEX)
+        val payloadEnd = HEADER_LENGTH + unsigned(LEN_INDEX)
         val signatureStart = payloadEnd + CHECKSUM_LENGTH
-        val signature = when (signatureLength) {
+        val signature = when (incompatFlags and SIGNED_FLAG) {
             0 -> null
-            else -> buffer.copyOfRange(signatureStart, signatureStart + signatureLength)
+            else -> buffer.copyOfRange(signatureStart, signatureStart + SIGNATURE_LENGTH)
         }
         return MavlinkFrame(
             sequence = unsigned(SEQUENCE_INDEX),
@@ -188,3 +228,7 @@ class MavlinkParser(private val crcExtraLookup: CrcExtraLookup) {
         const val BYTE_MASK = 0xFF
     }
 }
+
+/** [this] plus [kept], the list created on the first frame kept; unchanged when [kept] is `null`. */
+private fun <T : Any> MutableList<T>?.plusKept(kept: T?): MutableList<T>? =
+    if (kept == null) this else (this ?: mutableListOf()).apply { add(kept) }

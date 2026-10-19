@@ -4,7 +4,8 @@ package com.owindev.gcs.core.mavlink
  * What the parser has dropped so far, by reason. Bad input is counted, never thrown (REQ-012).
  *
  * @property badChecksum frames whose checksum (with CRC_EXTRA) did not match.
- * @property unknownMessageId frames whose message ID has no CRC_EXTRA, skipped whole by their LEN.
+ * @property unknownMessageId frames whose message ID has no CRC_EXTRA, delimited whole by their LEN and never
+ * checked: skipped by [MavlinkParser.parse], handed out as bytes by [MavlinkParser.parseRaw].
  * @property unsupportedIncompatFlags frames with an incompatibility flag the codec does not support.
  * @property skippedBytes bytes discarded while searching for a start marker (noise, MAVLink 1 frames,
  * the start marker of a rejected frame).
