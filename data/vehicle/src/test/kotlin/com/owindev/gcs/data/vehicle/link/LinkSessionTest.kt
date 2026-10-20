@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.link
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessages
@@ -515,6 +516,7 @@ private fun disarmedStabilizeFromAutopilot() = ReceivedMessage(
         mavlinkVersion = 3,
     ),
     sender = VEHICLE_ADDRESS,
+    origin = DataOrigin.LIVE,
 )
 
 /** [frame] as the codec delimits it on its own. */

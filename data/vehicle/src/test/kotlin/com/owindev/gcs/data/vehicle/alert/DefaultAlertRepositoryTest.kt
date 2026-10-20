@@ -23,6 +23,7 @@ import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
+import com.owindev.gcs.data.vehicle.link.sessionOn
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -55,6 +56,7 @@ class DefaultAlertRepositoryTest {
     private val vehicleRepository: VehicleRepository = mockk()
     private val activeSystemId = MutableStateFlow<SystemId?>(VEHICLE)
     private val vehicles = MutableStateFlow(mapOf(VEHICLE to vehicle(VEHICLE, clock.markNow())))
+    private val origin = MutableStateFlow(DataOrigin.LIVE)
 
     private lateinit var repository: DefaultAlertRepository
 
@@ -68,6 +70,7 @@ class DefaultAlertRepositoryTest {
         repository = DefaultAlertRepository(
             telemetryRepository,
             vehicleRepository,
+            sessionOn(origin),
             AlertRule(timeSource = clock),
             clock,
             testScope.backgroundScope,
@@ -89,6 +92,22 @@ class DefaultAlertRepositoryTest {
             val result = repository.activeAlerts.value
 
             result shouldBeEqualTo Alerts.NotEvaluated
+        }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN a live alert WHEN a replay of the same system ID starts THEN its alerts start afresh, as recorded`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = 20)
+            repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
+
+            origin.value = DataOrigin.REPLAY
+            activeTelemetry.value = telemetry(remaining = 20).copy(origin = DataOrigin.REPLAY)
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(2).copy(origin = DataOrigin.REPLAY)))
         }
 
     @Test

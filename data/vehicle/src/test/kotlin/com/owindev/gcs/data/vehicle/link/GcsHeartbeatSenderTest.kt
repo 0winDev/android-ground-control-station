@@ -52,7 +52,7 @@ class GcsHeartbeatSenderTest {
             sent += firstArg<ByteArray>()
             results.removeFirstOrNull() ?: SendResult.Sent
         }
-        sender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder()))
+        sender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession()))
     }
 
     @AfterEach

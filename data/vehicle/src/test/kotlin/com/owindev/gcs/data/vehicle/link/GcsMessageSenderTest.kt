@@ -1,8 +1,11 @@
 package com.owindev.gcs.data.vehicle.link
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
+import com.owindev.gcs.core.testing.coVerifyNever
+import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
@@ -19,6 +22,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.amshove.kluent.shouldBeEqualTo
 import org.junit.jupiter.api.BeforeEach
@@ -45,7 +49,23 @@ class GcsMessageSenderTest {
             sent += firstArg<ByteArray>()
             results.removeFirstOrNull() ?: SendResult.Sent
         }
-        sender = GcsMessageSender(transport, recorder)
+        sender = GcsMessageSender(transport, recorder, liveSession())
+    }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN the link plays a replay WHEN sending THEN nothing leaves and nothing is recorded`() = runTest {
+        val replaying = GcsMessageSender(transport, recorder, sessionOn(MutableStateFlow(DataOrigin.REPLAY)))
+
+        val result = replaying.send(HEARTBEAT, PEER)
+
+        result shouldBeEqualTo SendResult.NotOpen
+        coVerifyNever {
+            transport.send(any(), any())
+        }
+        verifyNever {
+            recorder.sent(any())
+        }
     }
 
     @Test

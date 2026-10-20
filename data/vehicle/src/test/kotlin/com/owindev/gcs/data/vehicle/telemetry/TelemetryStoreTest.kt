@@ -49,6 +49,21 @@ class TelemetryStoreTest {
     }
 
     @Tag("REQ-026")
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN live telemetry WHEN a replay session starts THEN it is forgotten and only the replay's is kept`() {
+        store.record(received(systemId = 1, message = attitude(roll = 0f)), FIRST)
+
+        store.startSession(DataOrigin.REPLAY)
+        store.record(received(systemId = 2, message = attitude(roll = 0f)), SECOND)
+        store.record(received(systemId = 2, message = sysStatus()).copy(origin = DataOrigin.REPLAY), SECOND)
+        val result = store.telemetry.value
+
+        result shouldBeEqualTo mapOf(
+            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND), origin = DataOrigin.REPLAY),
+        )
+    }
+
     @Test
     fun `GIVEN a newer message of the same kind WHEN recording it THEN replaces the value and its time`() {
         store.record(received(systemId = 1, message = attitude(roll = 0f)), FIRST)
@@ -236,7 +251,7 @@ private val ROLLED_90 = Attitude(roll = 90.00000250447816, pitch = 0.0, yaw = 0.
 private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
 
 private fun received(systemId: Int, message: MavlinkMessage) =
-    ReceivedMessage(systemId, MAV_COMP_ID_AUTOPILOT1, message, SENDER)
+    ReceivedMessage(systemId, MAV_COMP_ID_AUTOPILOT1, message, SENDER, origin = DataOrigin.LIVE)
 
 private fun attitude(roll: Float, timeBootMs: Long = 397_119) = MavlinkMessage.Attitude(
     timeBootMs = timeBootMs,

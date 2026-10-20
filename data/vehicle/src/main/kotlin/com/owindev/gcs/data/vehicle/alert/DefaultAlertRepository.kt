@@ -6,11 +6,13 @@ import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import com.owindev.gcs.data.vehicle.link.LinkSession
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,13 +55,15 @@ import kotlinx.coroutines.launch
  * Nothing remembered is ever shown (as the telemetry, #13): when the last observer leaves the alerts are dropped
  * and the next observer starts from [Alerts.NotEvaluated], judged afresh on the telemetry as it is then. Nor is one
  * vehicle's state carried to another: when the active system ID changes, its alerts start afresh, with no
- * hysteresis or acknowledgement from the vehicle before.
+ * hysteresis or acknowledgement from the vehicle before; and so they do when the link goes from live to a replay or
+ * back (REQ-037), even for the same system ID, so a live alert never shows in a replay nor a recorded one after it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 internal class DefaultAlertRepository @Inject constructor(
     private val telemetryRepository: TelemetryRepository,
     private val vehicleRepository: VehicleRepository,
+    session: LinkSession,
     private val rule: AlertRule,
     private val timeSource: TimeSource.WithComparableMarks,
     @ApplicationScope scope: CoroutineScope,
@@ -74,8 +78,9 @@ internal class DefaultAlertRepository @Inject constructor(
     /** The active system ID is decided from the vehicles' HEARTBEATs, so they are observed with it. */
     private val evaluations: Flow<Evaluation?> = vehicleRepository.vehicles
         .combine(vehicleRepository.activeSystemId) { _, systemId -> systemId }
+        .combine(session.origin) { systemId, origin -> systemId?.let { ActiveIn(origin, it) } }
         .distinctUntilChanged()
-        .flatMapLatest { systemId -> if (systemId == null) flowOf(null) else evaluationsOfNewVehicle(systemId) }
+        .flatMapLatest { active -> if (active == null) flowOf(null) else evaluationsOfNewVehicle(active.systemId) }
 
     /**
      * Starts from [Alerts.NotEvaluated], so nothing of the vehicle active before is carried over. Its armed state
@@ -168,6 +173,9 @@ internal class DefaultAlertRepository @Inject constructor(
 
     /** `BatteryLow (caution)`, `TelemetryStale(kind=GPS) (advisory)`. */
     private fun Alert.describe(): String = "$this (${level.name.lowercase()})"
+
+    /** The active vehicle, [systemId], of the link's [origin]. */
+    private data class ActiveIn(val origin: DataOrigin, val systemId: SystemId)
 
     /** The active vehicle's [telemetry], whether it is [armed], and since when its alerts have been evaluated. */
     private data class Evaluation(val telemetry: Telemetry, val armed: Boolean, val evaluatingSince: TimeMark)

@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.recording
 
 import android.util.Log
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkMessages
@@ -645,7 +646,7 @@ class FlightRecorderTest {
     /** As the receive loop does: the first vehicle's HEARTBEAT pins it, then the frame goes to [into]. */
     private fun receive(path: String, into: FlightRecorder = recorder) {
         val message = message(path)
-        message?.let(HeartbeatMapper::vehicleStateOf)?.let { activeVehicle.pinFirst(it.systemId) }
+        message?.let(HeartbeatMapper::vehicleStateOf)?.let { activeVehicle.pinFirst(it.systemId, DataOrigin.LIVE) }
         into.received(raw(path), message)
     }
 
@@ -752,6 +753,7 @@ class FlightRecorderTest {
                 componentId = valid.frame.componentId,
                 message = MavlinkDecoder.decode(valid.frame),
                 sender = SENDER,
+                origin = DataOrigin.LIVE,
             )
         }
     }

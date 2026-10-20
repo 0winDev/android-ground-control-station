@@ -5,6 +5,8 @@ import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
+import com.owindev.gcs.core.domain.replay.ReplayRepository
+import com.owindev.gcs.core.domain.replay.ReplayRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
@@ -13,9 +15,12 @@ import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
+import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
+import com.owindev.gcs.data.vehicle.replay.DefaultReplayRepository
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
+import com.owindev.gcs.data.vehicle.replay.TlogDatagramSource
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import com.owindev.gcs.data.vehicle.telemetry.DefaultTelemetryRepository
@@ -50,16 +55,20 @@ abstract class VehicleDataModule {
     @Binds
     internal abstract fun bindAlertRepository(impl: DefaultAlertRepository): AlertRepository
 
+    /** The live link's datagrams come from the one transport. */
+    @Binds
+    internal abstract fun bindLiveSource(transport: UdpTransport): DatagramSource
+
+    /** One clock for the whole pipeline (see [providePipelineClock]). */
+    @Binds
+    internal abstract fun bindTimeSource(clock: PipelineClock): TimeSource.WithComparableMarks
+
     companion object {
 
         /** One transport for the whole app: there is one vehicle link. */
         @Provides
         @Singleton
         fun provideUdpTransport(): UdpTransport = UdpTransport(port = UdpTransport.DEFAULT_PORT)
-
-        /** The live link's datagrams come from that one transport. */
-        @Provides
-        fun provideLiveSource(transport: UdpTransport): DatagramSource = transport
 
         /** A failure in one app-wide job must not cancel the others, hence the [SupervisorJob]. */
         @Provides
@@ -74,9 +83,6 @@ abstract class VehicleDataModule {
         @Provides
         @Singleton
         internal fun providePipelineClock(): PipelineClock = PipelineClock(device = ElapsedRealtimeTimeSource)
-
-        @Provides
-        internal fun provideTimeSource(clock: PipelineClock): TimeSource.WithComparableMarks = clock
 
         /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
         @Provides
@@ -113,6 +119,32 @@ abstract class VehicleDataModule {
             timeSource = ElapsedRealtimeTimeSource,
             clock = Clock.systemDefaultZone(),
             scope = scope + Dispatchers.IO,
+        )
+
+        /** Replays only the GCS's own recordings (REQ-037), read on `Dispatchers.IO`. */
+        // One parameter per collaborator of the repository, as its constructor has.
+        @Suppress("LongParameterList")
+        @Provides
+        @Singleton
+        internal fun provideReplayRepository(
+            @ApplicationContext context: Context,
+            session: LinkSession,
+            vehicleRepository: VehicleRepository,
+            activeVehicle: ActiveVehicle,
+            clock: PipelineClock,
+            linkLossRule: LinkLossRule,
+            @ApplicationScope scope: CoroutineScope,
+        ): ReplayRepository = DefaultReplayRepository(
+            session = session,
+            vehicleRepository = vehicleRepository,
+            activeVehicle = activeVehicle,
+            clock = clock,
+            rule = ReplayRule(linkLossRule),
+            recordings = File(context.filesDir, RECORDINGS_FOLDER),
+            replaySource = { recording, replayClock ->
+                TlogDatagramSource(recording, replayClock, ioDispatcher = Dispatchers.IO)
+            },
+            scope = scope,
         )
     }
 }

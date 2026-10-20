@@ -108,7 +108,7 @@ internal class FlightRecorder(
         val atMillis = clock.millis()
         message?.let(HeartbeatMapper::vehicleStateOf)?.let { state ->
             // Marked on arrival, as the vehicle repository marks it, not when the writer gets to it.
-            if (state.systemId == activeVehicle.systemId.value) heard(HeardAt(atMillis, timeSource.markNow()))
+            if (state.systemId == activeVehicle.liveSystemId) heard(HeardAt(atMillis, timeSource.markNow()))
         }
         offer(frame.bytes, micros(atMillis))
     }

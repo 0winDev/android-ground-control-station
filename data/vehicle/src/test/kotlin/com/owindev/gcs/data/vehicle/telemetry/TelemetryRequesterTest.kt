@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
 import android.util.Log
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
@@ -167,6 +168,7 @@ class TelemetryRequesterTest {
                     targetComponent = targetComponent,
                 ),
                 sender = VEHICLE_ADDRESS,
+                origin = DataOrigin.LIVE,
             )
         }
 
@@ -460,7 +462,13 @@ class TelemetryRequesterTest {
                         now < (resumeAt[message] ?: Long.MAX_VALUE)
                     if (!stopped) {
                         store.record(
-                            ReceivedMessage(systemId, AUTOPILOT_COMPONENT_ID, message, VEHICLE_ADDRESS),
+                            ReceivedMessage(
+                                systemId,
+                                AUTOPILOT_COMPONENT_ID,
+                                message,
+                                VEHICLE_ADDRESS,
+                                origin = DataOrigin.LIVE,
+                            ),
                             testScheduler.timeSource.markNow(),
                         )
                     }
@@ -624,6 +632,7 @@ class TelemetryRequesterTest {
                     targetComponent = targetComponent,
                 ),
                 sender = VEHICLE_ADDRESS,
+                origin = DataOrigin.LIVE,
             )
 
         fun setMessageInterval(messageId: Int, intervalMicros: Float) = CommandLong(

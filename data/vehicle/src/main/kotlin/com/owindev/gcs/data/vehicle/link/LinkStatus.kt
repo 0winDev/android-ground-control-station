@@ -26,4 +26,13 @@ internal sealed interface LinkStatus {
 
     /** Receiving stopped because of an unexpected I/O error. */
     data class Failed(val cause: IOException) : LinkStatus
+
+    /** Playing a recording (REQ-037); [datagrams] have been played since it started. */
+    data class Replaying(val datagrams: Long) : LinkStatus
+
+    /** The recording has been played to its end; [datagrams] in all. */
+    data class ReplayEnded(val datagrams: Long) : LinkStatus
+
+    /** The recording could not be read any further. */
+    data class ReplayFailed(val cause: IOException) : LinkStatus
 }

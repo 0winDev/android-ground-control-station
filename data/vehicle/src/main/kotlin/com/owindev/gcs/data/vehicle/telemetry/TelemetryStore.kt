@@ -23,14 +23,22 @@ import kotlinx.coroutines.flow.update
  * Written by the vehicle repository's listener, one message at a time, which marks each message on arrival, so
  * it is filled for exactly as long as the link is listened to. Nothing is ever removed: a vehicle that stops
  * sending keeps its last values, which grow stale. Only its home is forgotten, when it reboots (REQ-033).
+ *
+ * It holds one session at a time, live or replay (REQ-037): [startSession] forgets everything, and a message from
+ * another session is dropped. The listener and the vehicle repository's watchdog both call it, hence the lock.
  */
 @Singleton
 internal class TelemetryStore @Inject constructor() {
 
+    private val lock = Any()
+
     private val mutableTelemetry = MutableStateFlow<Map<SystemId, Telemetry>>(emptyMap())
 
-    /** The last `time_boot_ms` of each autopilot message that carries one, by system ID and message. */
+    /** The last `time_boot_ms` of each autopilot message that carries one, by system ID and message; under [lock]. */
     private val lastBootTimes = mutableMapOf<Pair<SystemId, KClass<out MavlinkMessage>>, Long>()
+
+    /** The session kept; under [lock]. */
+    private var origin = DataOrigin.LIVE
 
     val telemetry: StateFlow<Map<SystemId, Telemetry>> = mutableTelemetry.asStateFlow()
 
@@ -38,19 +46,29 @@ internal class TelemetryStore @Inject constructor() {
      * Keeps [received] if it is telemetry from a vehicle's autopilot, marked [receivedAt], and returns whether it
      * shows that the vehicle rebooted: its home is then forgotten, since a rebooted autopilot sets it again.
      */
-    fun record(received: ReceivedMessage, receivedAt: TimeMark): Boolean {
+    fun record(received: ReceivedMessage, receivedAt: TimeMark): Boolean =
+        synchronized(lock) { recordLocked(received, receivedAt) }
+
+    private fun recordLocked(received: ReceivedMessage, receivedAt: TimeMark): Boolean {
         // System ID 0 is broadcast, never a sender (https://mavlink.io/en/guide/routing.html).
-        if (received.systemId == BROADCAST_SYSTEM_ID) return false
+        if (received.systemId == BROADCAST_SYSTEM_ID || received.origin != origin) return false
         val systemId = SystemId(received.systemId)
         val rebooted = isReboot(systemId, received)
         mutableTelemetry.update { all ->
             val known = all[systemId]
             val kept = if (rebooted) known?.copy(home = null) else known
             val updated =
-                TelemetryMapper.update(kept ?: Telemetry(origin = DataOrigin.LIVE), received, receivedAt) ?: kept
+                TelemetryMapper.update(kept ?: Telemetry(origin = origin), received, receivedAt) ?: kept
             if (updated == null || updated == known) all else all + (systemId to updated)
         }
         return rebooted
+    }
+
+    /** Forgets every vehicle's telemetry and keeps only [origin]'s from now on. */
+    fun startSession(origin: DataOrigin) = synchronized(lock) {
+        this.origin = origin
+        lastBootTimes.clear()
+        mutableTelemetry.value = emptyMap()
     }
 
     /**

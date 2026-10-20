@@ -357,12 +357,13 @@ class DefaultVehicleRepositoryTest {
 
     /**
      * At exactly the timeout the HEARTBEAT and the timer are due at the same instant. Either order is safe
-     * (LOST then CONNECTED, or CONNECTED throughout, since the vehicle was heard in time). Here the HEARTBEAT
-     * is handled first and the timer that follows is re-checked against it, so it never marks LOST.
+     * (LOST then CONNECTED, or CONNECTED throughout, since the vehicle was heard in time). Here the timer is
+     * handled first, since the session hands each message over through its source switch (REQ-037): LOST at the
+     * timeout, as the rule says, and CONNECTED again with the HEARTBEAT, never left LOST.
      */
     @Tag("REQ-017")
     @Test
-    fun `GIVEN a HEARTBEAT exactly at the timeout WHEN observing the vehicles THEN the stale timer marks no LOST`() =
+    fun `GIVEN a HEARTBEAT exactly at the timeout WHEN observing the vehicles THEN is CONNECTED again right after`() =
         testScope.runTest {
             every { transport.datagrams() } returns datagrams(
                 GAP to DISARMED_STABILIZE,
@@ -374,8 +375,8 @@ class DefaultVehicleRepositoryTest {
             result shouldBeEqualTo listOf(
                 emptyMap(),
                 seen(SYSTEM_1 to connected(STABILIZE_DISARMED)),
+                seen(SYSTEM_1 to lost(STABILIZE_DISARMED)),
                 seen(SYSTEM_1 to connected(GUIDED_DISARMED)),
-                seen(SYSTEM_1 to lost(GUIDED_DISARMED)),
             )
         }
 
@@ -765,7 +766,7 @@ class DefaultVehicleRepositoryTest {
             val activeVehicle = ActiveVehicle()
             val session = sessionOn(transport, activeVehicle)
             val requester = TelemetryRequester(
-                sender = GcsMessageSender(transport, ignoringRecorder()),
+                sender = GcsMessageSender(transport, ignoringRecorder(), session),
                 session = session,
                 store = telemetryStore,
                 rule = StalenessRule(),
@@ -812,7 +813,7 @@ private fun TestScope.repositoryOn(
     session: LinkSession = sessionOn(transport, activeVehicle),
     timeSource: TimeSource.WithComparableMarks = testScheduler.timeSource,
     rule: LinkLossRule = LinkLossRule(),
-    heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
+    heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session)),
     scope: CoroutineScope = backgroundScope,
 ) = DefaultVehicleRepository(
     session = session,

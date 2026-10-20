@@ -45,8 +45,13 @@ class TelemetrySessionTest {
         valueCounts(result) shouldBeEqualTo PYMAVLINK_VALUE_COUNTS.toSortedMap()
     }
 
-    private fun received(frame: MavlinkFrame) =
-        ReceivedMessage(frame.systemId, frame.componentId, MavlinkDecoder.decode(frame), SENDER)
+    private fun received(frame: MavlinkFrame) = ReceivedMessage(
+        frame.systemId,
+        frame.componentId,
+        MavlinkDecoder.decode(frame),
+        SENDER,
+        origin = DataOrigin.LIVE,
+    )
 }
 
 private const val SESSION_STREAM = "derived/session-stream.bin"

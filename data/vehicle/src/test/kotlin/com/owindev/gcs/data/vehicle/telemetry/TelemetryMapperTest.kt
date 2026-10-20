@@ -505,7 +505,13 @@ class TelemetryMapperTest {
 
     private fun receivedFixture(path: String): ReceivedMessage {
         val frame = MavlinkParser(MavlinkMessages).parse(readFixture(path)).single()
-        return ReceivedMessage(frame.systemId, frame.componentId, MavlinkDecoder.decode(frame), SENDER)
+        return ReceivedMessage(
+            frame.systemId,
+            frame.componentId,
+            MavlinkDecoder.decode(frame),
+            SENDER,
+            origin = DataOrigin.LIVE,
+        )
     }
 }
 
@@ -584,7 +590,8 @@ private val UNHEALTHY_WITHOUT_READING = Battery(
     healthy = false,
 )
 
-private fun received(message: MavlinkMessage) = ReceivedMessage(SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, message, SENDER)
+private fun received(message: MavlinkMessage) =
+    ReceivedMessage(SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, message, SENDER, origin = DataOrigin.LIVE)
 
 private fun gpsRawInt(fixType: Int = 3, yaw: Int = 0) = MavlinkMessage.GpsRawInt(
     timeUsec = 396_763_000,

@@ -69,7 +69,14 @@ class BootBatteryAlertTest {
     /** The real boot SYS_STATUS mapped as received now, with a fresh 3D GPS fix so only the battery is judged. */
     private fun bootTelemetry(): Telemetry {
         val frame = MavlinkParser(MavlinkMessages).parse(readFixture(SYS_STATUS_BOOT)).single()
-        val received = ReceivedMessage(frame.systemId, frame.componentId, MavlinkDecoder.decode(frame), SENDER)
+        val received =
+            ReceivedMessage(
+                frame.systemId,
+                frame.componentId,
+                MavlinkDecoder.decode(frame),
+                SENDER,
+                origin = DataOrigin.LIVE,
+            )
         val now = clock.markNow()
         return checkNotNull(
             TelemetryMapper.update(Telemetry(gps = Timed(GPS_3D_FIX, now), origin = DataOrigin.LIVE), received, now),

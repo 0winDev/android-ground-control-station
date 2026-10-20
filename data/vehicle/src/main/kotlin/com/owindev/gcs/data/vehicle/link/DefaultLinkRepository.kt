@@ -45,10 +45,21 @@ internal class DefaultLinkRepository @Inject constructor(
 
     private fun LinkStatus.toLinkTraffic(): LinkTraffic = when (this) {
         is LinkStatus.Running -> LinkTraffic.Receiving(port = transport.port, datagrams = datagrams)
+
         is LinkStatus.Recovering -> LinkTraffic.Recovering(port = transport.port, datagrams = datagrams)
+
         LinkStatus.Unavailable -> LinkTraffic.Unavailable(port = transport.port)
+
         LinkStatus.UnavailableRetrying -> LinkTraffic.UnavailableRetrying(port = transport.port)
+
         is LinkStatus.Failed -> LinkTraffic.Failed
+
+        is LinkStatus.Replaying -> LinkTraffic.Replaying(datagrams = datagrams)
+
+        // The traffic of a recording played to its end: what follows is the silence the vehicle repository shows.
+        is LinkStatus.ReplayEnded -> LinkTraffic.Replaying(datagrams = datagrams)
+
+        is LinkStatus.ReplayFailed -> LinkTraffic.Failed
     }
 
     /**
@@ -62,6 +73,8 @@ internal class DefaultLinkRepository @Inject constructor(
                 Log.w(TAG, "Vehicle link failed unexpectedly; reopening it", status.cause)
                 failing = true
             }
+
+            status is LinkStatus.ReplayFailed -> Log.w(TAG, "Reading the recording failed", status.cause)
 
             status is LinkStatus.Running && status.datagrams > 0 && failing -> {
                 Log.i(TAG, "Vehicle link reopened")

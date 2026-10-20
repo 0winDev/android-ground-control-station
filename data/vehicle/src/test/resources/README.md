@@ -87,3 +87,12 @@ documented.
 | `derived/heartbeat-signed.bin` | `heartbeat/disarmed-stabilize.bin` signed by pymavlink | written unsigned: the real frame |
 | `derived/scaled-pressure-signed.bin` | `unknown/scaled-pressure.bin` signed by pymavlink | a signed unknown ID, left out and counted |
 | `derived/setup-signing.bin` | SETUP_SIGNING built by pymavlink with the test key | left out and counted |
+
+## Replay (#71)
+
+Byte-identical copy of the QGroundControl log in `core/mavlink/src/test/resources/tlog/` (#68), where its provenance
+is documented; decoded with pymavlink 2.4.50.
+
+| File | Origin | Used for |
+|---|---|---|
+| `replay/qgroundcontrol.tlog` | real, QGroundControl with SITL ArduCopter 4.7.2: vehicle 1/1 (10 HEARTBEATs, 30 GLOBAL_POSITION_INTs) and QGroundControl's own 255/190 frames (10 HEARTBEATs, 3 COMMAND_LONGs, 1 TIMESYNC) | an external log replayed: only vehicle 1 is heard, the ground station's frames are ignored (REQ-020) |

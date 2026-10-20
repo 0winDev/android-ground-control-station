@@ -10,6 +10,7 @@ import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.link.sessionOn
 import io.mockk.every
 import io.mockk.mockk
 import java.net.InetAddress
@@ -36,6 +37,7 @@ class DefaultTelemetryRepositoryTest {
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val activeSystemId = MutableStateFlow<SystemId?>(null)
     private val store = TelemetryStore()
+    private val origin = MutableStateFlow(DataOrigin.LIVE)
 
     private lateinit var repository: DefaultTelemetryRepository
 
@@ -43,7 +45,7 @@ class DefaultTelemetryRepositoryTest {
     fun setUp() {
         every { vehicleRepository.vehicles } returns vehicles
         every { vehicleRepository.activeSystemId } returns activeSystemId
-        repository = DefaultTelemetryRepository(store, vehicleRepository, testScope.backgroundScope)
+        repository = DefaultTelemetryRepository(store, vehicleRepository, sessionOn(origin), testScope.backgroundScope)
     }
 
     @Tag("REQ-020")
@@ -224,6 +226,7 @@ private fun received(systemId: Int, roll: Float = 0f) = ReceivedMessage(
         yawspeed = 0f,
     ),
     sender = SENDER,
+    origin = DataOrigin.LIVE,
 )
 
 private fun home(systemId: Int, latitude: Int) = ReceivedMessage(
@@ -246,4 +249,5 @@ private fun home(systemId: Int, latitude: Int) = ReceivedMessage(
         timeUsec = 443_979_837,
     ),
     sender = SENDER,
+    origin = DataOrigin.LIVE,
 )

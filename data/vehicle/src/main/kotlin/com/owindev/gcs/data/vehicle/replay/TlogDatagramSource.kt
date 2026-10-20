@@ -36,7 +36,8 @@ private const val CHUNK_SIZE = 4096
  * [REPLAY_SENDER], when the [clock] reaches its time, so pausing the clock pauses the replay.
  *
  * Records are spaced by the difference of their wall-clock timestamps, bounded to zero and [MAX_RECORD_WAIT]: a clock
- * set back never stalls the replay and one set forwards never skips ahead; the first record comes at once. Damaged
+ * set back never stalls the replay and one set forwards never skips ahead. Each collection plays the file from its
+ * start, its first record at once at the clock's position then, so collecting it again never plays a burst. Damaged
  * bytes are left to the [TlogReader], which never throws; a file that cannot be read fails the flow with an
  * [java.io.IOException]. The flow completes at the end of the file. The file is read on [ioDispatcher].
  */
@@ -48,7 +49,7 @@ internal class TlogDatagramSource(
 ) : DatagramSource {
 
     override fun datagrams(): Flow<Datagram> = flow {
-        val pacer = Pacer()
+        val pacer = Pacer(start = clock.position)
         val reader = TlogReader()
         open(recording).use { input ->
             val chunk = ByteArray(CHUNK_SIZE)
@@ -61,9 +62,9 @@ internal class TlogDatagramSource(
         reader.finish().forEach { record -> pacer.deliver(record, this) }
     }.flowOn(ioDispatcher)
 
-    /** When each record is due on the [clock]; one per collection. */
-    private inner class Pacer {
-        private var due = Duration.ZERO
+    /** When each record is due on the [clock], from [start]; one per collection. */
+    private inner class Pacer(start: Duration) {
+        private var due = start
         private var previous: Long? = null
 
         suspend fun deliver(record: TlogRecord, collector: FlowCollector<Datagram>) {
