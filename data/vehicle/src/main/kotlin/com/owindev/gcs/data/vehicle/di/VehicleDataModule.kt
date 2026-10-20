@@ -15,6 +15,7 @@ import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import com.owindev.gcs.data.vehicle.telemetry.DefaultTelemetryRepository
@@ -66,9 +67,16 @@ abstract class VehicleDataModule {
         @ApplicationScope
         fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-        /** Monotonic and counting through device sleep, never wall-clock time (see [ElapsedRealtimeTimeSource]). */
+        /**
+         * One clock for the whole pipeline: the device's, monotonic and counting through sleep, never wall-clock time
+         * (see [ElapsedRealtimeTimeSource]), or a replay's while one plays (REQ-037).
+         */
         @Provides
-        fun provideTimeSource(): TimeSource.WithComparableMarks = ElapsedRealtimeTimeSource
+        @Singleton
+        internal fun providePipelineClock(): PipelineClock = PipelineClock(device = ElapsedRealtimeTimeSource)
+
+        @Provides
+        internal fun provideTimeSource(clock: PipelineClock): TimeSource.WithComparableMarks = clock
 
         /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
         @Provides
@@ -87,20 +95,22 @@ abstract class VehicleDataModule {
         @Provides
         fun provideRecordingRule(): RecordingRule = RecordingRule()
 
-        /** Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. */
+        /**
+         * Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. Only the
+         * live link is recorded, so its link loss is timed on the device clock, never a replay's.
+         */
         @Provides
         @Singleton
         internal fun provideFlightRecorder(
             @ApplicationContext context: Context,
             rule: RecordingRule,
             activeVehicle: ActiveVehicle,
-            timeSource: TimeSource.WithComparableMarks,
             @ApplicationScope scope: CoroutineScope,
         ): FlightRecorder = FlightRecorder(
             directory = File(context.filesDir, RECORDINGS_FOLDER),
             rule = rule,
             activeVehicle = activeVehicle,
-            timeSource = timeSource,
+            timeSource = ElapsedRealtimeTimeSource,
             clock = Clock.systemDefaultZone(),
             scope = scope + Dispatchers.IO,
         )
