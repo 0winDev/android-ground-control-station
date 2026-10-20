@@ -2,6 +2,7 @@ package com.owindev.gcs.core.mavlink
 
 import com.owindev.gcs.core.testing.readFixture
 import org.amshove.kluent.invoking
+import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldBeEqualTo
 import org.amshove.kluent.shouldThrow
 import org.junit.jupiter.api.BeforeEach
@@ -89,8 +90,144 @@ class TlogWriterTest {
         result shouldThrow IllegalArgumentException::class
     }
 
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN an unsigned real frame WHEN taking it for the log THEN it is the same array, unchanged`() {
+        val frame = readFixture(DISARMED_STABILIZE)
+
+        val result = writer.loggable(frame, MavlinkMessages)
+
+        result.written() shouldBe frame
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN an unsigned frame with an unknown message ID WHEN taking it for the log THEN it is kept unchanged`() {
+        val frame = readFixture(SCALED_PRESSURE)
+
+        val result = writer.loggable(frame, MavlinkMessages)
+
+        result.written() shouldBe frame
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a signed HEARTBEAT WHEN taking it for the log THEN it is the real frame it was signed from`() {
+        val signed = readFixture(HEARTBEAT_SIGNED)
+
+        val result = writer.loggable(signed, MavlinkMessages)
+
+        result.written().asList() shouldBeEqualTo readFixture(DISARMED_STABILIZE).asList()
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a signed ATTITUDE with 0xFD inside WHEN taking it for the log THEN it is the real frame unsigned`() {
+        val signed = readFixture(ATTITUDE_SIGNED)
+
+        val result = writer.loggable(signed, MavlinkMessages)
+
+        result.written().asList() shouldBeEqualTo readFixture(ATTITUDE_FD_IN_PAYLOAD).asList()
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a signed truncated VFR_HUD WHEN taking it for the log THEN it keeps its LEN without the signature`() {
+        val signed = readFixture(VFR_HUD_SIGNED)
+
+        val result = writer.loggable(signed, MavlinkMessages)
+
+        result.written().asList() shouldBeEqualTo readFixture(VFR_HUD).asList()
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a signed frame with an unknown message ID WHEN taking it for the log THEN it is left out`() {
+        val signed = readFixture(SCALED_PRESSURE_SIGNED)
+
+        val result = writer.loggable(signed, MavlinkMessages)
+
+        result shouldBeEqualTo LogFrame.SignedUnknownMessage
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a SETUP_SIGNING WHEN taking it for the log THEN it is left out`() {
+        val setupSigning = readFixture(SETUP_SIGNING)
+
+        val result = writer.loggable(setupSigning, MavlinkMessages)
+
+        result shouldBeEqualTo LogFrame.SetupSigning
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a signed SETUP_SIGNING whose CRC_EXTRA is known WHEN taking it for the log THEN it is left out`() {
+        val setupSigning = readFixture(SETUP_SIGNING_SIGNED)
+        val lookup = CrcExtraLookup { msgId ->
+            if (msgId == SETUP_SIGNING_ID) SETUP_SIGNING_CRC_EXTRA else MavlinkMessages.crcExtraFor(msgId)
+        }
+
+        val result = writer.loggable(setupSigning, lookup)
+
+        result shouldBeEqualTo LogFrame.SetupSigning
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a real MAVLink 1 frame with bit 0x01 set at index 2 WHEN taking it for the log THEN it is left out`() {
+        val frame = TlogReader().read(readFixture(SESSION)).map { it.frame }.first(::mavlink1WithLowSeqBitSet)
+
+        val result = writer.loggable(frame, MavlinkMessages)
+
+        result shouldBeEqualTo LogFrame.Mavlink1
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a signed frame with a known ID plus a high MSGID byte WHEN taking it for the log THEN it is left out`() {
+        val signed = readFixture(HEARTBEAT_SIGNED).copyOf().also { it[MSGID_HIGH_INDEX] = 0x01 }
+
+        val result = writer.loggable(signed, MavlinkMessages)
+
+        result shouldBeEqualTo LogFrame.SignedUnknownMessage
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN two frames in one buffer WHEN taking them for the log THEN they are rejected`() {
+        val datagram = readFixture(HEARTBEAT_SIGNED) + readFixture(DISARMED_LOITER)
+
+        val result = invoking { writer.loggable(datagram, MavlinkMessages) }
+
+        result shouldThrow IllegalArgumentException::class
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN bytes that are not a whole frame WHEN taking them for the log THEN they are rejected`() {
+        val cut = readFixture(HEARTBEAT_SIGNED).copyOfRange(0, CUT_FRAME_LENGTH)
+
+        val result = invoking { writer.loggable(cut, MavlinkMessages) }
+
+        result shouldThrow IllegalArgumentException::class
+    }
+
     private companion object {
         const val QGROUNDCONTROL = "tlog/qgroundcontrol.tlog"
+        const val HEARTBEAT_SIGNED = "derived/heartbeat-signed.bin"
+        const val ATTITUDE_SIGNED = "derived/attitude-signed.bin"
+        const val ATTITUDE_FD_IN_PAYLOAD = "unknown/attitude-fd-in-payload.bin"
+        const val VFR_HUD_SIGNED = "derived/vfr-hud-signed.bin"
+        const val VFR_HUD = "telemetry/vfr-hud.bin"
+        const val SCALED_PRESSURE = "unknown/scaled-pressure.bin"
+        const val SCALED_PRESSURE_SIGNED = "derived/scaled-pressure-signed.bin"
+        const val SETUP_SIGNING = "derived/setup-signing.bin"
+        const val SETUP_SIGNING_SIGNED = "derived/setup-signing-signed.bin"
+
+        // common.xml and pymavlink 2.4.50's common dialect.
+        const val SETUP_SIGNING_ID = 256
+        const val SETUP_SIGNING_CRC_EXTRA = 71
         const val SESSION = "heartbeat/session.tlog"
         const val SESSION_RECORDS = "tlog/session.records.csv"
         const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
@@ -105,6 +242,16 @@ class TlogWriterTest {
         // 2026-10-13 04:23:51.687023 UTC, its low two bits both set: 00 06 5D B1 2E 8A 7F 6F, written as ...7F 6C.
         const val LOW_BITS_SET = 0x0006_5DB1_2E8A_7F6FL
         const val LOW_BITS_MASK = 0x03
+
+        // MAVLink 2 MSGID is bytes 7..9, little-endian: 0x01 there makes HEARTBEAT (0) message ID 65536.
+        const val MSGID_HIGH_INDEX = 9
+        const val MAVLINK1_START = 0xFE.toByte()
+        const val SEQ_INDEX_MAVLINK1 = 2
+
+        fun mavlink1WithLowSeqBitSet(frame: ByteArray): Boolean =
+            frame[0] == MAVLINK1_START && frame[SEQ_INDEX_MAVLINK1].toInt() and 0x01 != 0
+
+        fun LogFrame.written(): ByteArray = (this as LogFrame.Write).bytes
 
         fun bytes(vararg values: Int): ByteArray = ByteArray(values.size) { values[it].toByte() }
 
