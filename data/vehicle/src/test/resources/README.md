@@ -75,3 +75,15 @@ not named below is the real frame's: latitude -353633514, longitude 1491652411, 
 | `derived/home-position-lat-past-90.bin` | latitude 900000001 | a home past 90°: the frame is dropped |
 | `derived/home-position-lat-int32-min.bin` | latitude -2147483648 | INT32_MIN, whose absolute value overflows: the frame is dropped |
 | `derived/home-position-null-island.bin` | latitude 0, longitude 0 | never a home: the frame is dropped |
+
+## Recording (#70)
+
+Byte-identical copies of the frames in `core/mavlink/src/test/resources/` (#37, #70), where their provenance is
+documented.
+
+| File | Origin | Used for |
+|---|---|---|
+| `unknown/scaled-pressure.bin` | real | an unknown message ID, written as received |
+| `derived/heartbeat-signed.bin` | `heartbeat/disarmed-stabilize.bin` signed by pymavlink | written unsigned: the real frame |
+| `derived/scaled-pressure-signed.bin` | `unknown/scaled-pressure.bin` signed by pymavlink | a signed unknown ID, left out and counted |
+| `derived/setup-signing.bin` | SETUP_SIGNING built by pymavlink with the test key | left out and counted |

@@ -1,8 +1,10 @@
 package com.owindev.gcs.data.vehicle.di
 
+import android.content.Context
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.link.LinkRepository
+import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
@@ -10,18 +12,24 @@ import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
+import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import com.owindev.gcs.data.vehicle.telemetry.DefaultTelemetryRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.io.File
+import java.time.Clock
 import javax.inject.Singleton
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.plus
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -68,5 +76,25 @@ abstract class VehicleDataModule {
         @Provides
         fun provideAlertRule(staleness: StalenessRule, timeSource: TimeSource.WithComparableMarks): AlertRule =
             AlertRule(staleness = staleness, timeSource = timeSource)
+
+        /** The recording thresholds decided for v0.3 (REQ-036, REQ-039: 10 min, 256 MiB); change them here. */
+        @Provides
+        fun provideRecordingRule(): RecordingRule = RecordingRule()
+
+        /** Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. */
+        @Provides
+        @Singleton
+        internal fun provideFlightRecorder(
+            @ApplicationContext context: Context,
+            rule: RecordingRule,
+            timeSource: TimeSource.WithComparableMarks,
+            @ApplicationScope scope: CoroutineScope,
+        ): FlightRecorder = FlightRecorder(
+            directory = File(context.filesDir, RECORDINGS_FOLDER),
+            rule = rule,
+            timeSource = timeSource,
+            clock = Clock.systemDefaultZone(),
+            scope = scope + Dispatchers.IO,
+        )
     }
 }
