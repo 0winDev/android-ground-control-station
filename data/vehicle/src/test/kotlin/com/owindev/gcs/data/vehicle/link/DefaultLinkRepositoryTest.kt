@@ -42,13 +42,17 @@ class DefaultLinkRepositoryTest {
     @BeforeEach
     fun setUp() {
         val session = LinkSession(
-            transport = transport,
+            live = transport,
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
             recorder = ignoringRecorder(),
             activeVehicle = ActiveVehicle(),
         )
-        repository = DefaultLinkRepository(session = session, scope = testScope.backgroundScope)
+        repository = DefaultLinkRepository(
+            session = session,
+            transport = transport,
+            scope = testScope.backgroundScope,
+        )
     }
 
     @AfterEach

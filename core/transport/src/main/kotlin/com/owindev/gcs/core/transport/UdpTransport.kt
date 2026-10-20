@@ -30,7 +30,7 @@ class UdpTransport(
     val port: Int = DEFAULT_PORT,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val socketFactory: (Int) -> DatagramSocket = ::DatagramSocket,
-) {
+) : DatagramSource {
 
     /** The socket of the current collection of [datagrams], `null` while nobody collects it. */
     private val openSocket = AtomicReference<DatagramSocket?>(null)
@@ -48,7 +48,7 @@ class UdpTransport(
      * another [IOException] if receiving fails while the socket is open. Cancelling the collector is
      * not a failure: the flow just stops.
      */
-    fun datagrams(): Flow<Datagram> = callbackFlow {
+    override fun datagrams(): Flow<Datagram> = callbackFlow {
         val socket = socketFactory(port)
         openSocket.set(socket)
         launch(ioDispatcher) { receiveInto(socket) }

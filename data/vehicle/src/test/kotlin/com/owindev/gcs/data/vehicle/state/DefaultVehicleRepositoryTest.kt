@@ -827,7 +827,7 @@ private fun TestScope.repositoryOn(
 
 /** A link session on [transport] in this scope's virtual time, recording nothing. */
 private fun TestScope.sessionOn(transport: UdpTransport, activeVehicle: ActiveVehicle) = LinkSession(
-    transport = transport,
+    live = transport,
     scope = backgroundScope,
     timeSource = testScheduler.timeSource,
     recorder = ignoringRecorder(),

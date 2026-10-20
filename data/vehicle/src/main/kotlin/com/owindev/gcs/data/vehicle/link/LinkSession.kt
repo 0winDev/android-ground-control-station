@@ -5,7 +5,7 @@ import com.owindev.gcs.core.mavlink.MavlinkFrame
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.mavlink.RawFrame
-import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
@@ -64,8 +64,8 @@ internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
 /**
  * The one place that receives, parses and decodes the vehicle link; every repository builds on it.
  *
- * The transport can only be collected once (a second collection would bind the port twice and fail),
- * so it is shared in the application scope. The socket stays open while anyone collects [messages] or
+ * The [live] source (the UDP transport) can only be collected once (a second collection would bind the port twice
+ * and fail), so it is shared in the application scope. The socket stays open while anyone collects [messages] or
  * [whileOpen] (each repository already waits [LINK_STOP_TIMEOUT] before letting go); after that it
  * closes and [status] goes back to `Running(0)`; the next observer starts a new session with a new
  * socket and a new parser (it keeps partial frames between datagrams).
@@ -93,7 +93,7 @@ internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
  */
 @Singleton
 internal class LinkSession @Inject constructor(
-    private val transport: UdpTransport,
+    private val live: DatagramSource,
     @param:ApplicationScope private val scope: CoroutineScope,
     private val timeSource: TimeSource.WithComparableMarks,
     private val recorder: FlightRecorder,
@@ -102,16 +102,13 @@ internal class LinkSession @Inject constructor(
 
     private val mutableStatus = MutableStateFlow<LinkStatus>(LinkStatus.Running(datagrams = 0))
 
-    /** The local UDP port the link listens on. */
-    val port: Int get() = transport.port
-
     /**
      * The state of the current session; it only changes while the session is open. The datagram count runs
      * for the whole session, across reopenings of the socket.
      */
     val status: StateFlow<LinkStatus> = mutableStatus.asStateFlow()
 
-    // Built on first use, so the transport is only asked for its flow once someone observes the link.
+    // Built on first use, so the source is only asked for its flow once someone observes the link.
     val messages: SharedFlow<ReceivedMessage> by lazy {
         flow {
             var datagrams = 0L
@@ -128,7 +125,7 @@ internal class LinkSession @Inject constructor(
                     val parser = MavlinkParser(MavlinkMessages)
                     var failure: IOException = EOFException("The transport stopped delivering datagrams")
                     var upSince: ComparableTimeMark? = null
-                    transport.datagrams()
+                    live.datagrams()
                         // Only the transport's own failures, never the downstream's: only I/O failures are link
                         // states; anything else is a bug and must crash, not be shared. CancellationException is
                         // not an IOException, so it always goes through.

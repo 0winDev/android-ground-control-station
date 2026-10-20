@@ -9,6 +9,7 @@ import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
+import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
@@ -54,6 +55,10 @@ abstract class VehicleDataModule {
         @Provides
         @Singleton
         fun provideUdpTransport(): UdpTransport = UdpTransport(port = UdpTransport.DEFAULT_PORT)
+
+        /** The live link's datagrams come from that one transport. */
+        @Provides
+        fun provideLiveSource(transport: UdpTransport): DatagramSource = transport
 
         /** A failure in one app-wide job must not cancel the others, hence the [SupervisorJob]. */
         @Provides

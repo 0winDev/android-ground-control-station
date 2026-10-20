@@ -57,7 +57,7 @@ class LinkSessionTest {
     @BeforeEach
     fun setUp() {
         session = LinkSession(
-            transport = transport,
+            live = transport,
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
             recorder = recorder,
@@ -345,7 +345,7 @@ class LinkSessionTest {
             )
             val calls = datagramsAnswering(failingWith(IllegalStateException()))
             LinkSession(
-                transport = transport,
+                live = transport,
                 scope = appScope,
                 timeSource = testScheduler.timeSource,
                 recorder = ignoringRecorder(),

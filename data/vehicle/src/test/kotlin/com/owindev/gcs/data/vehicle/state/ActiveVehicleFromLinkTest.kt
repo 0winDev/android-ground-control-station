@@ -37,7 +37,7 @@ class ActiveVehicleFromLinkTest {
     private val telemetryRequester: TelemetryRequester = mockk()
     private val activeVehicle = ActiveVehicle()
     private val session = LinkSession(
-        transport = transport,
+        live = transport,
         scope = testScope.backgroundScope,
         timeSource = testScope.testScheduler.timeSource,
         recorder = ignoringRecorder(),

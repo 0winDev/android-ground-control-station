@@ -59,7 +59,7 @@ class TelemetryFromLinkTest {
         coEvery { telemetryRequester.run(any(), capture(isHeard)) } coAnswers { awaitCancellation() }
         repository = DefaultVehicleRepository(
             session = LinkSession(
-                transport = transport,
+                live = transport,
                 scope = testScope.backgroundScope,
                 timeSource = testScope.testScheduler.timeSource,
                 recorder = ignoringRecorder(),
@@ -150,7 +150,7 @@ class TelemetryFromLinkTest {
             every { transport.datagrams() } returns datagrams(HEARTBEAT)
             val sleepy = DefaultVehicleRepository(
                 session = LinkSession(
-                    transport = transport,
+                    live = transport,
                     scope = backgroundScope,
                     timeSource = testScheduler.timeSource,
                     recorder = ignoringRecorder(),
