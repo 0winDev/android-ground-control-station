@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.state
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
@@ -161,7 +162,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // timeout had already passed, so a late event never flashes CONNECTED.
                         val link = rule.linkAfter(elapsed)
                         addresses += systemId to event.sender
-                        update(systemId, Vehicle(event.state, link, event.at))
+                        update(systemId, Vehicle(event.state, link, event.at, origin = DataOrigin.LIVE))
                         if (link == VehicleLink.CONNECTED) {
                             startTimer(systemId, rule.timeout - elapsed)
                         } else {

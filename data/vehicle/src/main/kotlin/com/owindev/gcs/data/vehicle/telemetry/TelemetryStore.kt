@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
@@ -45,7 +46,8 @@ internal class TelemetryStore @Inject constructor() {
         mutableTelemetry.update { all ->
             val known = all[systemId]
             val kept = if (rebooted) known?.copy(home = null) else known
-            val updated = TelemetryMapper.update(kept ?: Telemetry(), received, receivedAt) ?: kept
+            val updated =
+                TelemetryMapper.update(kept ?: Telemetry(origin = DataOrigin.LIVE), received, receivedAt) ?: kept
             if (updated == null || updated == known) all else all + (systemId to updated)
         }
         return rebooted

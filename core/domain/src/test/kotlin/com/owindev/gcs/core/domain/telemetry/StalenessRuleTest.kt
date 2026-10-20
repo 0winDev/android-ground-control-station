@@ -1,5 +1,6 @@
 package com.owindev.gcs.core.domain.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
@@ -130,7 +131,7 @@ class StalenessRuleTest {
         val attitude = Timed(LEVEL, clock.markNow())
         clock += 300.milliseconds
 
-        val result = rule.untilNextStale(Telemetry(attitude = attitude, battery = battery))
+        val result = rule.untilNextStale(Telemetry(attitude = attitude, battery = battery, origin = DataOrigin.LIVE))
 
         result shouldBeEqualTo 200.milliseconds
     }
@@ -140,7 +141,7 @@ class StalenessRuleTest {
         val attitude = Timed(LEVEL, clock.markNow())
         clock += rule.thresholdOf(TelemetryKind.ATTITUDE)
 
-        val result = rule.untilNextStale(Telemetry(attitude = attitude))
+        val result = rule.untilNextStale(Telemetry(attitude = attitude, origin = DataOrigin.LIVE))
 
         result.shouldBeNull()
     }

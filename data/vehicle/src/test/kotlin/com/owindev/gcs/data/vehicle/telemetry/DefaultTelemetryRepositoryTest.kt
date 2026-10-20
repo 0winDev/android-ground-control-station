@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Home
 import com.owindev.gcs.core.domain.telemetry.Telemetry
@@ -68,7 +69,7 @@ class DefaultTelemetryRepositoryTest {
             runCurrent()
             val result = repository.activeTelemetry.value
 
-            result shouldBeEqualTo Telemetry()
+            result shouldBeEqualTo Telemetry(origin = DataOrigin.LIVE)
         }
 
     @Tag("REQ-016")
@@ -84,7 +85,7 @@ class DefaultTelemetryRepositoryTest {
             runCurrent()
             val result = repository.activeTelemetry.value
 
-            result shouldBeEqualTo Telemetry(attitude = Timed(LEVEL, RECEIVED_AT))
+            result shouldBeEqualTo Telemetry(attitude = Timed(LEVEL, RECEIVED_AT), origin = DataOrigin.LIVE)
         }
 
     @Tag("REQ-026")
@@ -98,7 +99,7 @@ class DefaultTelemetryRepositoryTest {
         runCurrent()
         val result = repository.activeTelemetry.value
 
-        result shouldBeEqualTo Telemetry(attitude = Timed(LEVEL, RECEIVED_AT))
+        result shouldBeEqualTo Telemetry(attitude = Timed(LEVEL, RECEIVED_AT), origin = DataOrigin.LIVE)
     }
 
     @Tag("REQ-026")
@@ -158,7 +159,7 @@ class DefaultTelemetryRepositoryTest {
             runCurrent()
             val result = repository.activeTelemetry.value
 
-            result shouldBeEqualTo Telemetry(attitude = Timed(LEVEL, RECEIVED_AT))
+            result shouldBeEqualTo Telemetry(attitude = Timed(LEVEL, RECEIVED_AT), origin = DataOrigin.LIVE)
         }
 
     @Tag("REQ-033")

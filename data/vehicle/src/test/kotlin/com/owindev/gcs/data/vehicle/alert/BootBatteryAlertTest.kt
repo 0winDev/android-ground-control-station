@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.alert
 import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.Telemetry
@@ -45,7 +46,10 @@ class BootBatteryAlertTest {
 
         val result = rule.evaluate(emptyList(), telemetry, armed = false, clock.markNow() - SETTLED, ::nextOccurrence)
 
-        result shouldBeEqualTo listOf(ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow()))
+        result shouldBeEqualTo
+            listOf(
+                ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow(), origin = DataOrigin.LIVE),
+            )
     }
 
     @Test
@@ -55,8 +59,8 @@ class BootBatteryAlertTest {
         val result = rule.evaluate(emptyList(), telemetry, armed = true, clock.markNow() - SETTLED, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(
-            ActiveAlert(Alert.BatteryUnhealthy, occurrence = 2, raisedAt = clock.markNow()),
-            ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow()),
+            ActiveAlert(Alert.BatteryUnhealthy, occurrence = 2, raisedAt = clock.markNow(), origin = DataOrigin.LIVE),
+            ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow(), origin = DataOrigin.LIVE),
         )
     }
 
@@ -67,7 +71,9 @@ class BootBatteryAlertTest {
         val frame = MavlinkParser(MavlinkMessages).parse(readFixture(SYS_STATUS_BOOT)).single()
         val received = ReceivedMessage(frame.systemId, frame.componentId, MavlinkDecoder.decode(frame), SENDER)
         val now = clock.markNow()
-        return checkNotNull(TelemetryMapper.update(Telemetry(gps = Timed(GPS_3D_FIX, now)), received, now))
+        return checkNotNull(
+            TelemetryMapper.update(Telemetry(gps = Timed(GPS_3D_FIX, now), origin = DataOrigin.LIVE), received, now),
+        )
     }
 }
 

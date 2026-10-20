@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
@@ -388,17 +389,24 @@ class DefaultAlertRepositoryTest {
 
     /** Active as [occurrence], raised now unless [raisedAt] says otherwise. */
     private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false, raisedAt: TimeMark = clock.markNow()) =
-        ActiveAlert(alert = this, occurrence = occurrence, raisedAt = raisedAt, acknowledged = acknowledged)
+        ActiveAlert(
+            alert = this,
+            occurrence = occurrence,
+            raisedAt = raisedAt,
+            acknowledged = acknowledged,
+            origin = DataOrigin.LIVE,
+        )
 
     /** Only a GPS with a 3D fix, kept fresh: the battery never arrives. */
-    private fun gpsOnly(): Telemetry = Telemetry(gps = Timed(GPS_3D_FIX, clock.markNow() + LONG_AFTER))
+    private fun gpsOnly(): Telemetry =
+        Telemetry(gps = Timed(GPS_3D_FIX, clock.markNow() + LONG_AFTER), origin = DataOrigin.LIVE)
 
     /** Battery and GPS with a 3D fix, received [receivedAt]. */
     private fun telemetry(remaining: Int, receivedAt: TimeMark = clock.markNow()): Telemetry =
         telemetry(battery(remaining), receivedAt)
 
     private fun telemetry(battery: Battery, receivedAt: TimeMark = clock.markNow()): Telemetry =
-        Telemetry(battery = Timed(battery, receivedAt), gps = Timed(GPS_3D_FIX, receivedAt))
+        Telemetry(battery = Timed(battery, receivedAt), gps = Timed(GPS_3D_FIX, receivedAt), origin = DataOrigin.LIVE)
 }
 
 private const val TAG = "AlertRepository"
@@ -438,6 +446,7 @@ private fun vehicle(systemId: SystemId, heardAt: TimeMark, armed: Boolean = fals
     state = VehicleState(systemId, VehicleType.COPTER, FlightMode.Named("Stabilize"), armed = armed),
     link = VehicleLink.CONNECTED,
     lastHeartbeat = heardAt,
+    origin = DataOrigin.LIVE,
 )
 
 private fun battery(remaining: Int) = Battery(

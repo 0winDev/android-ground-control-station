@@ -1,5 +1,6 @@
 package com.owindev.gcs.core.domain.alert
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import kotlin.time.TimeMark
 
@@ -68,12 +69,13 @@ sealed interface Alert {
  *
  * [occurrence] tells this raise apart from any other, before or after: an alert that clears and is raised again is
  * a new occurrence, so acknowledging the one the operator saw never acknowledges the next. [raisedAt] is when it was
- * raised.
+ * raised, and [origin] whether by the live link or a replay, so a recorded alert never passes for a live one.
  */
 data class ActiveAlert(
     val alert: Alert,
     val occurrence: Long,
     val raisedAt: TimeMark,
+    val origin: DataOrigin,
     val acknowledged: Boolean = false,
 )
 

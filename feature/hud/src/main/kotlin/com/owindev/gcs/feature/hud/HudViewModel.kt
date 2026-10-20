@@ -174,11 +174,14 @@ class HudViewModel @Inject constructor(
             // Data is arriving, so the vehicle is shown as usual; the warning only says the link may fail again.
             is LinkTraffic.Recovering ->
                 receiving(traffic.port, traffic.datagrams, active, otherVehicles, linkUnstable = true)
+
+            // No port: the datagrams come from a recording, not from a socket.
+            is LinkTraffic.Replaying -> receiving(port = null, traffic.datagrams, active, otherVehicles)
         }.withTelemetry(telemetry)
     }
 
     private fun receiving(
-        port: Int,
+        port: Int?,
         datagrams: Long,
         active: Vehicle?,
         otherVehicles: List<Int>,
@@ -228,7 +231,7 @@ private fun Vehicle.toStatus() = VehicleStatus(
 )
 
 private fun LinkTraffic.toLocalFault(): LocalLinkFault? = when (this) {
-    is LinkTraffic.Receiving -> null
+    is LinkTraffic.Receiving, is LinkTraffic.Replaying -> null
     is LinkTraffic.Recovering -> LocalLinkFault.Unstable
     is LinkTraffic.Unavailable -> LocalLinkFault.PortUnavailable(port = port)
     is LinkTraffic.UnavailableRetrying -> LocalLinkFault.PortUnavailableRetrying(port = port)

@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.AirData
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
@@ -43,7 +44,7 @@ class TelemetryMapperTest {
     fun `GIVEN a real GLOBAL_POSITION_INT WHEN mapping it THEN is in degrees, metres and metres per second`() {
         val received = receivedFixture(GLOBAL_POSITION_INT)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result shouldBeEqualTo Telemetry(
             position = Timed(
@@ -59,6 +60,7 @@ class TelemetryMapperTest {
                 ),
                 RECEIVED_AT,
             ),
+            origin = DataOrigin.LIVE,
         )
     }
 
@@ -66,7 +68,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GLOBAL_POSITION_INT with an unknown heading WHEN mapping it THEN has no heading`() {
         val received = receivedFixture(GLOBAL_POSITION_INT_EDGES)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.position?.value shouldBeEqualTo GlobalPosition(
             latitude = -35.3633514,
@@ -85,7 +87,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GLOBAL_POSITION_INT with a heading of 360 degrees WHEN mapping it THEN has no heading`() {
         val received = receivedFixture(GLOBAL_POSITION_INT_HDG_36000)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.position?.value shouldBeEqualTo REAL_POSITION.copy(heading = null)
     }
@@ -95,7 +97,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GLOBAL_POSITION_INT at the ends of every range WHEN mapping it THEN keeps them`() {
         val received = receivedFixture(GLOBAL_POSITION_INT_ENDS)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.position?.value shouldBeEqualTo REAL_POSITION.copy(
             latitude = 90.0,
@@ -107,7 +109,7 @@ class TelemetryMapperTest {
     @Test
     @Tag("REQ-031")
     fun `GIVEN a known position WHEN a GLOBAL_POSITION_INT places the vehicle nowhere THEN the frame is dropped`() {
-        val telemetry = Telemetry(position = Timed(REAL_POSITION, EARLIER))
+        val telemetry = Telemetry(position = Timed(REAL_POSITION, EARLIER), origin = DataOrigin.LIVE)
         val placesNowhere = listOf(
             GLOBAL_POSITION_INT_LAT_PAST_90,
             GLOBAL_POSITION_INT_LON_PAST_180,
@@ -125,7 +127,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GLOBAL_POSITION_INT at the south and east ends WHEN mapping it THEN keeps them`() {
         val received = receivedFixture(GLOBAL_POSITION_INT_ENDS_SOUTH_EAST)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.position?.value shouldBeEqualTo REAL_POSITION.copy(latitude = -90.0, longitude = 180.0)
     }
@@ -134,13 +136,14 @@ class TelemetryMapperTest {
     fun `GIVEN a real ATTITUDE WHEN mapping it THEN is in degrees`() {
         val received = receivedFixture(ATTITUDE)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result shouldBeEqualTo Telemetry(
             attitude = Timed(
                 Attitude(roll = -0.06018896765758124, pitch = -0.07352510544512286, yaw = -0.6512406614749974),
                 RECEIVED_AT,
             ),
+            origin = DataOrigin.LIVE,
         )
     }
 
@@ -148,7 +151,7 @@ class TelemetryMapperTest {
     fun `GIVEN an ATTITUDE with yaw near minus pi WHEN mapping it THEN is near minus 180 degrees`() {
         val received = receivedFixture(ATTITUDE_EDGES)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.attitude?.value shouldBeEqualTo Attitude(
             roll = 28.64788975654116,
@@ -162,7 +165,7 @@ class TelemetryMapperTest {
     fun `GIVEN an ATTITUDE with a NaN roll and an infinite pitch WHEN mapping it THEN only the yaw is kept`() {
         val received = receivedFixture(ATTITUDE_OUT_OF_RANGE)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.attitude?.value shouldBeEqualTo Attitude(roll = null, pitch = null, yaw = 28.64788975654116)
     }
@@ -172,7 +175,7 @@ class TelemetryMapperTest {
     fun `GIVEN an ATTITUDE with a roll at pi and a yaw past it WHEN mapping it THEN only the yaw is dropped`() {
         val received = receivedFixture(ATTITUDE_PAST_PI)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.attitude?.value shouldBeEqualTo Attitude(
             roll = 180.00000500895632,
@@ -185,7 +188,7 @@ class TelemetryMapperTest {
     fun `GIVEN a real truncated VFR_HUD WHEN mapping it THEN is the air data with throttle 0`() {
         val received = receivedFixture(VFR_HUD)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result shouldBeEqualTo Telemetry(
             airData = Timed(
@@ -197,6 +200,7 @@ class TelemetryMapperTest {
                 ),
                 RECEIVED_AT,
             ),
+            origin = DataOrigin.LIVE,
         )
     }
 
@@ -204,7 +208,7 @@ class TelemetryMapperTest {
     fun `GIVEN a VFR_HUD while descending WHEN mapping it THEN the climb rate is negative`() {
         val received = receivedFixture(VFR_HUD_EDGES)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.airData?.value shouldBeEqualTo AirData(
             airspeed = 0.0238723773509264,
@@ -219,7 +223,7 @@ class TelemetryMapperTest {
     fun `GIVEN a VFR_HUD with non-finite floats and throttle 101 WHEN mapping it THEN keeps only the groundspeed`() {
         val received = receivedFixture(VFR_HUD_OUT_OF_RANGE)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.airData?.value shouldBeEqualTo AirData(
             airspeed = null,
@@ -234,7 +238,7 @@ class TelemetryMapperTest {
     fun `GIVEN a VFR_HUD at full throttle WHEN mapping it THEN keeps a throttle of 100`() {
         val received = receivedFixture(VFR_HUD_THROTTLE_100)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.airData?.value?.throttle shouldBeEqualTo 100
     }
@@ -243,10 +247,11 @@ class TelemetryMapperTest {
     fun `GIVEN a real SYS_STATUS WHEN mapping it THEN is the battery in volts, amperes and percent`() {
         val received = receivedFixture(SYS_STATUS)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result shouldBeEqualTo Telemetry(
             battery = Timed(FULL_BATTERY, RECEIVED_AT),
+            origin = DataOrigin.LIVE,
         )
     }
 
@@ -254,7 +259,7 @@ class TelemetryMapperTest {
     fun `GIVEN a SYS_STATUS with distinct readings from an unhealthy monitor WHEN mapping it THEN keeps them`() {
         val received = receivedFixture(SYS_STATUS_EDGES)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo Battery(
             voltage = 11.1,
@@ -269,7 +274,7 @@ class TelemetryMapperTest {
     fun `GIVEN a SYS_STATUS with every battery reading unknown WHEN mapping it THEN has no reading`() {
         val received = receivedFixture(SYS_STATUS_UNKNOWN_BATTERY)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo UNHEALTHY_WITHOUT_READING
     }
@@ -278,7 +283,7 @@ class TelemetryMapperTest {
     fun `GIVEN the real boot SYS_STATUS, 0 mV and not yet healthy WHEN mapping it THEN has no voltage, not 0 V`() {
         val received = receivedFixture(SYS_STATUS_BOOT)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo UNHEALTHY_WITHOUT_READING
     }
@@ -287,7 +292,7 @@ class TelemetryMapperTest {
     fun `GIVEN a SYS_STATUS with 0 mV from a healthy monitor WHEN mapping it THEN reads 0 V`() {
         val received = receivedFixture(SYS_STATUS_ZERO_VOLTS)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(voltage = 0.0)
     }
@@ -296,7 +301,7 @@ class TelemetryMapperTest {
     fun `GIVEN a SYS_STATUS without a battery monitor WHEN mapping it THEN is not monitored and has no reading`() {
         val received = receivedFixture(SYS_STATUS_NO_MONITOR)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo Battery(
             voltage = null,
@@ -311,7 +316,7 @@ class TelemetryMapperTest {
     fun `GIVEN a SYS_STATUS after a battery failsafe WHEN mapping it THEN is unhealthy and keeps its voltage`() {
         val received = receivedFixture(SYS_STATUS_UNHEALTHY)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(healthy = false)
     }
@@ -320,7 +325,7 @@ class TelemetryMapperTest {
     fun `GIVEN a SYS_STATUS with a remaining energy of -128 WHEN mapping it THEN has no remaining energy`() {
         val received = receivedFixture(SYS_STATUS_REMAINING_MIN)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.battery?.value shouldBeEqualTo FULL_BATTERY.copy(remaining = null)
     }
@@ -329,7 +334,7 @@ class TelemetryMapperTest {
     fun `GIVEN a real GPS_RAW_INT WHEN mapping it THEN is the fix with its accuracy in metres and no yaw`() {
         val received = receivedFixture(GPS_RAW_INT)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result shouldBeEqualTo Telemetry(
             gps = Timed(
@@ -346,6 +351,7 @@ class TelemetryMapperTest {
                 ),
                 RECEIVED_AT,
             ),
+            origin = DataOrigin.LIVE,
         )
     }
 
@@ -353,7 +359,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GPS_RAW_INT with a distinct value in every field WHEN mapping it THEN yaw north is 0 degrees`() {
         val received = receivedFixture(GPS_RAW_INT_EDGES)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.gps?.value shouldBeEqualTo GpsStatus(
             fixType = GpsFixType.Fix3d,
@@ -372,7 +378,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GPS_RAW_INT with every value unknown and extensions zero-filled WHEN mapping it THEN is all null`() {
         val received = receivedFixture(GPS_RAW_INT_UNKNOWN)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.gps?.value shouldBeEqualTo GpsStatus(
             fixType = GpsFixType.NoGps,
@@ -391,7 +397,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GPS_RAW_INT configured for yaw but unable to provide it WHEN mapping it THEN has no yaw`() {
         val received = received(gpsRawInt(yaw = MavlinkMessage.GpsRawInt.YAW_UNAVAILABLE))
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.gps?.value?.yaw.shouldBeNull()
     }
@@ -401,7 +407,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GPS_RAW_INT with a course and a yaw past their ranges WHEN mapping it THEN has neither`() {
         val received = receivedFixture(GPS_RAW_INT_OUT_OF_RANGE)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.gps?.value shouldBeEqualTo GpsStatus(
             fixType = GpsFixType.RtkFixed,
@@ -420,7 +426,7 @@ class TelemetryMapperTest {
     fun `GIVEN a GPS_RAW_INT with a fix type GPS_FIX_TYPE does not define WHEN mapping it THEN keeps its number`() {
         val received = received(gpsRawInt(fixType = UNDEFINED_FIX_TYPE))
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result?.gps?.value?.fixType shouldBeEqualTo GpsFixType.Unknown(UNDEFINED_FIX_TYPE)
     }
@@ -430,15 +436,15 @@ class TelemetryMapperTest {
     fun `GIVEN a real HOME_POSITION WHEN mapping it THEN is the home in degrees and metres`() {
         val received = receivedFixture(HOME_POSITION)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
-        result shouldBeEqualTo Telemetry(home = Timed(REAL_HOME, RECEIVED_AT))
+        result shouldBeEqualTo Telemetry(home = Timed(REAL_HOME, RECEIVED_AT), origin = DataOrigin.LIVE)
     }
 
     @Test
     @Tag("REQ-033")
     fun `GIVEN a known home WHEN a HOME_POSITION at another point arrives THEN replaces it`() {
-        val telemetry = Telemetry(home = Timed(REAL_HOME, EARLIER))
+        val telemetry = Telemetry(home = Timed(REAL_HOME, EARLIER), origin = DataOrigin.LIVE)
 
         val result = mapper.update(telemetry, receivedFixture(HOME_POSITION_MOVED), RECEIVED_AT)
 
@@ -452,7 +458,7 @@ class TelemetryMapperTest {
     @Tag("REQ-031")
     @Tag("REQ-033")
     fun `GIVEN a known home WHEN a HOME_POSITION places it nowhere or at 0, 0 THEN the frame is dropped`() {
-        val telemetry = Telemetry(home = Timed(REAL_HOME, EARLIER))
+        val telemetry = Telemetry(home = Timed(REAL_HOME, EARLIER), origin = DataOrigin.LIVE)
         val noHome = listOf(HOME_POSITION_LAT_PAST_90, HOME_POSITION_LAT_INT32_MIN, HOME_POSITION_NULL_ISLAND)
 
         val result = noHome.map { path -> mapper.update(telemetry, receivedFixture(path), RECEIVED_AT) }
@@ -465,14 +471,14 @@ class TelemetryMapperTest {
     fun `GIVEN a HOME_POSITION from another component of the vehicle WHEN mapping it THEN is not the vehicle's`() {
         val received = receivedFixture(HOME_POSITION).copy(componentId = MAV_COMP_ID_GIMBAL)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result.shouldBeNull()
     }
 
     @Test
     fun `GIVEN telemetry with other parts WHEN mapping a message THEN only its own part changes`() {
-        val telemetry = Telemetry(battery = Timed(UNHEALTHY_WITHOUT_READING, EARLIER))
+        val telemetry = Telemetry(battery = Timed(UNHEALTHY_WITHOUT_READING, EARLIER), origin = DataOrigin.LIVE)
 
         val result = mapper.update(telemetry, receivedFixture(ATTITUDE), RECEIVED_AT)
 
@@ -483,7 +489,7 @@ class TelemetryMapperTest {
     fun `GIVEN telemetry from another component of the vehicle WHEN mapping it THEN is not the vehicle's`() {
         val received = receivedFixture(ATTITUDE).copy(componentId = MAV_COMP_ID_GIMBAL)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result.shouldBeNull()
     }
@@ -492,7 +498,7 @@ class TelemetryMapperTest {
     fun `GIVEN a message that is not telemetry WHEN mapping it THEN is not telemetry`() {
         val received = receivedFixture(HEARTBEAT)
 
-        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
         result.shouldBeNull()
     }

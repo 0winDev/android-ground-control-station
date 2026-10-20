@@ -1,5 +1,6 @@
 package com.owindev.gcs.core.domain.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TestTimeSource
 import org.amshove.kluent.shouldBeEqualTo
@@ -61,7 +62,7 @@ class PositionTrustTest {
 
     @Test
     fun `GIVEN a position and no GPS received yet WHEN judging the position THEN is not verified`() {
-        val telemetry = Telemetry(position = Timed(NULL_ISLAND, clock.markNow()))
+        val telemetry = Telemetry(position = Timed(NULL_ISLAND, clock.markNow()), origin = DataOrigin.LIVE)
 
         val result = telemetry.isPositionVerified(staleness)
 
@@ -70,7 +71,7 @@ class PositionTrustTest {
 
     @Test
     fun `GIVEN a fresh 3D fix and no position received yet WHEN judging the position THEN is not verified`() {
-        val telemetry = Telemetry(gps = Timed(gps(GpsFixType.Fix3d), clock.markNow()))
+        val telemetry = Telemetry(gps = Timed(gps(GpsFixType.Fix3d), clock.markNow()), origin = DataOrigin.LIVE)
 
         val result = telemetry.isPositionVerified(staleness)
 
@@ -109,7 +110,7 @@ class PositionTrustTest {
     /** [position] and [gps], both received now. */
     private fun telemetry(gps: GpsStatus, position: GlobalPosition = CANBERRA): Telemetry {
         val now = clock.markNow()
-        return Telemetry(position = Timed(position, now), gps = Timed(gps, now))
+        return Telemetry(position = Timed(position, now), gps = Timed(gps, now), origin = DataOrigin.LIVE)
     }
 }
 

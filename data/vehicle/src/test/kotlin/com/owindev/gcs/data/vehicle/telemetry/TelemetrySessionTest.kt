@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkFrame
@@ -39,7 +40,7 @@ class TelemetrySessionTest {
             .filter { it.systemId == VEHICLE_SYSTEM_ID }
             .map(::received)
 
-        val result = messages.mapNotNull { mapper.update(Telemetry(), it, RECEIVED_AT) }
+        val result = messages.mapNotNull { mapper.update(Telemetry(origin = DataOrigin.LIVE), it, RECEIVED_AT) }
 
         valueCounts(result) shouldBeEqualTo PYMAVLINK_VALUE_COUNTS.toSortedMap()
     }

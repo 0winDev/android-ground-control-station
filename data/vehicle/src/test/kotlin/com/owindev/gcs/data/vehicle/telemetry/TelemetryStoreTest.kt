@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
@@ -42,8 +43,8 @@ class TelemetryStoreTest {
         val result = store.telemetry.value
 
         result shouldBeEqualTo mapOf(
-            SystemId(1) to Telemetry(attitude = Timed(LEVEL, FIRST)),
-            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND)),
+            SystemId(1) to Telemetry(attitude = Timed(LEVEL, FIRST), origin = DataOrigin.LIVE),
+            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND), origin = DataOrigin.LIVE),
         )
     }
 
@@ -55,7 +56,8 @@ class TelemetryStoreTest {
         store.record(received(systemId = 1, message = attitude(roll = HALF_PI)), SECOND)
         val result = store.telemetry.value
 
-        result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(attitude = Timed(ROLLED_90, SECOND)))
+        result shouldBeEqualTo
+            mapOf(SystemId(1) to Telemetry(attitude = Timed(ROLLED_90, SECOND), origin = DataOrigin.LIVE))
     }
 
     @Tag("REQ-031")
@@ -66,7 +68,8 @@ class TelemetryStoreTest {
         store.record(received(systemId = 1, message = globalPositionInt(lat = PAST_NORTH_POLE_DEGE7)), SECOND)
         val result = store.telemetry.value
 
-        result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(position = Timed(SOUTH_POSITION, FIRST)))
+        result shouldBeEqualTo
+            mapOf(SystemId(1) to Telemetry(position = Timed(SOUTH_POSITION, FIRST), origin = DataOrigin.LIVE))
     }
 
     @Tag("REQ-016")
@@ -114,7 +117,8 @@ class TelemetryStoreTest {
         val result = store.telemetry.value
 
         rebooted.shouldBeTrue()
-        result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(attitude = Timed(LEVEL, SECOND)))
+        result shouldBeEqualTo
+            mapOf(SystemId(1) to Telemetry(attitude = Timed(LEVEL, SECOND), origin = DataOrigin.LIVE))
     }
 
     @Tag("REQ-033")

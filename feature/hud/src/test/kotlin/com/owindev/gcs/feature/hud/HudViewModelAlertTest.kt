@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.domain.telemetry.Battery
@@ -96,7 +97,11 @@ class HudViewModelAlertTest {
         runTest {
             turbineScope {
                 heardVehicle(VehicleLink.CONNECTED, heardAgo = Duration.ZERO)
-                activeTelemetry.value = Telemetry(battery = Timed(LOW_BATTERY, testScheduler.timeSource.markNow()))
+                activeTelemetry.value =
+                    Telemetry(
+                        battery = Timed(LOW_BATTERY, testScheduler.timeSource.markNow()),
+                        origin = DataOrigin.LIVE,
+                    )
                 activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = 1)))
 
                 val result = viewModel.state.testIn(backgroundScope)
@@ -210,6 +215,7 @@ class HudViewModelAlertTest {
                 ),
                 link = link,
                 lastHeartbeat = testScheduler.timeSource.markNow() - heardAgo,
+                origin = DataOrigin.LIVE,
             ),
         )
     }
@@ -218,6 +224,7 @@ class HudViewModelAlertTest {
         alert = alert,
         occurrence = occurrence,
         raisedAt = testScheduler.timeSource.markNow(),
+        origin = DataOrigin.LIVE,
     )
 }
 

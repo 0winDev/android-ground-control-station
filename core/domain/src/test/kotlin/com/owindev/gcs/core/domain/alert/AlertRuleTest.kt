@@ -1,5 +1,6 @@
 package com.owindev.gcs.core.domain.alert
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
@@ -45,6 +46,16 @@ class AlertRuleTest {
         }
 
         result shouldBeEqualTo listOf(NONE, listOf(LOW.raised(1)), listOf(LOW.raised(2)), listOf(CRITICAL.raised(3)))
+    }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN telemetry from a replay WHEN an alert is raised THEN it is marked as from the replay`() {
+        val replayed = telemetry(battery(remaining = 20)).copy(origin = DataOrigin.REPLAY)
+
+        val result = rule.evaluate(NONE, replayed, ARMED, evaluatingSince, ::nextOccurrence)
+
+        result shouldBeEqualTo listOf(LOW.raised(1).copy(origin = DataOrigin.REPLAY))
     }
 
     @Test
@@ -192,7 +203,7 @@ class AlertRuleTest {
 
         val result = rule.evaluate(
             NONE,
-            Telemetry(battery = battery, gps = Timed(gps(), clock.markNow())),
+            Telemetry(battery = battery, gps = Timed(gps(), clock.markNow()), origin = DataOrigin.LIVE),
             ARMED,
             evaluatingSince,
             ::nextOccurrence,
@@ -208,6 +219,7 @@ class AlertRuleTest {
             attitude = Timed(ATTITUDE, clock.markNow() - ATTITUDE_STALE_AFTER),
             battery = Timed(battery(remaining = 50), clock.markNow() - BATTERY_STALE_AFTER),
             gps = Timed(gps(), clock.markNow()),
+            origin = DataOrigin.LIVE,
         )
 
         val result = rule.evaluate(previous, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
@@ -254,7 +266,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN no battery received yet WHEN evaluating it THEN the battery is unknown, never OK`() {
-        val telemetry = Telemetry(gps = Timed(gps(), clock.markNow()))
+        val telemetry = Telemetry(gps = Timed(gps(), clock.markNow()), origin = DataOrigin.LIVE)
 
         val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
@@ -387,7 +399,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN no GPS received yet WHEN evaluating it THEN the fix is lost, never OK`() {
-        val telemetry = Telemetry(battery = Timed(battery(remaining = 100), clock.markNow()))
+        val telemetry = Telemetry(battery = Timed(battery(remaining = 100), clock.markNow()), origin = DataOrigin.LIVE)
 
         val result = rule.evaluate(NONE, telemetry, ARMED, evaluatingSince, ::nextOccurrence)
 
@@ -461,7 +473,7 @@ class AlertRuleTest {
         val since = clock.markNow()
         clock += 500.milliseconds
 
-        val result = rule.untilNextEvaluation(NONE, Telemetry(), since)
+        val result = rule.untilNextEvaluation(NONE, Telemetry(origin = DataOrigin.LIVE), since)
 
         result shouldBeEqualTo GPS_STALE_AFTER - 500.milliseconds
     }
@@ -471,7 +483,13 @@ class AlertRuleTest {
         val since = clock.markNow()
         clock += BATTERY_STALE_AFTER - 1.milliseconds
 
-        val result = rule.evaluate(NONE, Telemetry(gps = Timed(gps(), clock.markNow())), ARMED, since, ::nextOccurrence)
+        val result = rule.evaluate(
+            NONE,
+            Telemetry(gps = Timed(gps(), clock.markNow()), origin = DataOrigin.LIVE),
+            ARMED,
+            since,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo NONE
     }
@@ -481,7 +499,13 @@ class AlertRuleTest {
         val since = clock.markNow()
         clock += BATTERY_STALE_AFTER
 
-        val result = rule.evaluate(NONE, Telemetry(gps = Timed(gps(), clock.markNow())), ARMED, since, ::nextOccurrence)
+        val result = rule.evaluate(
+            NONE,
+            Telemetry(gps = Timed(gps(), clock.markNow()), origin = DataOrigin.LIVE),
+            ARMED,
+            since,
+            ::nextOccurrence,
+        )
 
         result shouldBeEqualTo listOf(UNKNOWN.raised(1))
     }
@@ -493,7 +517,7 @@ class AlertRuleTest {
 
         val result = rule.evaluate(
             NONE,
-            Telemetry(battery = Timed(battery(100), clock.markNow())),
+            Telemetry(battery = Timed(battery(100), clock.markNow()), origin = DataOrigin.LIVE),
             ARMED,
             since,
             ::nextOccurrence,
@@ -509,7 +533,7 @@ class AlertRuleTest {
 
         val result = rule.evaluate(
             NONE,
-            Telemetry(battery = Timed(battery(100), clock.markNow())),
+            Telemetry(battery = Timed(battery(100), clock.markNow()), origin = DataOrigin.LIVE),
             ARMED,
             since,
             ::nextOccurrence,
@@ -685,14 +709,20 @@ class AlertRuleTest {
 
     /** Active as [occurrence], raised now unless [raisedAt] says otherwise. */
     private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false, raisedAt: TimeMark = clock.markNow()) =
-        ActiveAlert(alert = this, occurrence = occurrence, raisedAt = raisedAt, acknowledged = acknowledged)
+        ActiveAlert(
+            alert = this,
+            occurrence = occurrence,
+            raisedAt = raisedAt,
+            acknowledged = acknowledged,
+            origin = DataOrigin.LIVE,
+        )
 
     /** The next occurrence raised in this test: 1, 2, 3, after the [PREVIOUS] ones. */
     private fun nextOccurrence(): Long = ++raised
 
     /** Fresh battery and GPS, received [receivedAt]. */
     private fun telemetry(battery: Battery, gps: GpsStatus = gps(), receivedAt: TimeMark = clock.markNow()) =
-        Telemetry(battery = Timed(battery, receivedAt), gps = Timed(gps, receivedAt))
+        Telemetry(battery = Timed(battery, receivedAt), gps = Timed(gps, receivedAt), origin = DataOrigin.LIVE)
 }
 
 private val NONE = emptyList<ActiveAlert>()

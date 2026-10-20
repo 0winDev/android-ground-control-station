@@ -21,6 +21,9 @@ sealed interface LinkTraffic {
     /** [port] was taken while the link was being reopened after a failure; the link keeps retrying. */
     data class UnavailableRetrying(val port: Int) : LinkTraffic
 
+    /** A recording is being played back instead of the live link (REQ-037); [datagrams] have been played so far. */
+    data class Replaying(val datagrams: Long) : LinkTraffic
+
     /** The link stopped because of an unexpected I/O error. */
     data object Failed : LinkTraffic
 }

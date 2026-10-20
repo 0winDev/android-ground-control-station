@@ -1,14 +1,17 @@
 package com.owindev.gcs.core.domain.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
+
 /**
  * The last telemetry received from one vehicle, each part with the time it arrived (REQ-026). A part is
  * `null` until its first message arrives; a part that stops arriving keeps its last value and grows stale.
  *
  * Units are SI except angles, which are in degrees: latitude, longitude, headings, courses and attitude.
  * A field that the vehicle reported as unknown, or sent outside its documented range (REQ-031), is `null`,
- * never 0 nor a clamped or wrapped value.
+ * never 0 nor a clamped or wrapped value. [origin] says whether it came from the live link or a replay.
  */
 data class Telemetry(
+    val origin: DataOrigin,
     val position: Timed<GlobalPosition>? = null,
     val attitude: Timed<Attitude>? = null,
     val airData: Timed<AirData>? = null,

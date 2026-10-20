@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
@@ -37,7 +38,7 @@ internal class DefaultTelemetryRepository @Inject constructor(
         store.telemetry,
     ) { _, activeSystemId, telemetry ->
         // Heard but nothing received from it yet: every part null, which is not the same as no vehicle.
-        activeSystemId?.let { telemetry[it] ?: Telemetry() }
+        activeSystemId?.let { telemetry[it] ?: Telemetry(origin = DataOrigin.LIVE) }
     }
         .stateIn(
             scope = scope,

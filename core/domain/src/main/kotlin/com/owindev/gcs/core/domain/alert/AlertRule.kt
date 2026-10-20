@@ -60,7 +60,14 @@ class AlertRule(
             staleAlerts(telemetry, previous)
         val kept = previous.filter { it.alert in active }
         val now = timeSource.markNow()
-        val raised = (active - wasActive).map { ActiveAlert(it, occurrence = nextOccurrence(), raisedAt = now) }
+        val raised = (active - wasActive).map {
+            ActiveAlert(
+                alert = it,
+                occurrence = nextOccurrence(),
+                raisedAt = now,
+                origin = telemetry.origin,
+            )
+        }
         return (raised + kept).sortedByDescending { it.alert.level }
     }
 

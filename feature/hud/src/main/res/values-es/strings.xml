@@ -1,5 +1,6 @@
 <resources>
     <string name="hud_datagrams_received">Datagramas recibidos</string>
+    <string name="hud_playing_recording">Reproduciendo una grabación</string>
     <string name="hud_listening_on_port">Escuchando en el puerto UDP %1$d</string>
     <string name="hud_port_unavailable">No se puede escuchar en el puerto UDP %1$d: otra app lo está usando.</string>
     <string name="hud_port_unavailable_retrying">El puerto UDP %1$d se ocupó al reconectar. Reintentando hasta que quede libre.</string>
