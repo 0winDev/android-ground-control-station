@@ -3,9 +3,11 @@ package com.owindev.gcs.data.vehicle.replay
 import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.TimeSource
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
@@ -30,6 +32,17 @@ internal class ReplayClock(private val device: TimeSource.WithComparableMarks) {
 
     fun pause() = state.update { current ->
         if (current is State.Playing) State.Paused(position = current.position()) else current
+    }
+
+    /**
+     * Suspends until the clock plays and its position has reached [target], so a paused replay delivers nothing, not even
+     * what was already due. The position is read again after each wait, since a pause may have come in the middle of it.
+     */
+    suspend fun awaitPosition(target: Duration) {
+        do {
+            playing.first { it }
+            delay(target - position)
+        } while (position < target)
     }
 
     private fun State.position(): Duration = when (this) {
