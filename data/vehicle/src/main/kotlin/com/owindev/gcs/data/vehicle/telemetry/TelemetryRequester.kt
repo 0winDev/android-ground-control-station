@@ -2,6 +2,7 @@ package com.owindev.gcs.data.vehicle.telemetry
 
 import android.util.Log
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
@@ -46,11 +47,11 @@ internal sealed interface StreamResult {
 }
 
 /**
- * Asks the active vehicle for the HUD's telemetry ([TELEMETRY_STREAMS]) each time it becomes CONNECTED
+ * Asks the active vehicle for its telemetry ([TELEMETRY_STREAMS]) each time it becomes CONNECTED
  * (REQ-023): on first contact and after every recovery, since a rebooted autopilot has forgotten the
  * intervals.
  *
- * After that round, and for as long as the vehicle stays CONNECTED, a stream that has been silent for its
+ * After that round, and for as long as the vehicle stays CONNECTED, a watched stream that has been silent for its
  * [StalenessRule] threshold is requested again (REQ-023): when its value goes stale, the operator sees it
  * greyed out and the vehicle is asked for it. A stream is requested at most once every
  * [REQUEST_AGAIN_INTERVAL], so a vehicle that rejects or ignores it is not flooded. Silence is read from the
@@ -115,19 +116,21 @@ internal class TelemetryRequester @Inject constructor(
     suspend fun requestAll(target: TelemetryTarget): List<StreamResult> =
         TELEMETRY_STREAMS.map { stream -> request(target, stream).also { result -> report(stream, result) } }
 
+    /** The streams whose silence is watched, with the part of the telemetry that tells it. */
+    private val watched: Map<TelemetryStream, TelemetryKind> =
+        TELEMETRY_STREAMS.mapNotNull { stream -> stream.kind?.let { kind -> stream to kind } }.toMap()
+
     /**
-     * Until cancelled, requests each stream again once it has been silent for its staleness threshold and
+     * Until cancelled, requests each watched stream again once it has been silent for its staleness threshold and
      * [REQUEST_AGAIN_INTERVAL] has passed since it was last requested. A stream never received counts as
      * silent from the start. Sleeps until the next stream is due and then reads the store again, since a
      * message that arrived in the meantime moves that stream's turn later. A turn that comes while the vehicle
      * is not [isHeard] is skipped, not sent, and waits a whole interval again.
      */
     private suspend fun requestAgainWhenSilent(target: TelemetryTarget, isHeard: () -> Boolean): Nothing {
-        val requestedAt = TELEMETRY_STREAMS.associateWithTo(mutableMapOf()) { timeSource.markNow() }
+        val requestedAt = watched.keys.associateWithTo(mutableMapOf()) { timeSource.markNow() }
         while (true) {
-            val untilDue = TELEMETRY_STREAMS.associateWith { stream ->
-                untilDue(target, stream, requestedAt.getValue(stream))
-            }
+            val untilDue = watched.mapValues { (stream, kind) -> untilDue(target, kind, requestedAt.getValue(stream)) }
             val due = untilDue.entries.firstOrNull { it.value <= Duration.ZERO }?.key
             if (due == null) {
                 delay(untilDue.values.min())
@@ -138,10 +141,10 @@ internal class TelemetryRequester @Inject constructor(
         }
     }
 
-    /** How long until [stream] is due to be requested again; zero or less when it is due now. */
-    private fun untilDue(target: TelemetryTarget, stream: TelemetryStream, requestedAt: TimeMark): Duration {
-        val silence = store.telemetry.value[target.systemId]?.get(stream.kind)?.receivedAt?.elapsedNow()
-        val untilStale = if (silence == null) Duration.ZERO else rule.thresholdOf(stream.kind) - silence
+    /** How long until the stream of [kind] is due to be requested again; zero or less when it is due now. */
+    private fun untilDue(target: TelemetryTarget, kind: TelemetryKind, requestedAt: TimeMark): Duration {
+        val silence = store.telemetry.value[target.systemId]?.get(kind)?.receivedAt?.elapsedNow()
+        val untilStale = if (silence == null) Duration.ZERO else rule.thresholdOf(kind) - silence
         val untilAllowed = REQUEST_AGAIN_INTERVAL - requestedAt.elapsedNow()
         return maxOf(untilStale, untilAllowed)
     }
