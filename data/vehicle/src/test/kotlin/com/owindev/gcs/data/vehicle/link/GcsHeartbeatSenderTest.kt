@@ -9,6 +9,7 @@ import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -51,7 +52,7 @@ class GcsHeartbeatSenderTest {
             sent += firstArg<ByteArray>()
             results.removeFirstOrNull() ?: SendResult.Sent
         }
-        sender = GcsHeartbeatSender(GcsMessageSender(transport))
+        sender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder()))
     }
 
     @AfterEach

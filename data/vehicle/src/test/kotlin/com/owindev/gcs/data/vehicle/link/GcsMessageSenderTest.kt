@@ -5,7 +5,12 @@ import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import io.mockk.Runs as runs
 import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import java.io.IOException
 import java.net.InetAddress
@@ -28,6 +33,7 @@ import org.junit.jupiter.api.Test
 class GcsMessageSenderTest {
 
     private val transport: UdpTransport = mockk()
+    private val recorder: FlightRecorder = ignoringRecorder()
     private val sent = mutableListOf<ByteArray>()
     private var results = mutableListOf<SendResult>()
 
@@ -39,7 +45,7 @@ class GcsMessageSenderTest {
             sent += firstArg<ByteArray>()
             results.removeFirstOrNull() ?: SendResult.Sent
         }
-        sender = GcsMessageSender(transport)
+        sender = GcsMessageSender(transport, recorder)
     }
 
     @Test
@@ -100,6 +106,20 @@ class GcsMessageSenderTest {
 
         result shouldBeEqualTo SendResult.Sent
         sent.takeLast(2).map { headerOf(it).sequence } shouldBeEqualTo listOf(LAST_SEQUENCE, 0)
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a closed link and then an open one WHEN sending THEN only the frames sent are recorded`() = runTest {
+        val recorded = mutableListOf<ByteArray>()
+        every { recorder.sent(capture(recorded)) } just runs
+        results = mutableListOf(SendResult.NotOpen)
+        sender.send(HEARTBEAT, PEER)
+
+        val result = sender.send(COMMAND, PEER)
+
+        result shouldBeEqualTo SendResult.Sent
+        recorded.map { it.asList() } shouldBeEqualTo listOf(sent[1].asList())
     }
 
     /** The header fields this test checks, as the codec's parser reads them. */
