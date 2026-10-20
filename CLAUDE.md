@@ -278,6 +278,8 @@ the issue number to an existing one.
   after about 5 s (`sendto` → `EPERM`) (#14).
 - In airplane mode the emulator's bound UDP socket never fails, so a transport failure cannot be reproduced there
   (#25).
+- A SITL TCP port can stay silent for a whole session (5762 sent nothing while 5763 worked): count raw bytes on it
+  first (#70).
 
 **Emulator, Windows and tooling**
 - `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first and
@@ -289,5 +291,6 @@ the issue number to an existing one.
   and Python writes CRLF unless `newline="\n"`, which ktlint rejects (#14, #56).
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those instead of retrying (#8).
+- On Windows `@TempDir` cannot delete a file a test leaves open: close what the SUT opened in `@AfterEach` (#70).
 - CI never runs `check`: its Coverage step calls each module's `koverVerify` by name, so a module with a new
   minimum must be added there too, or the minimum only fails locally (#63).
