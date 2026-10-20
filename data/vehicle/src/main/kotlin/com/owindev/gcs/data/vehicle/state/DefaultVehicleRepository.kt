@@ -58,8 +58,8 @@ import kotlinx.coroutines.launch
  *   of a reboot the store detects while it stays CONNECTED, since the autopilot has forgotten the intervals
  *   (REQ-033). It only listens for answers while it is waiting for one.
  *
- * The first vehicle heard becomes the [activeSystemId] and stays so (REQ-020); the others are kept in the
- * map like any vehicle, never merged into it.
+ * The [activeSystemId] is the [ActiveVehicle] the link pinned with the first vehicle heard, and stays so (REQ-020);
+ * the others are kept in the map like any vehicle, never merged into it.
  *
  * The watchdog is the only writer: HEARTBEATs and timeouts reach it as events through one channel and
  * are handled one at a time, so no state is shared between threads. Vehicles are never removed: a lost
@@ -73,7 +73,7 @@ import kotlinx.coroutines.launch
  * vehicle's age is right after waking. Timers use coroutine `delay`, which pauses during sleep, so the
  * LOST transition itself can lag by up to one timeout after the device wakes.
  */
-// One collaborator per job above, plus the store the listener fills; grouping them would only hide that.
+// One collaborator per job above, plus the store the listener fills and the pin; grouping them would only hide that.
 @Suppress("LongParameterList")
 @Singleton
 internal class DefaultVehicleRepository @Inject constructor(
@@ -83,11 +83,11 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val heartbeatSender: GcsHeartbeatSender,
     private val telemetryRequester: TelemetryRequester,
     private val telemetryStore: TelemetryStore,
+    private val activeVehicle: ActiveVehicle,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository {
 
     private val mutableVehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
-    private val mutableActiveSystemId = MutableStateFlow<SystemId?>(null)
     private val events = Channel<Event>(Channel.UNLIMITED)
 
     /**
@@ -116,7 +116,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     override val activeSystemId: StateFlow<SystemId?> by lazy {
         // Starts the jobs: the active vehicle comes from the same HEARTBEATs as the map.
         vehicles
-        mutableActiveSystemId.asStateFlow()
+        activeVehicle.systemId
     }
 
     private suspend fun listenWhileObserved() {
@@ -160,9 +160,6 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Normally CONNECTED; LOST only if the watchdog got to this HEARTBEAT after the
                         // timeout had already passed, so a late event never flashes CONNECTED.
                         val link = rule.linkAfter(elapsed)
-                        // Pinned once, in arrival order, and never moved (REQ-020): a second vehicle on the
-                        // link must not silently take the operator's place.
-                        if (mutableActiveSystemId.value == null) mutableActiveSystemId.value = systemId
                         addresses += systemId to event.sender
                         update(systemId, Vehicle(event.state, link, event.at))
                         if (link == VehicleLink.CONNECTED) {
@@ -209,7 +206,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private fun update(systemId: SystemId, vehicle: Vehicle) {
         val before = mutableVehicles.value[systemId]?.link ?: VehicleLink.LOST
         mutableVehicles.value += systemId to vehicle
-        if (systemId == mutableActiveSystemId.value && vehicle.link != before) {
+        if (systemId == activeVehicle.systemId.value && vehicle.link != before) {
             val target = if (vehicle.link == VehicleLink.CONNECTED) {
                 TelemetryTarget(systemId, addresses.getValue(systemId))
             } else {
@@ -225,7 +222,7 @@ internal class DefaultVehicleRepository @Inject constructor(
      */
     private fun requestAgainAfterReboot(systemId: SystemId) {
         val connected = mutableVehicles.value[systemId]?.link == VehicleLink.CONNECTED
-        if (systemId == mutableActiveSystemId.value && connected) {
+        if (systemId == activeVehicle.systemId.value && connected) {
             activeLinkChanges.trySend(TelemetryTarget(systemId, addresses.getValue(systemId)))
         }
     }
@@ -236,7 +233,7 @@ internal class DefaultVehicleRepository @Inject constructor(
      * timer can run late after the device sleeps (#12) and this GCS must not keep announcing itself then.
      */
     private fun activeAddressWhileConnected(): InetSocketAddress? {
-        val systemId = mutableActiveSystemId.value
+        val systemId = activeVehicle.systemId.value
         val vehicle = systemId?.let(mutableVehicles.value::get)
         val connected = vehicle != null &&
             vehicle.link == VehicleLink.CONNECTED &&

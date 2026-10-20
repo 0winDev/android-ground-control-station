@@ -14,6 +14,7 @@ import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import com.owindev.gcs.data.vehicle.telemetry.DefaultTelemetryRepository
 import dagger.Binds
@@ -87,11 +88,13 @@ abstract class VehicleDataModule {
         internal fun provideFlightRecorder(
             @ApplicationContext context: Context,
             rule: RecordingRule,
+            activeVehicle: ActiveVehicle,
             timeSource: TimeSource.WithComparableMarks,
             @ApplicationScope scope: CoroutineScope,
         ): FlightRecorder = FlightRecorder(
             directory = File(context.filesDir, RECORDINGS_FOLDER),
             rule = rule,
+            activeVehicle = activeVehicle,
             timeSource = timeSource,
             clock = Clock.systemDefaultZone(),
             scope = scope + Dispatchers.IO,

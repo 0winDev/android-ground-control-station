@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.link
 
+import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
@@ -10,6 +11,7 @@ import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.every
 import io.mockk.mockk
 import java.net.BindException
@@ -48,6 +50,7 @@ class LinkSessionTest {
     private val testScope = TestScope()
     private val transport: UdpTransport = mockk()
     private val recorder: FlightRecorder = ignoringRecorder()
+    private val activeVehicle = ActiveVehicle()
 
     private lateinit var session: LinkSession
 
@@ -58,6 +61,7 @@ class LinkSessionTest {
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
             recorder = recorder,
+            activeVehicle = activeVehicle,
         )
     }
 
@@ -345,6 +349,7 @@ class LinkSessionTest {
                 scope = appScope,
                 timeSource = testScheduler.timeSource,
                 recorder = ignoringRecorder(),
+                activeVehicle = ActiveVehicle(),
             ).messages.launchIn(backgroundScope)
 
             delay(LONG_WAIT)
@@ -424,6 +429,33 @@ class LinkSessionTest {
             }
         }
 
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN a ground station's HEARTBEAT then two vehicles' WHEN collecting THEN the first vehicle is pinned`() =
+        testScope.runTest {
+            val heartbeats = readFixture(MISSION_PLANNER) +
+                readFixture(SECOND_VEHICLE) +
+                readFixture(DISARMED_STABILIZE)
+            every { transport.datagrams() } returns openWith(heartbeats)
+
+            session.messages.take(3).toList()
+
+            activeVehicle.systemId.value shouldBeEqualTo SystemId(2)
+        }
+
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN the first vehicle's HEARTBEAT WHEN the recorder gets it THEN its vehicle is already pinned`() =
+        testScope.runTest {
+            var pinnedWhenRecorded: SystemId? = null
+            every { recorder.received(any(), any()) } answers { pinnedWhenRecorded = activeVehicle.systemId.value }
+            every { transport.datagrams() } returns openWith(readFixture(DISARMED_STABILIZE))
+
+            session.messages.first()
+
+            pinnedWhenRecorded shouldBeEqualTo SystemId(1)
+        }
+
     /**
      * Answers each `datagrams()` call with the next of [flows], repeating the last one, and records when each
      * call was made, in virtual ms since this was called.
@@ -442,6 +474,8 @@ class LinkSessionTest {
 
 private const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
 private const val SCALED_PRESSURE = "unknown/scaled-pressure.bin"
+private const val MISSION_PLANNER = "gcs/heartbeat-mission-planner.bin"
+private const val SECOND_VEHICLE = "derived/heartbeat-sysid-2.bin"
 private const val SPLIT = 7
 private const val GAP_MILLIS = 100L
 private const val RETRY_FIRST_MILLIS = 1_000L

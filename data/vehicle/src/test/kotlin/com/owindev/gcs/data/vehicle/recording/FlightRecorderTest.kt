@@ -10,10 +10,13 @@ import com.owindev.gcs.core.mavlink.TlogReader
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
+import com.owindev.gcs.data.vehicle.state.HeartbeatMapper
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.net.InetAddress
@@ -47,6 +50,8 @@ class FlightRecorderTest {
 
     private val testScope = TestScope()
     private val clock = SettableClock(START)
+    private val activeVehicle = ActiveVehicle()
+    private val openStreams = mutableListOf<OutputStream>()
     private val directory get() = File(temp, RECORDINGS_FOLDER)
 
     private lateinit var recorder: FlightRecorder
@@ -62,6 +67,8 @@ class FlightRecorderTest {
 
     @AfterEach
     fun tearDown() {
+        // Windows cannot delete the temporary folder while a test leaves a recording open.
+        openStreams.forEach(OutputStream::close)
         unmockkStatic(Log::class)
     }
 
@@ -144,6 +151,62 @@ class FlightRecorderTest {
 
             timestamps(START_NAME) shouldBeEqualTo listOf(START_MICROS, START_MICROS + LATER_MICROS)
         }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a signed frame sent WHEN recorded THEN it is written without its signature`() = testScope.runTest {
+        receive(DISARMED_STABILIZE)
+        recorder.sent(fixture(HEARTBEAT_SIGNED).toByteArray())
+
+        stopAndWrite()
+
+        frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(DISARMED_STABILIZE))
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a wall clock before 1970 WHEN frames are recorded THEN they are stamped at the epoch`() =
+        testScope.runTest {
+            clock.set(BEFORE_EPOCH)
+            receive(DISARMED_STABILIZE)
+
+            stopAndWrite()
+
+            timestamps(BEFORE_EPOCH_NAME) shouldBeEqualTo listOf(0L)
+        }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN HEARTBEATs queued before the writer runs WHEN the log opens THEN it is named by the first`() =
+        testScope.runTest {
+            receive(DISARMED_STABILIZE)
+            clock.advance(LATER)
+            receive(DISARMED_LOITER)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN the vehicle heard WHEN the log opens THEN the status is RECORDING`() = testScope.runTest {
+        receive(DISARMED_STABILIZE)
+
+        runCurrent()
+
+        recorder.status.value shouldBeEqualTo RecorderStatus.RECORDING
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a recording WHEN the session stops THEN the status is IDLE`() = testScope.runTest {
+        receive(DISARMED_STABILIZE)
+
+        stopAndWrite()
+
+        recorder.status.value shouldBeEqualTo RecorderStatus.IDLE
+    }
 
     @Tag("REQ-036")
     @Test
@@ -274,7 +337,7 @@ class FlightRecorderTest {
             val small = recorder(RecordingRule(maxTotalBytes = LIMIT_BYTES))
             oldLog(OLDEST_NAME, LIMIT_BYTES, lastModifiedMillis = 1)
             oldLog(IMPORTED_NAME, LIMIT_BYTES / 2, lastModifiedMillis = 2)
-            small.received(raw(DISARMED_STABILIZE), message(DISARMED_STABILIZE))
+            receive(DISARMED_STABILIZE, small)
 
             small.sessionStopped()
             runCurrent()
@@ -287,7 +350,7 @@ class FlightRecorderTest {
     fun `GIVEN a recording over the limit by itself WHEN it closes THEN every other log goes but never it`() =
         testScope.runTest {
             val tiny = recorder(RecordingRule(maxTotalBytes = 1))
-            tiny.received(raw(DISARMED_STABILIZE), message(DISARMED_STABILIZE))
+            receive(DISARMED_STABILIZE, tiny)
             runCurrent()
             oldLog(OLDEST_NAME, 1, lastModifiedMillis = 1)
             tiny.sessionStopped()
@@ -295,6 +358,36 @@ class FlightRecorderTest {
             runCurrent()
 
             logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN a closed log over the limit by itself WHEN the next recording opens THEN the closed one is kept`() =
+        testScope.runTest {
+            val tiny = recorder(RecordingRule(maxTotalBytes = 1))
+            receive(DISARMED_STABILIZE, tiny)
+            tiny.sessionStopped()
+            runCurrent()
+            clock.advance(LATER)
+            receive(DISARMED_LOITER, tiny)
+
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(START_NAME, LATER_NAME)
+        }
+
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN logs from before the app started over the limit WHEN a recording opens THEN the newest is kept`() =
+        testScope.runTest {
+            val tiny = recorder(RecordingRule(maxTotalBytes = 1))
+            oldLog(OLDEST_NAME, 1, lastModifiedMillis = 1)
+            oldLog(IMPORTED_NAME, 1, lastModifiedMillis = 2)
+            receive(DISARMED_STABILIZE, tiny)
+
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(START_NAME, IMPORTED_NAME)
         }
 
     @Tag("REQ-036")
@@ -315,9 +408,9 @@ class FlightRecorderTest {
     fun `GIVEN a disk that fails WHEN recording THEN it stops, is logged once and frames keep being taken`() =
         testScope.runTest {
             val failing = recorder(openOutput = { FailingStream() })
-            failing.received(raw(DISARMED_STABILIZE), message(DISARMED_STABILIZE))
+            receive(DISARMED_STABILIZE, failing)
             runCurrent()
-            failing.received(raw(DISARMED_LOITER), message(DISARMED_LOITER))
+            receive(DISARMED_LOITER, failing)
 
             runCurrent()
 
@@ -325,6 +418,36 @@ class FlightRecorderTest {
                 Log.w(TAG, any<String>(), any<IOException>())
             }
         }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a disk that failed WHEN frames keep arriving THEN they are taken and the status is FAILED`() =
+        testScope.runTest {
+            val failing = recorder(openOutput = { FailingStream() })
+            receive(DISARMED_STABILIZE, failing)
+            runCurrent()
+            receive(DISARMED_LOITER, failing)
+
+            runCurrent()
+
+            failing.status.value shouldBeEqualTo RecorderStatus.FAILED
+        }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a disk that failed WHEN the next session hears the vehicle THEN it records again`() = testScope.runTest {
+        var failures = 1
+        val recovering = recorder(openOutput = { if (failures-- > 0) FailingStream() else opened(it) })
+        receive(DISARMED_STABILIZE, recovering)
+        recovering.sessionStopped()
+        runCurrent()
+        receive(DISARMED_LOITER, recovering)
+
+        recovering.sessionStopped()
+        runCurrent()
+
+        frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
+    }
 
     @Tag("REQ-036")
     @Test
@@ -343,18 +466,20 @@ class FlightRecorderTest {
 
     private fun recorder(
         rule: RecordingRule = RecordingRule(),
-        openOutput: ((File) -> OutputStream)? = null,
+        openOutput: (File) -> OutputStream = ::opened,
     ): FlightRecorder {
         val timeSource = testScope.testScheduler.timeSource
-        val scope = testScope.backgroundScope
-        return if (openOutput == null) {
-            FlightRecorder(directory, rule, timeSource, clock, scope)
-        } else {
-            FlightRecorder(directory, rule, timeSource, clock, scope, openOutput)
-        }
+        return FlightRecorder(directory, rule, activeVehicle, timeSource, clock, testScope.backgroundScope, openOutput)
     }
 
-    private fun receive(path: String) = recorder.received(raw(path), message(path))
+    private fun opened(file: File): OutputStream = FileOutputStream(file).also(openStreams::add)
+
+    /** As the receive loop does: the first vehicle's HEARTBEAT pins it, then the frame goes to [into]. */
+    private fun receive(path: String, into: FlightRecorder = recorder) {
+        val message = message(path)
+        message?.let(HeartbeatMapper::vehicleStateOf)?.let { activeVehicle.pinFirst(it.systemId) }
+        into.received(raw(path), message)
+    }
 
     private fun TestScope.stopAndWrite() {
         recorder.sessionStopped()
@@ -381,6 +506,10 @@ class FlightRecorderTest {
 
         fun advance(by: Duration) {
             now = now.plusMillis(by.inWholeMilliseconds)
+        }
+
+        fun set(instant: Instant) {
+            now = instant
         }
 
         override fun instant(): Instant = now
@@ -414,6 +543,8 @@ class FlightRecorderTest {
         const val LATER_NAME = "2026-10-20_14-32-05.tlog"
         const val TEN_MINUTES_LATER_NAME = "2026-10-20_14-40-05.tlog"
         val NINE_MINUTES = 9.minutes
+        val BEFORE_EPOCH: Instant = Instant.parse("1969-12-31T23:59:59Z")
+        const val BEFORE_EPOCH_NAME = "1969-12-31_23-59-59.tlog"
 
         const val OLDEST_NAME = "2026-10-01_09-00-00.tlog"
         const val IMPORTED_NAME = "imported.tlog"

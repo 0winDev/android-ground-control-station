@@ -8,8 +8,8 @@ data class Recording(val name: String, val sizeBytes: Long, val lastModifiedMill
 
 /**
  * When a flight recording closes (REQ-036) and which recordings make room for a new one (REQ-039): a recording closes
- * after [closeAfterLinkLoss] without a HEARTBEAT from the active vehicle, and all of them together stay within
- * [maxTotalBytes], the oldest deleted first and never the one being recorded.
+ * after [closeAfterLinkLoss] without a HEARTBEAT from the active vehicle, and each time one opens or closes the oldest
+ * are deleted until all fit in [maxTotalBytes], never the one being recorded nor the last one closed.
  */
 class RecordingRule(
     val closeAfterLinkLoss: Duration = DEFAULT_CLOSE_AFTER_LINK_LOSS,
@@ -25,15 +25,15 @@ class RecordingRule(
     fun closesAfter(sinceLastHeartbeat: Duration): Boolean = sinceLastHeartbeat >= closeAfterLinkLoss
 
     /**
-     * The [recordings] to delete, oldest first (by last write, then name), until the rest fit in [maxTotalBytes]. The
-     * one named [current] is never among them, so it alone can stay over the limit.
+     * The [recordings] to delete, oldest first (by last write, then name), until the rest fit in [maxTotalBytes]. Never
+     * the one named [kept], the last one closed or the one closing, so it alone can stay over the limit; with no name,
+     * the newest is kept, as the last one closed before the app started.
      */
-    fun toDelete(recordings: List<Recording>, current: String?): List<Recording> {
+    fun toDelete(recordings: List<Recording>, kept: String?): List<Recording> {
         var excess = recordings.sumOf { it.sizeBytes } - maxTotalBytes
-        val candidates = recordings
-            .filter { it.name != current }
-            .sortedWith(compareBy({ it.lastModifiedMillis }, { it.name }))
-            .iterator()
+        val oldestFirst = recordings.sortedWith(compareBy({ it.lastModifiedMillis }, { it.name }))
+        val keptName = kept ?: oldestFirst.lastOrNull()?.name
+        val candidates = oldestFirst.filter { it.name != keptName }.iterator()
         val deleted = mutableListOf<Recording>()
         while (excess > 0 && candidates.hasNext()) {
             val oldest = candidates.next()

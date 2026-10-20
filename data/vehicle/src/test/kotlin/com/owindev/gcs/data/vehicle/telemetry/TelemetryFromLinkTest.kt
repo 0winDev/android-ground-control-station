@@ -11,6 +11,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import io.mockk.CapturingSlot
 import io.mockk.coEvery
@@ -48,6 +49,7 @@ class TelemetryFromLinkTest {
     private val telemetryRequester: TelemetryRequester = mockk()
     private val isHeard: CapturingSlot<() -> Boolean> = slot()
     private val store = TelemetryStore()
+    private val activeVehicle = ActiveVehicle()
 
     private lateinit var repository: DefaultVehicleRepository
 
@@ -61,12 +63,14 @@ class TelemetryFromLinkTest {
                 scope = testScope.backgroundScope,
                 timeSource = testScope.testScheduler.timeSource,
                 recorder = ignoringRecorder(),
+                activeVehicle = activeVehicle,
             ),
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
             heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
             telemetryRequester = telemetryRequester,
             telemetryStore = store,
+            activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
         )
     }
@@ -150,12 +154,14 @@ class TelemetryFromLinkTest {
                     scope = backgroundScope,
                     timeSource = testScheduler.timeSource,
                     recorder = ignoringRecorder(),
+                    activeVehicle = activeVehicle,
                 ),
                 timeSource = deviceClock,
                 rule = LinkLossRule(),
                 heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
                 telemetryRequester = telemetryRequester,
                 telemetryStore = store,
+                activeVehicle = activeVehicle,
                 scope = backgroundScope,
             )
             sleepy.vehicles.launchIn(backgroundScope)
