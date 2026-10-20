@@ -216,6 +216,10 @@ the issue number to an existing one.
   position and frozen after losing it: a fresh message is not a fresh value (#39, #41, #42).
 - ArduPilot keeps message rates per channel, streams only to a TCP channel it hears from and forgets the rates on
   reboot: measure on the app's own channel and request the streams again (#36, #41).
+- An ArduPilot reboot is shorter than the link timeout (1.2 s without HEARTBEAT in SITL), so it never goes LOST,
+  and the channel then gets no streams until asked again: detect it from `time_boot_ms` going back (#69).
+- ArduPilot sends HOME_POSITION once, unrequested, when it sets or moves home, and nothing before: its silence is
+  normal, never a reason to request it again (#69).
 - Rejecting a value must never erase state: drop the invalid frame instead of turning it into a `null` part. Compare
   ±π ranges as float32 and integer ranges with `in`, not `abs()` (`abs(Int.MIN_VALUE)` overflows) (#49).
 
@@ -250,6 +254,8 @@ the issue number to an existing one.
   (#36).
 - A `try/catch` around `collect` also catches what `emit` throws downstream: catch the upstream with `.catch`.
   `shareIn` does not hand upstream crashes to subscribers, so such a test needs its own scope with a handler (#25).
+- One event can show on several messages: a reboot seen on ATTITUDE and again on GLOBAL_POSITION_INT restarted the
+  request round halfway, so detect it once per system (#69).
 - Anything that waits for an answer subscribes to `messages` and reopens a closed socket: gate background sends on
   "the link is listened to", not only on CONNECTED (#39).
 
