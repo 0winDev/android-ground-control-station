@@ -434,7 +434,7 @@ applied): 130 GLOBAL_POSITION_INT, all with a heading; 260 ATTITUDE with roll, p
 airspeed, groundspeed, climb and throttle; 325 GPS_RAW_INT, all with a course and none with a yaw (no
 dual-antenna GPS in SITL).
 
-## HOME_POSITION (#66)
+## HOME_POSITION (#66, #69)
 
 Extracted from `heartbeat/session.tlog` and re-packed by `py tools/fixtures/derive_fixtures.py` (pymavlink 2.4.50);
 `mavparse` (`common.xml` master `2e2b6af`): CRC_EXTRA 104, LEN 52, 60 with `time_usec` at 52.
@@ -445,6 +445,10 @@ Extracted from `heartbeat/session.tlog` and re-packed by `py tools/fixtures/deri
 | `derived/home-position-full.bin` | distinct value in every field, `time_usec` `0x0102030405060708`, LEN 60 | every offset and the uint64 byte order (REQ-032) |
 | `derived/home-position-no-extension.bin` | `time_usec` 0, `approach_z` -1.5, LEN 52 | a missing extension reads 0 (REQ-013, REQ-032) |
 | `derived/home-position-cut-after-q.bin` | `time_usec` 0, LEN 40 | zero-fill after the NaN `q` (REQ-013, REQ-032) |
+| `derived/home-position-moved.bin` | latitude -353624514, longitude 1491663411, altitude 590130, LEN 56 | home set again elsewhere (REQ-033) |
+| `derived/home-position-lat-past-90.bin` | latitude 900000001, LEN 56 | a home past 90°: dropped (REQ-031) |
+| `derived/home-position-lat-int32-min.bin` | latitude -2147483648 (INT32_MIN), LEN 56 | a latitude whose absolute value overflows an int32 (REQ-031) |
+| `derived/home-position-null-island.bin` | latitude and longitude 0, LEN 56 | 0°, 0° is never a home (REQ-033) |
 
 Raw bytes:
 
@@ -463,6 +467,22 @@ derived/home-position-no-extension.bin  fd 34 00 00 72 01 01 f2 00 00 16 fb eb e
 derived/home-position-cut-after-q.bin   fd 28 00 00 72 01 01 f2 00 00 16 fb eb ea 3b cf e8 58 7a f5 08 00
                                         82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
                                         c0 7f 00 00 c0 7f 44 cc
+derived/home-position-moved.bin         fd 38 00 00 72 01 01 f2 00 00 3e 1e ec ea 33 fa e8 58 32 01 09 00
+                                        82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
+                                        c0 7f 00 00 c0 7f 00 00 00 00 00 00 00 00 00 00 00 00 3d 98 76 1a
+                                        2e f9
+derived/home-position-lat-past-90.bin   fd 38 00 00 72 01 01 f2 00 00 01 e9 a4 35 3b cf e8 58 7a f5 08 00
+                                        82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
+                                        c0 7f 00 00 c0 7f 00 00 00 00 00 00 00 00 00 00 00 00 3d 98 76 1a
+                                        76 48
+derived/home-position-lat-int32-min.bin fd 38 00 00 72 01 01 f2 00 00 00 00 00 80 3b cf e8 58 7a f5 08 00
+                                        82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
+                                        c0 7f 00 00 c0 7f 00 00 00 00 00 00 00 00 00 00 00 00 3d 98 76 1a
+                                        66 c4
+derived/home-position-null-island.bin   fd 38 00 00 72 01 01 f2 00 00 00 00 00 00 00 00 00 00 7a f5 08 00
+                                        82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
+                                        c0 7f 00 00 c0 7f 00 00 00 00 00 00 00 00 00 00 00 00 3d 98 76 1a
+                                        ee 06
 ```
 
 ## Raw frames for the flight log (#67)

@@ -146,6 +146,11 @@ Writes:
                                                 truncated whole, LEN 52
   <out>/derived/home-position-cut-after-q.bin   the real one with time_usec 0: the zero approach and extension
                                                 are truncated after ArduPilot's NaN q, LEN 40
+  <out>/derived/home-position-moved.bin         the real HOME_POSITION re-packed by pymavlink at another point
+                                                (about 100 m north-east, 3 m higher): home set again on arming
+  <out>/derived/home-position-lat-past-90.bin   the same with latitude 900000001 (90.0000001 degrees) (#69)
+  <out>/derived/home-position-lat-int32-min.bin the same with latitude -2147483648 (INT32_MIN)
+  <out>/derived/home-position-null-island.bin   the same with latitude and longitude 0: never a home (#69)
   <out>/derived/session-mavlink2-stream.bin     heartbeat/session.tlog's MAVLink 2 frames only, in order, as on
                                                 the wire: what the parser hands out of session-stream.bin
   <out>/derived/heartbeat-corrupted-len-raised.bin
@@ -356,6 +361,11 @@ FULL_HOME_POSITION_LENGTH = 60
 HOME_POSITION_BASE_LENGTH = 52
 TRUNCATED_HOME_POSITION_LENGTH = 56  # time_usec 443979837 fits 4 bytes: its 4 zero high bytes are truncated
 HOME_POSITION_AFTER_Q_LENGTH = 40  # ArduPilot's NaN q ends in 7f; the zero approach and time_usec go
+# Home set again elsewhere, past the WGS84 ranges, and at 0°, 0°, which ArduPilot never sets as home (#69).
+HOME_POSITION_MOVED = {"latitude": -353624514, "longitude": 1491663411, "altitude": 590130}
+HOME_POSITION_LAT_PAST_90 = {"latitude": 900_000_001}
+HOME_POSITION_LAT_INT32_MIN = {"latitude": -(2**31)}
+HOME_POSITION_NULL_ISLAND = {"latitude": 0, "longitude": 0}
 # A corrupted LEN, the checksum left as it was: the largest LEN makes a receiver wait for a maximum frame, the
 # smallest valid one cuts the frame short.
 CORRUPTED_LEN_RAISED = 255
@@ -786,6 +796,12 @@ def main() -> None:
         derived_dir / "home-position-cut-after-q.bin": with_message_fields(
             home_position, **HOME_POSITION_CUT_AFTER_Q
         ),
+        derived_dir / "home-position-moved.bin": with_message_fields(home_position, **HOME_POSITION_MOVED),
+        derived_dir / "home-position-lat-past-90.bin": with_message_fields(home_position, **HOME_POSITION_LAT_PAST_90),
+        derived_dir / "home-position-lat-int32-min.bin": with_message_fields(
+            home_position, **HOME_POSITION_LAT_INT32_MIN
+        ),
+        derived_dir / "home-position-null-island.bin": with_message_fields(home_position, **HOME_POSITION_NULL_ISLAND),
         derived_dir / "session-mavlink2-stream.bin": session_mavlink2_stream(session),
         derived_dir / "heartbeat-corrupted-len-raised.bin": with_length(source, CORRUPTED_LEN_RAISED),
         derived_dir / "heartbeat-corrupted-len-lowered.bin": with_length(source, CORRUPTED_LEN_LOWERED),
@@ -896,6 +912,10 @@ def main() -> None:
         ("home-position-full.bin", HOME_POSITION_FULL, FULL_HOME_POSITION_LENGTH),
         ("home-position-no-extension.bin", HOME_POSITION_NO_EXTENSION, HOME_POSITION_BASE_LENGTH),
         ("home-position-cut-after-q.bin", HOME_POSITION_CUT_AFTER_Q, HOME_POSITION_AFTER_Q_LENGTH),
+        ("home-position-moved.bin", HOME_POSITION_MOVED, TRUNCATED_HOME_POSITION_LENGTH),
+        ("home-position-lat-past-90.bin", HOME_POSITION_LAT_PAST_90, TRUNCATED_HOME_POSITION_LENGTH),
+        ("home-position-lat-int32-min.bin", HOME_POSITION_LAT_INT32_MIN, TRUNCATED_HOME_POSITION_LENGTH),
+        ("home-position-null-island.bin", HOME_POSITION_NULL_ISLAND, TRUNCATED_HOME_POSITION_LENGTH),
     ):
         frame = outputs[derived_dir / name]
         assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
@@ -961,6 +981,10 @@ def main() -> None:
         derived_dir / "home-position-full.bin",
         derived_dir / "home-position-no-extension.bin",
         derived_dir / "home-position-cut-after-q.bin",
+        derived_dir / "home-position-moved.bin",
+        derived_dir / "home-position-lat-past-90.bin",
+        derived_dir / "home-position-lat-int32-min.bin",
+        derived_dir / "home-position-null-island.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")
