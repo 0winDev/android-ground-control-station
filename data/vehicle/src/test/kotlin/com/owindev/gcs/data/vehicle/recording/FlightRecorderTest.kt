@@ -28,6 +28,8 @@ import java.time.ZoneOffset
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.TestTimeSource
+import kotlin.time.TimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -186,6 +188,45 @@ class FlightRecorderTest {
             stopAndWrite()
 
             logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a HEARTBEAT still queued when the session stops WHEN the next one hears the vehicle THEN it logs it`() =
+        testScope.runTest {
+            receive(DISARMED_STABILIZE)
+            recorder.sessionStopped()
+            clock.advance(LATER)
+            receive(DISARMED_LOITER)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, LATER_NAME)
+            frames(LATER_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
+        }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN HEARTBEATs queued before the writer runs WHEN timing the close THEN it counts from the latest`() =
+        testScope.runTest {
+            val heardAt = TestTimeSource()
+            val queued = recorder(timeSource = heardAt)
+            receive(DISARMED_STABILIZE, queued)
+            heardAt += NINE_MINUTES
+            receive(DISARMED_LOITER, queued)
+            runCurrent()
+            heardAt += LATER
+            advanceTimeBy(LATER)
+            receive(SCALED_PRESSURE, queued)
+
+            queued.sessionStopped()
+            runCurrent()
+
+            frames(START_NAME) shouldBeEqualTo listOf(
+                fixture(DISARMED_STABILIZE),
+                fixture(DISARMED_LOITER),
+                fixture(SCALED_PRESSURE),
+            )
         }
 
     @Tag("REQ-036")
@@ -390,6 +431,89 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(START_NAME, IMPORTED_NAME)
         }
 
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN a log a full disk cut short WHEN the next recording opens THEN it is kept as the last one closed`() =
+        testScope.runTest {
+            var opens = 0
+            val filling = recorder(
+                rule = RecordingRule(maxTotalBytes = 1),
+                openOutput = { if (opens++ == 1) FullAfterFirstWrite(it) else opened(it) },
+            )
+            receive(DISARMED_STABILIZE, filling)
+            filling.sessionStopped()
+            runCurrent()
+            clock.advance(LATER)
+            receive(DISARMED_LOITER, filling)
+            runCurrent()
+            receive(SCALED_PRESSURE, filling)
+            filling.sessionStopped()
+            runCurrent()
+            clock.advance(LATER)
+            receive(DISARMED_STABILIZE, filling)
+
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(LATER_NAME, FOUR_MINUTES_LATER_NAME)
+        }
+
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN a closed log WHEN it closes THEN the marker names it and no temporary file is left`() =
+        testScope.runTest {
+            receive(DISARMED_STABILIZE)
+
+            stopAndWrite()
+
+            LastClosedMarker(directory).read() shouldBeEqualTo START_NAME
+            File(directory, LastClosedMarker.TEMPORARY_NAME).exists() shouldBeEqualTo false
+        }
+
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN the marker names an older log WHEN a recording opens after a restart THEN that one is kept`() =
+        testScope.runTest {
+            val tiny = recorder(RecordingRule(maxTotalBytes = 1))
+            oldLog(OLDEST_NAME, 1, lastModifiedMillis = 1)
+            oldLog(IMPORTED_NAME, 1, lastModifiedMillis = 2)
+            LastClosedMarker(directory).write(OLDEST_NAME)
+            receive(DISARMED_STABILIZE, tiny)
+
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(OLDEST_NAME, START_NAME)
+        }
+
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN a damaged marker WHEN a recording opens after a restart THEN the newest on disk is kept`() =
+        testScope.runTest {
+            val tiny = recorder(RecordingRule(maxTotalBytes = 1))
+            oldLog(OLDEST_NAME, 1, lastModifiedMillis = 1)
+            oldLog(IMPORTED_NAME, 1, lastModifiedMillis = 2)
+            File(directory, LastClosedMarker.FILE_NAME).writeBytes(byteArrayOf(0x00, 0xFF.toByte(), 0x2F))
+            receive(DISARMED_STABILIZE, tiny)
+
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(START_NAME, IMPORTED_NAME)
+        }
+
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN logs exactly at the limit and a marker WHEN a recording opens THEN the marker does not count`() =
+        testScope.runTest {
+            val small = recorder(RecordingRule(maxTotalBytes = LIMIT_BYTES))
+            oldLog(OLDEST_NAME, LIMIT_BYTES, lastModifiedMillis = 1)
+            oldLog(IMPORTED_NAME, 0, lastModifiedMillis = 2)
+            LastClosedMarker(directory).write(IMPORTED_NAME)
+            receive(DISARMED_STABILIZE, small)
+
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(OLDEST_NAME, START_NAME, IMPORTED_NAME)
+        }
+
     @Tag("REQ-036")
     @Test
     fun `GIVEN more frames than the queue holds WHEN the writer is behind THEN the surplus is dropped and counted`() =
@@ -451,6 +575,42 @@ class FlightRecorderTest {
 
     @Tag("REQ-036")
     @Test
+    fun `GIVEN a recording WHEN it closes THEN it is synced to the disk before it is closed`() = testScope.runTest {
+        val events = mutableListOf<String>()
+        val syncing = recorder(
+            openOutput = { ClosingStream(it, events) },
+            syncOutput = { events += SYNCED },
+        )
+        receive(DISARMED_STABILIZE, syncing)
+        runCurrent()
+
+        syncing.sessionStopped()
+        runCurrent()
+
+        events shouldBeEqualTo listOf(SYNCED, CLOSED)
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a sync that fails WHEN the log closes THEN its file is closed and the status stays FAILED`() =
+        testScope.runTest {
+            val events = mutableListOf<String>()
+            val failing = recorder(
+                openOutput = { ClosingStream(it, events) },
+                syncOutput = { throw IOException("I/O error") },
+            )
+            receive(DISARMED_STABILIZE, failing)
+            runCurrent()
+
+            failing.sessionStopped()
+            runCurrent()
+
+            events shouldBeEqualTo listOf(CLOSED)
+            failing.status.value shouldBeEqualTo RecorderStatus.FAILED
+        }
+
+    @Tag("REQ-036")
+    @Test
     fun `GIVEN a folder that cannot be created WHEN the vehicle is heard THEN nothing is recorded and it is logged`() =
         testScope.runTest {
             directory.writeText("not a folder")
@@ -467,10 +627,18 @@ class FlightRecorderTest {
     private fun recorder(
         rule: RecordingRule = RecordingRule(),
         openOutput: (File) -> OutputStream = ::opened,
-    ): FlightRecorder {
-        val timeSource = testScope.testScheduler.timeSource
-        return FlightRecorder(directory, rule, activeVehicle, timeSource, clock, testScope.backgroundScope, openOutput)
-    }
+        syncOutput: (OutputStream) -> Unit = {},
+        timeSource: TimeSource.WithComparableMarks = testScope.testScheduler.timeSource,
+    ) = FlightRecorder(
+        directory = directory,
+        rule = rule,
+        activeVehicle = activeVehicle,
+        timeSource = timeSource,
+        clock = clock,
+        scope = testScope.backgroundScope,
+        openOutput = openOutput,
+        syncOutput = syncOutput,
+    )
 
     private fun opened(file: File): OutputStream = FileOutputStream(file).also(openStreams::add)
 
@@ -486,7 +654,7 @@ class FlightRecorderTest {
         runCurrent()
     }
 
-    private fun logs(): List<String> = directory.list().orEmpty().sorted()
+    private fun logs(): List<String> = directory.list { _, name -> name.endsWith(".tlog") }.orEmpty().sorted()
 
     private fun records(name: String) = TlogReader().let { it.read(File(directory, name).readBytes()) + it.finish() }
 
@@ -523,6 +691,24 @@ class FlightRecorderTest {
         override fun write(b: Int) = throw IOException("No space left on device")
     }
 
+    /** A real file that takes its first write and fails every later one, as a disk filling up mid-flight. */
+    private class FullAfterFirstWrite(file: File) : FileOutputStream(file) {
+        private var writes = 0
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            if (writes++ > 0) throw IOException("No space left on device")
+            super.write(b, off, len)
+        }
+    }
+
+    /** A real file that adds to [events] when it closes. */
+    private class ClosingStream(file: File, private val events: MutableList<String>) : FileOutputStream(file) {
+        override fun close() {
+            events += CLOSED
+            super.close()
+        }
+    }
+
     private companion object {
         const val TAG = "FlightRecorder"
         const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
@@ -545,6 +731,10 @@ class FlightRecorderTest {
         val NINE_MINUTES = 9.minutes
         val BEFORE_EPOCH: Instant = Instant.parse("1969-12-31T23:59:59Z")
         const val BEFORE_EPOCH_NAME = "1969-12-31_23-59-59.tlog"
+
+        const val FOUR_MINUTES_LATER_NAME = "2026-10-20_14-34-05.tlog"
+        const val SYNCED = "synced"
+        const val CLOSED = "closed"
 
         const val OLDEST_NAME = "2026-10-01_09-00-00.tlog"
         const val IMPORTED_NAME = "imported.tlog"

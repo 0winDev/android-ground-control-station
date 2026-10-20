@@ -51,8 +51,10 @@ internal const val RECORDINGS_FOLDER = "tlogs"
  * HEARTBEAT then opens a new one. A closed log is synced to the disk.
  *
  * The limit is applied when a recording opens and when it closes (REQ-039): the oldest logs in [directory] are deleted
- * until all fit in [RecordingRule.maxTotalBytes], never the one being recorded nor the last one closed. While open, a
- * recording grows past the limit unchecked: about 1.1 kB/s from ArduCopter SITL, so 256 MiB in some 65 hours.
+ * until all fit in [RecordingRule.maxTotalBytes], never the one being recorded nor the last one closed, named by the
+ * [LastClosedMarker] across restarts (the newest on disk when it is missing or damaged). A log a disk failure cut short
+ * counts as closed. While open, a recording grows past the limit unchecked: about 1.1 kB/s from ArduCopter SITL, so
+ * 256 MiB in some 65 hours.
  *
  * Only the live link feeds it: a replay is never recorded. The callers never wait: frames queue for one writer in
  * [scope] (on a device, on `Dispatchers.IO`), and beyond [MAX_PENDING_RECORDS] they are dropped and counted. A disk
@@ -69,6 +71,7 @@ internal class FlightRecorder(
     private val clock: Clock,
     private val scope: CoroutineScope,
     private val openOutput: (File) -> OutputStream = ::FileOutputStream,
+    private val syncOutput: (OutputStream) -> Unit = ::syncToDisk,
 ) {
 
     // Records travel as their bare arrays and controls as objects, so a frame costs nothing beyond its record.
@@ -77,12 +80,19 @@ internal class FlightRecorder(
     private val droppedCount = AtomicLong()
     private val signedUnknownCount = AtomicLong()
     private val setupSigningCount = AtomicLong()
-    private val latestHeard = AtomicReference<HeardAt?>()
     private val mutableStatus = MutableStateFlow(RecorderStatus.IDLE)
+    private val marker = LastClosedMarker(directory)
+
+    /**
+     * The latest HEARTBEAT of the active vehicle not yet taken by the writer. One per session, replaced when it stops,
+     * so a HEARTBEAT still queued from a stopped session never takes the next session's place.
+     */
+    @Volatile
+    private var latestHeard = AtomicReference<HeardAt?>()
 
     private val writer: Job by lazy { scope.launch { write() } }
 
-    /** Whether a log is being written now; [RecorderStatus.FAILED] from a disk failure until the session stops. */
+    /** Whether a log is being written now; [RecorderStatus.FAILED] from a disk failure until a log opens again. */
     val status: StateFlow<RecorderStatus> = mutableStatus.asStateFlow()
 
     /** What has been left out of the logs since the app started. */
@@ -106,8 +116,11 @@ internal class FlightRecorder(
     /** A frame this GCS has just sent on the link. */
     fun sent(frame: ByteArray) = offer(frame, micros(clock.millis()))
 
-    /** The link session has stopped: the recording closes. */
-    fun sessionStopped() = control(Control.SessionStopped)
+    /** The link session has stopped: the recording closes. Called from the receive loop, after its last frame. */
+    fun sessionStopped() {
+        latestHeard = AtomicReference()
+        control(Control.SessionStopped)
+    }
 
     private fun offer(frame: ByteArray, atMicros: Long) {
         when (val loggable = TlogWriter.loggable(frame, MavlinkMessages)) {
@@ -135,7 +148,8 @@ internal class FlightRecorder(
     // The writer needs the first HEARTBEAT's time, to name a log, and the latest one's mark, to close it: a slow disk
     // holds one event in the queue, not one per HEARTBEAT.
     private fun heard(heard: HeardAt) {
-        if (latestHeard.getAndSet(heard) == null) control(Control.Heard(heard.atMillis))
+        val latest = latestHeard
+        if (latest.getAndSet(heard) == null) control(Control.Heard(heard.atMillis, latest))
     }
 
     private fun control(control: Control) {
@@ -161,7 +175,7 @@ internal class FlightRecorder(
                 }
 
                 is Control.Heard -> {
-                    val latest = latestHeard.getAndSet(null) ?: continue
+                    val latest = event.latest.getAndSet(null) ?: continue
                     state.lastHeartbeat = latest.mark
                     state.openIfIdle(event.firstAtMillis)
                     closeAfter(rule.closeAfterLinkLoss - latest.mark.elapsedNow())
@@ -175,7 +189,7 @@ internal class FlightRecorder(
                 Control.SessionStopped -> {
                     timer?.cancel()
                     state.close()
-                    state.failed = false
+                    state.blocked = false
                 }
             }
             // Written through once the queue holds no more records, so a crash loses at most what is queued.
@@ -187,27 +201,24 @@ internal class FlightRecorder(
     /** The writer's state; only the writer coroutine touches it. */
     private inner class WriterState {
         var open: OpenRecording? = null
-        var failed = false
         var lastHeartbeat: ComparableTimeMark? = null
+        var status = RecorderStatus.IDLE
 
-        /** Unknown after the app starts, when the newest log on disk stands for it. */
+        /** After a disk failure, until the session stops: no log opens. */
+        var blocked = false
+
+        /** Unknown after the app starts, when the [marker] stands for it. */
         var lastClosed: String? = null
 
-        val status: RecorderStatus
-            get() = when {
-                failed -> RecorderStatus.FAILED
-                open != null -> RecorderStatus.RECORDING
-                else -> RecorderStatus.IDLE
-            }
-
         fun openIfIdle(atMillis: Long) {
-            if (open != null || failed) return
+            if (open != null || blocked) return
             guarded {
                 if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
                 val file = newFile(atMillis)
-                deleteOldest(kept = lastClosed)
+                deleteOldest(kept = lastClosed ?: marker.read())
                 val output = openOutput(file)
                 open = OpenRecording(file, output, BufferedOutputStream(output))
+                status = RecorderStatus.RECORDING
                 Log.i(TAG, "Recording the flight to ${file.name}")
             }
         }
@@ -224,26 +235,43 @@ internal class FlightRecorder(
 
         fun close() {
             val recording = open ?: return
-            open = null
-            lastClosed = recording.file.name
             guarded {
                 recording.stream.flush()
                 // On the disk before it counts as closed: a power cut must not lose a finished flight.
-                (recording.output as? FileOutputStream)?.fd?.sync()
+                syncOutput(recording.output)
                 recording.stream.close()
+                open = null
+                status = RecorderStatus.IDLE
                 Log.i(TAG, "Recording ${recording.file.name} closed; left out so far: $stats")
+                closed(recording.file.name)
                 deleteOldest(kept = recording.file.name)
             }
+        }
+
+        private fun closed(name: String) {
+            lastClosed = name
+            marker.write(name)
         }
 
         private inline fun guarded(action: () -> Unit) {
             try {
                 action()
             } catch (e: IOException) {
-                open?.let { runCatchingIo { it.stream.close() } }
-                open = null
-                failed = true
+                abandon()
+                blocked = true
+                status = RecorderStatus.FAILED
                 Log.w(TAG, "The flight log failed; recording stopped until the next session", e)
+            }
+        }
+
+        /** What a failure cut short is still this flight's log: the last one closed, never the first to go. */
+        private fun abandon() {
+            val recording = open ?: return
+            open = null
+            runCatchingIo { recording.stream.close() }
+            if (recording.file.isFile) {
+                lastClosed = recording.file.name
+                runCatchingIo { marker.write(recording.file.name) }
             }
         }
     }
@@ -273,8 +301,8 @@ internal class FlightRecorder(
     private class HeardAt(val atMillis: Long, val mark: ComparableTimeMark)
 
     private sealed interface Control {
-        /** The active vehicle was heard, first at [firstAtMillis]; [latestHeard] holds its latest HEARTBEAT. */
-        class Heard(val firstAtMillis: Long) : Control
+        /** The active vehicle was heard, first at [firstAtMillis]; [latest] holds its latest HEARTBEAT. */
+        class Heard(val firstAtMillis: Long, val latest: AtomicReference<HeardAt?>) : Control
 
         data object TimedOut : Control
 
@@ -289,6 +317,10 @@ internal class FlightRecorder(
 
         // A .tlog cannot hold a time before the Unix epoch, and a clock set that far back must not stop the link.
         fun micros(atMillis: Long): Long = atMillis.coerceAtLeast(0) * MICROS_PER_MILLI
+
+        fun syncToDisk(output: OutputStream) {
+            (output as? FileOutputStream)?.fd?.sync()
+        }
 
         inline fun runCatchingIo(action: () -> Unit) {
             try {
