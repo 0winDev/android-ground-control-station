@@ -16,6 +16,10 @@ Stopping a stream (#39): s = ask the vehicle, on this relay's channel (the app's
 
 Stopping the battery (#41): b = the same for SYS_STATUS, so the app's battery reading goes stale.
 
+Recording (#70): with --tlog <prefix> it writes, as .tlogs, every frame it forwards to the app (<prefix>.down.tlog) and
+every frame the app sends (<prefix>.up.tlog), so compare_recording.py can check the app's own log against them. Two
+files, because other ground stations also send as system 255 and ArduPilot forwards them to the app.
+
 Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), s = stop ATTITUDE,
 b = stop SYS_STATUS, q = quit. With --background (no terminal; on Windows NUL even claims to be one): create the
 file <log>.downlink-off to cut the downlink and delete it to restore it; create <log>.stop-attitude or
@@ -57,6 +61,8 @@ downlink_on = threading.Event()
 downlink_on.set()
 stop = threading.Event()
 log_file = None
+tlog_files = {}
+tlog_lock = threading.Lock()
 
 
 def log(line: str) -> None:
@@ -66,6 +72,15 @@ def log(line: str) -> None:
     if log_file:
         log_file.write(text + "\n")
         log_file.flush()
+
+
+def record(direction: str, frame: bytes) -> None:
+    """Appends [frame] to the [direction] .tlog: 8-byte big-endian us since the Unix epoch, then the frame."""
+    if direction not in tlog_files:
+        return
+    with tlog_lock:
+        tlog_files[direction].write(int(time.time() * 1_000_000).to_bytes(8, "big") + frame)
+        tlog_files[direction].flush()
 
 
 def downlink(sitl, udp: socket.socket, app: tuple) -> None:
@@ -96,7 +111,9 @@ def downlink(sitl, udp: socket.socket, app: tuple) -> None:
                 f"result={msg.result} target={msg.target_system}/{msg.target_component}{latency}"
             )
         if downlink_on.is_set():
-            udp.sendto(bytes(msg.get_msgbuf()), app)
+            frame = bytes(msg.get_msgbuf())
+            udp.sendto(frame, app)
+            record("down", frame)
 
 
 def uplink(sitl, udp: socket.socket) -> None:
@@ -115,6 +132,8 @@ def uplink(sitl, udp: socket.socket) -> None:
             continue
         sitl.write(data)
         for msg in parser.parse_buffer(data) or []:
+            if msg.get_type() != "BAD_DATA":
+                record("up", bytes(msg.get_msgbuf()))
             if msg.get_type() == "COMMAND_LONG":
                 commands_sent[msg.command] = time.monotonic()
                 log(
@@ -158,11 +177,15 @@ def main() -> None:
     parser.add_argument("--app", default="127.0.0.1:14561", help="host:port redirected into the emulator")
     parser.add_argument("--log", default="relay-14.log")
     parser.add_argument("--background", action="store_true", help="control by file instead of the terminal")
+    parser.add_argument("--tlog", help="write the frames forwarded each way to <prefix>.down.tlog and <prefix>.up.tlog")
     parser.add_argument("--rates-every", type=float, default=5.0, help="seconds between RATES lines")
     args = parser.parse_args()
     host, port = args.app.rsplit(":", 1)
     app = (host, int(port))
     log_file = open(args.log, "a", encoding="utf-8")
+    if args.tlog:
+        for direction in ("down", "up"):
+            tlog_files[direction] = open(f"{args.tlog}.{direction}.tlog", "ab")
 
     # Reconnects when the autopilot reboots (#41), so the app sees the boot frames.
     sitl = mavutil.mavlink_connection(args.sitl, source_system=253, dialect="common", autoreconnect=True)
