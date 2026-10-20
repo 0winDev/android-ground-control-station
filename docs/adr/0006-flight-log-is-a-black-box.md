@@ -104,3 +104,6 @@ GCS replays it through the same parser as the live link, which still validates a
   recorder recognises it by its message ID, not by decoding it. These rules handle the signing key, so #70 needs
   `safety-reviewer`. The replay (#71) reads the log with the same parser, so unknown-ID frames in a log are only
   bytes there too.
+- Open (from #70): what to log of a signed frame that fails verification once signing exists (v0.6); it is what
+  arrived, but it also carries a signature someone may be probing. Durability as built: records reach the disk when
+  the writer's queue empties and a log is synced when it closes, so a crash loses at most the queued records.

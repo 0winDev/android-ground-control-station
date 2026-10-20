@@ -50,6 +50,9 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
   foreground service that keeps the link open is planned before any real hardware (#28, v0.4).
 - **The app does not yet warn when only its uplink fails.** If its HEARTBEATs stop reaching the vehicle
   while telemetry still arrives, the HUD stays connected; this is planned for v0.4 (#29).
+- **A recording can grow past the 256 MiB limit while it is open.** Old flight logs are deleted only when a
+  recording opens or closes, so one very long session keeps growing (about 1.1 kB/s from ArduCopter SITL, so
+  256 MiB in some 65 hours).
 - **No link security until v0.6.** MAVLink packets are not signed yet, so anyone who can reach the UDP
   port can forge them (see [`docs/security.md`](docs/security.md)).
 

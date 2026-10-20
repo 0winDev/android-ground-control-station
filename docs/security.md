@@ -24,8 +24,8 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 | S-1 | The MAVLink signing key is never stored in plain text: it is encrypted at rest with a key held in Android Keystore. | v0.6 | ⏳ | |
 | S-2 | No secrets in source code, resources, build files or the repository. | v0.0 | ✅ | gitleaks pre-commit hook; `.gitignore` excludes keystores and `*.mavkey` |
 | S-3 | No sensitive data (keys, signatures) in logs. | v0.6 | ⏳ | |
-| S-4 | Backups exclude the signing key and sensitive data (`data_extraction_rules.xml`, `backup_rules.xml`). | v0.6 | ⏳ | |
-| S-5 | Missions and flight logs are stored in app-private storage. | v0.5 | ⏳ | |
+| S-4 | Backups exclude the signing key and sensitive data (`data_extraction_rules.xml`, `backup_rules.xml`). | v0.6 | 🚧 | Flight logs (`tlogs/`) excluded from cloud backup and device transfer (#70, `BackupRulesTest`); the signing key from v0.6 |
+| S-5 | Missions and flight logs are stored in app-private storage. | v0.5 | 🚧 | Flight logs in `filesDir/tlogs`, owner-only (`-rw-------`, checked in SITL, #70); missions in v0.5 |
 
 ## MASVS-CRYPTO
 
