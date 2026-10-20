@@ -41,6 +41,12 @@ Writes:
                                                 heartbeat/session.tlog whose payload contains 0xFD
   <out>/derived/attitude-signed.bin             that ATTITUDE re-packed and signed the same way (a signed
                                                 frame whose message ID the parser tests treat as unknown)
+  <out>/derived/vfr-hud-signed.bin              telemetry/vfr-hud.bin (truncated, LEN 18) signed the same way
+  <out>/derived/scaled-pressure-signed.bin      unknown/scaled-pressure.bin signed the same way: a signed frame
+                                                whose message ID the codec does not know
+  <out>/derived/setup-signing.bin               a SETUP_SIGNING from the GCS (255/190) to 1/1 with the test key,
+                                                built by pymavlink
+  <out>/derived/setup-signing-signed.bin        the same SETUP_SIGNING, signed the same way
   <out>/derived/session-stream.bin              heartbeat/session.tlog as a plain byte stream: every
                                                 frame (MAVLink 1 and 2) in order, without the 8-byte
                                                 .tlog timestamps
@@ -192,6 +198,8 @@ UNKNOWN_INCOMPAT = 0x02
 UNKNOWN_COMPAT = 0x80
 START_MARKER = 0xFD
 ATTITUDE_ID = common.MAVLINK_MSG_ID_ATTITUDE
+SETUP_SIGNING_ID = 256  # common.xml; omitted from logs (signing guide, Logging)
+GCS_SYSTEM_ID = 255
 # Test-only signing material: never a real key.
 TEST_KEY = bytes(range(32))
 TEST_LINK_ID = 0
@@ -517,6 +525,21 @@ def signed(frame: bytes) -> bytes:
     return bytes(msg.pack(mav))
 
 
+def unsigned(frame: bytes) -> bytes:
+    """Re-packs a signed frame's message with the same header fields and fields, without signing it."""
+    msg = decode(frame, key=TEST_KEY)
+    mav = common.MAVLink(io.BytesIO(), srcSystem=msg.get_srcSystem(), srcComponent=msg.get_srcComponent())
+    mav.seq = msg.get_seq()
+    return bytes(msg.pack(mav))
+
+
+def setup_signing() -> bytes:
+    """A SETUP_SIGNING from the GCS to the vehicle carrying the test key, built by pymavlink."""
+    mav = common.MAVLink(io.BytesIO(), srcSystem=GCS_SYSTEM_ID, srcComponent=MAV_COMP_ID_MISSIONPLANNER)
+    msg = mav.setup_signing_encode(VEHICLE_SYSTEM_ID, common.MAV_COMP_ID_AUTOPILOT1, TEST_KEY, TEST_TIMESTAMP)
+    return bytes(msg.pack(mav))
+
+
 def attitude_with_fd(session: Path) -> bytes:
     """First real MAVLink 2 ATTITUDE frame of the session whose payload contains 0xFD."""
     log = mavutil.mavlink_connection(str(session), dialect="common", robust_parsing=True)
@@ -703,6 +726,7 @@ def main() -> None:
         "onboard_control_sensors_health": battery_msg.onboard_control_sensors_health & ~MAV_SYS_STATUS_SENSOR_BATTERY,
     }
     home_position = session_frame(session, "HOME_POSITION", lambda m: True)
+    scaled_pressure = session_frame(session, "SCALED_PRESSURE", lambda m: True)
 
     outputs = {
         derived_dir / "heartbeat-signed.bin": signed(source),
@@ -723,6 +747,10 @@ def main() -> None:
         gcs_dir / "heartbeat-mission-planner.bin": gcs_heartbeat(args.out / SESSION),
         unknown_dir / "attitude-fd-in-payload.bin": attitude_with_fd(args.out / SESSION),
         derived_dir / "attitude-signed.bin": signed(attitude_with_fd(args.out / SESSION)),
+        derived_dir / "vfr-hud-signed.bin": signed(vfr_hud),
+        derived_dir / "scaled-pressure-signed.bin": signed(scaled_pressure),
+        derived_dir / "setup-signing.bin": setup_signing(),
+        derived_dir / "setup-signing-signed.bin": signed(setup_signing()),
         derived_dir / "session-stream.bin": session_stream(args.out / SESSION),
         command_dir / "set-message-interval.bin": interval,
         command_dir / "set-message-interval-ack.bin": interval_ack,
@@ -755,7 +783,7 @@ def main() -> None:
         telemetry_dir / "attitude.bin": attitude,
         telemetry_dir / "global-position-int.bin": position,
         telemetry_dir / "vfr-hud.bin": vfr_hud,
-        unknown_dir / "scaled-pressure.bin": session_frame(session, "SCALED_PRESSURE", lambda m: True),
+        unknown_dir / "scaled-pressure.bin": scaled_pressure,
         derived_dir / "attitude-edges.bin": with_message_fields(
             attitude, time_boot_ms=LARGE_TIME_BOOT_MS, **ATTITUDE_EDGES
         ),
@@ -807,9 +835,26 @@ def main() -> None:
         derived_dir / "heartbeat-corrupted-len-lowered.bin": with_length(source, CORRUPTED_LEN_LOWERED),
     }
 
-    for name in ("heartbeat-signed.bin", "attitude-signed.bin"):
+    for name in (
+        "heartbeat-signed.bin",
+        "attitude-signed.bin",
+        "vfr-hud-signed.bin",
+        "scaled-pressure-signed.bin",
+        "setup-signing-signed.bin",
+    ):
         signed_msg = decode(outputs[derived_dir / name], key=TEST_KEY)
         assert signed_msg.get_signed() and signed_msg._link_id == TEST_LINK_ID, f"pymavlink did not verify {name}"
+    # What the log must hold for each signed frame (ADR 0006): its message unsigned, the same bytes as the original.
+    for name, original in (
+        ("heartbeat-signed.bin", source),
+        ("attitude-signed.bin", outputs[unknown_dir / "attitude-fd-in-payload.bin"]),
+        ("vfr-hud-signed.bin", vfr_hud),
+        ("scaled-pressure-signed.bin", scaled_pressure),
+        ("setup-signing-signed.bin", outputs[derived_dir / "setup-signing.bin"]),
+    ):
+        assert unsigned(outputs[derived_dir / name]) == original, f"{name} unsigned is not its original"
+    setup = decode(outputs[derived_dir / "setup-signing.bin"])
+    assert setup.get_msgId() == SETUP_SIGNING_ID and bytes(setup.secret_key) == TEST_KEY
     decode(outputs[derived_dir / "heartbeat-unknown-compat.bin"])
     assert decode(outputs[derived_dir / "heartbeat-max-custom-mode.bin"]).custom_mode == MAX_UINT32
     loiter = decode((args.out / LOITER).read_bytes())

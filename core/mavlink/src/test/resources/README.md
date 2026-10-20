@@ -523,3 +523,32 @@ bytes each run). Records are numbered from 0.
 | `derived/tlog-truncated-last-record.bin` | the last record cut to 23 of 38 bytes | a truncated record is counted |
 | `derived/tlog-timestamp-at-end.bin` | a lone timestamp after the last record | a lone tail timestamp is counted |
 | `derived/tlog-false-start-at-end.bin` | the 10 records, the last timestamp again with `fd ff 00 00 00 01 01 00 00 00` (LEN 255), then records 10 to 12 | `finish()` finds hidden records |
+
+## Frames for the flight log (#70)
+
+Made by `py tools/fixtures/derive_fixtures.py` (pymavlink 2.4.50, same bytes each run), signed with the test key,
+link ID and timestamp of `derived/heartbeat-signed.bin`. pymavlink verifies each signature, and re-packs each signed
+message unsigned with the same header to the bytes of its original before the files are written.
+
+| File | Origin | What it proves |
+|---|---|---|
+| `derived/heartbeat-signed.bin`, `derived/attitude-signed.bin` | reused; unsigned they are `heartbeat/disarmed-stabilize.bin` and `unknown/attitude-fd-in-payload.bin` | a signed known message is logged unsigned, checksum recomputed (ADR 0006) |
+| `derived/vfr-hud-signed.bin` | `telemetry/vfr-hud.bin` (LEN 18) signed | a truncated payload keeps its LEN when the signature goes |
+| `derived/scaled-pressure-signed.bin` | `unknown/scaled-pressure.bin` signed | a signed unknown message ID is left out |
+| `derived/setup-signing.bin` | SETUP_SIGNING (256) from 255/190 to 1/1 carrying the test key | SETUP_SIGNING is left out |
+| `derived/setup-signing-signed.bin` | the same, signed | left out signed too |
+
+Raw bytes:
+
+```
+derived/vfr-hud-signed.bin          fd 12 01 00 2b 01 01 4a 00 00 01 90 c3 3c 00 8f c3 3c 52 c8 12 44 73 50 1e b9
+                                    67 01 48 bd 00 78 56 34 12 00 00 16 ab 8d 26 48 e4
+derived/scaled-pressure-signed.bin  fd 0e 01 00 3b 01 01 1d 00 00 e9 0f 06 00 8c 2b 6c 44 00 00 00 00 2e 0c 69 b4
+                                    00 78 56 34 12 00 00 6c c6 9b 13 4a 26
+derived/setup-signing.bin           fd 2a 00 00 00 ff be 00 01 00 78 56 34 12 00 00 00 00 01 01 00 01 02 03 04 05
+                                    06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+                                    b3 87
+derived/setup-signing-signed.bin    fd 2a 01 00 00 ff be 00 01 00 78 56 34 12 00 00 00 00 01 01 00 01 02 03 04 05
+                                    06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+                                    0f 82 00 78 56 34 12 00 00 8b 0c cc 4a 63 b1
+```
