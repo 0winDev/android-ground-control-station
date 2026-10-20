@@ -4,8 +4,10 @@ import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkFrame
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
+import com.owindev.gcs.core.mavlink.RawFrame
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import java.io.EOFException
 import java.io.IOException
 import java.net.BindException
@@ -82,12 +84,16 @@ internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
  * [messages] has no replay: a late subscriber only gets messages that arrive after it subscribed, so an
  * old HEARTBEAT is never delivered as a new one. What a late subscriber needs to know, such as a bind
  * failure, is in [status].
+ *
+ * Every frame it delimits, unknown message IDs included, goes to the [recorder] as it arrives (REQ-036), and the
+ * recording closes with the session.
  */
 @Singleton
 internal class LinkSession @Inject constructor(
     private val transport: UdpTransport,
     @param:ApplicationScope private val scope: CoroutineScope,
     private val timeSource: TimeSource.WithComparableMarks,
+    private val recorder: FlightRecorder,
 ) {
 
     private val mutableStatus = MutableStateFlow<LinkStatus>(LinkStatus.Running(datagrams = 0))
@@ -136,8 +142,10 @@ internal class LinkSession @Inject constructor(
                             } else {
                                 LinkStatus.Running(datagrams)
                             }
-                            parser.parse(datagram.payload).forEach { frame ->
-                                emit(received(frame, datagram.sender))
+                            parser.parseRaw(datagram.payload).forEach { raw ->
+                                val message = (raw as? RawFrame.Valid)?.let { received(it.frame, datagram.sender) }
+                                recorder.received(raw, message)
+                                if (message != null) emit(message)
                             }
                         }
                     holdLimit?.cancel()
@@ -172,6 +180,7 @@ internal class LinkSession @Inject constructor(
             // The last subscriber left and the session was stopped: the next one starts clean, never
             // showing this one's count or failure.
             .onCompletion { cause ->
+                recorder.sessionStopped()
                 if (cause is CancellationException) mutableStatus.value = LinkStatus.Running(datagrams = 0)
             }
             .shareIn(scope = scope, started = SharingStarted.WhileSubscribed())

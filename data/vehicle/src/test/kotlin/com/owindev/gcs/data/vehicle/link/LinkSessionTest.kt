@@ -1,10 +1,15 @@
 package com.owindev.gcs.data.vehicle.link
 
 import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.core.mavlink.MavlinkMessages
+import com.owindev.gcs.core.mavlink.MavlinkParser
+import com.owindev.gcs.core.mavlink.RawFrame
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import io.mockk.every
 import io.mockk.mockk
 import java.net.BindException
@@ -42,6 +47,7 @@ class LinkSessionTest {
 
     private val testScope = TestScope()
     private val transport: UdpTransport = mockk()
+    private val recorder: FlightRecorder = ignoringRecorder()
 
     private lateinit var session: LinkSession
 
@@ -51,6 +57,7 @@ class LinkSessionTest {
             transport = transport,
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
+            recorder = recorder,
         )
     }
 
@@ -337,6 +344,7 @@ class LinkSessionTest {
                 transport = transport,
                 scope = appScope,
                 timeSource = testScheduler.timeSource,
+                recorder = ignoringRecorder(),
             ).messages.launchIn(backgroundScope)
 
             delay(LONG_WAIT)
@@ -385,6 +393,37 @@ class LinkSessionTest {
             session.status.value shouldBeEqualTo LinkStatus.Running(datagrams = 0)
         }
 
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN an unknown message and a HEARTBEAT in one datagram WHEN collecting THEN both are recorded`() =
+        testScope.runTest {
+            val unknown = readFixture(SCALED_PRESSURE)
+            val heartbeat = readFixture(DISARMED_STABILIZE)
+            every { transport.datagrams() } returns openWith(unknown + heartbeat)
+
+            val result = session.messages.first()
+
+            result shouldBeEqualTo disarmedStabilizeFromAutopilot()
+            verifyOnce {
+                recorder.received(rawFrameOf(unknown), null)
+                recorder.received(rawFrameOf(heartbeat), disarmedStabilizeFromAutopilot())
+            }
+        }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN an observed session WHEN the last subscriber leaves THEN the recorder is told it stopped`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns openWith(readFixture(DISARMED_STABILIZE))
+            session.messages.first()
+
+            delay(GAP_MILLIS)
+
+            verifyOnce {
+                recorder.sessionStopped()
+            }
+        }
+
     /**
      * Answers each `datagrams()` call with the next of [flows], repeating the last one, and records when each
      * call was made, in virtual ms since this was called.
@@ -402,6 +441,7 @@ class LinkSessionTest {
 }
 
 private const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
+private const val SCALED_PRESSURE = "unknown/scaled-pressure.bin"
 private const val SPLIT = 7
 private const val GAP_MILLIS = 100L
 private const val RETRY_FIRST_MILLIS = 1_000L
@@ -442,6 +482,9 @@ private fun disarmedStabilizeFromAutopilot() = ReceivedMessage(
     ),
     sender = VEHICLE_ADDRESS,
 )
+
+/** [frame] as the codec delimits it on its own. */
+private fun rawFrameOf(frame: ByteArray): RawFrame = MavlinkParser(MavlinkMessages).parseRaw(frame).single()
 
 /** Delivers [datagram] once (if any) and then keeps the socket open with nothing more arriving. */
 private fun openWith(datagram: ByteArray?): Flow<Datagram> = flow {

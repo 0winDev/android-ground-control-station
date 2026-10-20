@@ -16,6 +16,7 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
@@ -761,13 +762,9 @@ class DefaultVehicleRepositoryTest {
             val start = testScheduler.timeSource.markNow()
             every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE)
                 .onCompletion { closedAt = start.elapsedNow().inWholeMilliseconds }
-            val session = LinkSession(
-                transport = transport,
-                scope = backgroundScope,
-                timeSource = testScheduler.timeSource,
-            )
+            val session = sessionOn(transport)
             val requester = TelemetryRequester(
-                sender = GcsMessageSender(transport),
+                sender = GcsMessageSender(transport, ignoringRecorder()),
                 session = session,
                 store = telemetryStore,
                 rule = StalenessRule(),
@@ -810,14 +807,10 @@ private fun TestScope.repositoryOn(
     transport: UdpTransport,
     telemetryRequester: TelemetryRequester,
     telemetryStore: TelemetryStore,
-    session: LinkSession = LinkSession(
-        transport = transport,
-        scope = backgroundScope,
-        timeSource = testScheduler.timeSource,
-    ),
+    session: LinkSession = sessionOn(transport),
     timeSource: TimeSource.WithComparableMarks = testScheduler.timeSource,
     rule: LinkLossRule = LinkLossRule(),
-    heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+    heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
     scope: CoroutineScope = backgroundScope,
 ) = DefaultVehicleRepository(
     session = session,
@@ -827,6 +820,14 @@ private fun TestScope.repositoryOn(
     telemetryRequester = telemetryRequester,
     telemetryStore = telemetryStore,
     scope = scope,
+)
+
+/** A link session on [transport] in this scope's virtual time, recording nothing. */
+private fun TestScope.sessionOn(transport: UdpTransport) = LinkSession(
+    transport = transport,
+    scope = backgroundScope,
+    timeSource = testScheduler.timeSource,
+    recorder = ignoringRecorder(),
 )
 
 private const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"

@@ -5,6 +5,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,9 +26,14 @@ import kotlinx.coroutines.sync.withLock
  * lost link) does not advance the number even if the frame left, so the next frame repeats it. The vehicle
  * then counts one more lost packet than there was; nothing else depends on it. Advancing anyway would do
  * the opposite when the frame did not leave.
+ *
+ * Every frame sent goes to the [recorder] (REQ-036), under the same lock, so the log keeps them in sequence order.
  */
 @Singleton
-internal class GcsMessageSender @Inject constructor(private val transport: UdpTransport) {
+internal class GcsMessageSender @Inject constructor(
+    private val transport: UdpTransport,
+    private val recorder: FlightRecorder,
+) {
 
     private val lock = Mutex()
 
@@ -41,8 +47,12 @@ internal class GcsMessageSender @Inject constructor(private val transport: UdpTr
         send(to) { sequence -> MavlinkEncoder.encode(sequence, GCS_SYSTEM_ID, GCS_COMPONENT_ID, commandLong) }
 
     private suspend fun send(to: InetSocketAddress, encode: (sequence: Int) -> ByteArray): SendResult = lock.withLock {
-        val result = transport.send(encode(sequence), to)
-        if (result == SendResult.Sent) sequence = (sequence + 1) and SEQUENCE_MASK
+        val frame = encode(sequence)
+        val result = transport.send(frame, to)
+        if (result == SendResult.Sent) {
+            recorder.sent(frame)
+            sequence = (sequence + 1) and SEQUENCE_MASK
+        }
         result
     }
 

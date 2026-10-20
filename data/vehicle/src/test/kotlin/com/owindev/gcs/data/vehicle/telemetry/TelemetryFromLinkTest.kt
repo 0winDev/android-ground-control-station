@@ -10,6 +10,7 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import io.mockk.CapturingSlot
 import io.mockk.coEvery
@@ -59,10 +60,11 @@ class TelemetryFromLinkTest {
                 transport = transport,
                 scope = testScope.backgroundScope,
                 timeSource = testScope.testScheduler.timeSource,
+                recorder = ignoringRecorder(),
             ),
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
             telemetryRequester = telemetryRequester,
             telemetryStore = store,
             scope = testScope.backgroundScope,
@@ -147,10 +149,11 @@ class TelemetryFromLinkTest {
                     transport = transport,
                     scope = backgroundScope,
                     timeSource = testScheduler.timeSource,
+                    recorder = ignoringRecorder(),
                 ),
                 timeSource = deviceClock,
                 rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport)),
+                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
                 telemetryRequester = telemetryRequester,
                 telemetryStore = store,
                 scope = backgroundScope,

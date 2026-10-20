@@ -6,6 +6,7 @@ import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -43,6 +44,7 @@ class DefaultLinkRepositoryTest {
             transport = transport,
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
+            recorder = ignoringRecorder(),
         )
         repository = DefaultLinkRepository(session = session, scope = testScope.backgroundScope)
     }
