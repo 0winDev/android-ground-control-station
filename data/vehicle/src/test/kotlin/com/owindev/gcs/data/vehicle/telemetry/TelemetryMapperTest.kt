@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
+import com.owindev.gcs.core.domain.telemetry.Home
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.mavlink.MavlinkDecoder
@@ -425,6 +426,51 @@ class TelemetryMapperTest {
     }
 
     @Test
+    @Tag("REQ-033")
+    fun `GIVEN a real HOME_POSITION WHEN mapping it THEN is the home in degrees and metres`() {
+        val received = receivedFixture(HOME_POSITION)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result shouldBeEqualTo Telemetry(home = Timed(REAL_HOME, RECEIVED_AT))
+    }
+
+    @Test
+    @Tag("REQ-033")
+    fun `GIVEN a known home WHEN a HOME_POSITION at another point arrives THEN replaces it`() {
+        val telemetry = Telemetry(home = Timed(REAL_HOME, EARLIER))
+
+        val result = mapper.update(telemetry, receivedFixture(HOME_POSITION_MOVED), RECEIVED_AT)
+
+        result?.home shouldBeEqualTo Timed(
+            Home(latitude = -35.3624514, longitude = 149.1663411, altitudeMsl = 590.13),
+            RECEIVED_AT,
+        )
+    }
+
+    @Test
+    @Tag("REQ-031")
+    @Tag("REQ-033")
+    fun `GIVEN a known home WHEN a HOME_POSITION places it nowhere or at 0, 0 THEN the frame is dropped`() {
+        val telemetry = Telemetry(home = Timed(REAL_HOME, EARLIER))
+        val noHome = listOf(HOME_POSITION_LAT_PAST_90, HOME_POSITION_LAT_INT32_MIN, HOME_POSITION_NULL_ISLAND)
+
+        val result = noHome.map { path -> mapper.update(telemetry, receivedFixture(path), RECEIVED_AT) }
+
+        result shouldBeEqualTo listOf(null, null, null)
+    }
+
+    @Test
+    @Tag("REQ-033")
+    fun `GIVEN a HOME_POSITION from another component of the vehicle WHEN mapping it THEN is not the vehicle's`() {
+        val received = receivedFixture(HOME_POSITION).copy(componentId = MAV_COMP_ID_GIMBAL)
+
+        val result = mapper.update(Telemetry(), received, RECEIVED_AT)
+
+        result.shouldBeNull()
+    }
+
+    @Test
     fun `GIVEN telemetry with other parts WHEN mapping a message THEN only its own part changes`() {
         val telemetry = Telemetry(battery = Timed(UNHEALTHY_WITHOUT_READING, EARLIER))
 
@@ -486,6 +532,11 @@ private const val SYS_STATUS_UNHEALTHY = "derived/sys-status-battery-unhealthy.b
 private const val GPS_RAW_INT = "telemetry/gps-raw-int.bin"
 private const val GPS_RAW_INT_EDGES = "derived/gps-raw-int-edges.bin"
 private const val GPS_RAW_INT_UNKNOWN = "derived/gps-raw-int-unknown.bin"
+private const val HOME_POSITION = "telemetry/home-position.bin"
+private const val HOME_POSITION_MOVED = "derived/home-position-moved.bin"
+private const val HOME_POSITION_LAT_PAST_90 = "derived/home-position-lat-past-90.bin"
+private const val HOME_POSITION_LAT_INT32_MIN = "derived/home-position-lat-int32-min.bin"
+private const val HOME_POSITION_NULL_ISLAND = "derived/home-position-null-island.bin"
 private const val HEARTBEAT = "heartbeat/disarmed-stabilize.bin"
 
 private const val SYSTEM_ID = 1
@@ -512,6 +563,9 @@ private val REAL_POSITION = GlobalPosition(
     velocityDown = 0.0,
     heading = 359.35,
 )
+
+/** `telemetry/home-position.bin` as pymavlink decodes it, converted by hand. */
+private val REAL_HOME = Home(latitude = -35.3633514, longitude = 149.1652411, altitudeMsl = 587.13)
 
 private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
 
