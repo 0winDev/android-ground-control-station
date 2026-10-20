@@ -6,11 +6,13 @@ import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
+import com.owindev.gcs.core.domain.telemetry.Home
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
+import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
 import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
@@ -34,6 +36,12 @@ internal object TelemetryMapper {
     private const val MILLI = 1_000.0
     private const val PERCENT_MAX = 100
     private const val NORTH_DEGREES = 0.0
+
+    /**
+     * 0°, 0° is what a location never set reads as: ArduPilot sends GLOBAL_POSITION_INT at 0°, 0° before it has a
+     * position (#42), so a home there is taken as no home.
+     */
+    private const val NULL_ISLAND_DEGE7 = 0
 
     // GPS_FIX_TYPE (common.xml).
     private const val GPS_FIX_TYPE_NO_GPS = 0
@@ -65,8 +73,8 @@ internal object TelemetryMapper {
 
     /**
      * [telemetry] with the part [received] carries, marked [receivedAt], or `null` if [received] is not
-     * telemetry from a vehicle's autopilot, or is a position that does not exist: that frame is dropped, so the
-     * last valid position keeps its time and goes stale (REQ-031), never replaced by nothing.
+     * telemetry from a vehicle's autopilot, or is a position or home that does not exist: that frame is dropped, so
+     * the last valid one is kept (REQ-031), never replaced by nothing.
      */
     fun update(telemetry: Telemetry, received: ReceivedMessage, receivedAt: TimeMark): Telemetry? {
         if (received.componentId != MAV_COMP_ID_AUTOPILOT1) return null
@@ -76,6 +84,7 @@ internal object TelemetryMapper {
             is VfrHud -> telemetry.copy(airData = Timed(message.toAirData(), receivedAt))
             is SysStatus -> telemetry.copy(battery = Timed(message.toBattery(), receivedAt))
             is GpsRawInt -> telemetry.copy(gps = Timed(message.toGpsStatus(), receivedAt))
+            is HomePosition -> message.toHome()?.let { telemetry.copy(home = Timed(it, receivedAt)) }
             else -> null
         }
     }
@@ -92,6 +101,17 @@ internal object TelemetryMapper {
             velocityEast = vy / CENTI,
             velocityDown = vz / CENTI,
             heading = TelemetryRanges.direction(hdg)?.let { it / CENTI },
+        )
+    }
+
+    /** `null` for a place that does not exist or was never set. The local `x/y/z`, `q` and approach are not used. */
+    private fun HomePosition.toHome(): Home? {
+        val neverSet = latitude == NULL_ISLAND_DEGE7 && longitude == NULL_ISLAND_DEGE7
+        if (neverSet || !TelemetryRanges.isOnEarth(latitude, longitude)) return null
+        return Home(
+            latitude = latitude / DEGE7_PER_DEGREE,
+            longitude = longitude / DEGE7_PER_DEGREE,
+            altitudeMsl = altitude / MILLI,
         )
     }
 

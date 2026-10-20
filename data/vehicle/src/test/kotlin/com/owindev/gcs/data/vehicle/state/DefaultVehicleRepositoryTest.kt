@@ -704,6 +704,28 @@ class DefaultVehicleRepositoryTest {
             )
         }
 
+    @Tag("REQ-023")
+    @Tag("REQ-033")
+    @Test
+    fun `GIVEN the active vehicle CONNECTED WHEN it reboots without being LOST THEN telemetry is requested again`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                GAP to ATTITUDE_LONG_UP,
+                GAP to ATTITUDE_AFTER_REBOOT,
+                afterwards = { emitAll(heartbeatEverySecond(DISARMED_STABILIZE)) },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            runCurrent()
+
+            val result = telemetryTargets.captured.take(2).toList()
+
+            result shouldBeEqualTo listOf(
+                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+            )
+        }
+
     /**
      * The telemetry job busy while the vehicle is lost and heard again: both changes still reach it, so a
      * new round starts. A state that only kept the latest value would show CONNECTED twice and lose it.
@@ -814,6 +836,10 @@ private const val ARMED_GUIDED = "heartbeat/armed-guided.bin"
 private const val SYSTEM_2_LOITER = "derived/heartbeat-sysid-2.bin"
 private const val GCS = "gcs/heartbeat-mission-planner.bin"
 private const val GIMBAL = "derived/heartbeat-gimbal-component.bin"
+
+/** `time_boot_ms` 4000000000 and then 397119 (pymavlink): back by far more than the reboot backstep. */
+private const val ATTITUDE_LONG_UP = "derived/attitude-edges.bin"
+private const val ATTITUDE_AFTER_REBOOT = "telemetry/attitude.bin"
 
 // Virtual milliseconds. The default timeout is 3 s (REQ-017).
 private const val GAP = 100L

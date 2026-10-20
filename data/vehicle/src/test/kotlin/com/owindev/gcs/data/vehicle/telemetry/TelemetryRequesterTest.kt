@@ -41,8 +41,9 @@ import org.junit.jupiter.params.provider.CsvSource
  * (`command/set-message-interval-ack.bin`: command 511, ACCEPTED, from 1/1 to 255/190).
  *
  * The streams themselves are recorded straight into a real [TelemetryStore] on the scheduler's clock, as the
- * vehicle repository's listener does. A round of five accepted requests takes 250 ms (one 50 ms answer each),
- * so a stream is first allowed again 5.25 s in; the tests check well away from that edge.
+ * vehicle repository's listener does. A round of six accepted requests takes 300 ms (one 50 ms answer each),
+ * so a stream is first allowed again 5.3 s in; the tests check well away from that edge. The vehicle never
+ * streams HOME_POSITION here, as before home is set.
  */
 @Tag("REQ-023")
 class TelemetryRequesterTest {
@@ -87,6 +88,7 @@ class TelemetryRequesterTest {
                 setMessageInterval(messageId = 74, intervalMicros = 250_000f),
                 setMessageInterval(messageId = 24, intervalMicros = 500_000f),
                 setMessageInterval(messageId = 1, intervalMicros = 1_000_000f),
+                setMessageInterval(messageId = 242, intervalMicros = 1_000_000f),
             )
         }
 
@@ -103,6 +105,7 @@ class TelemetryRequesterTest {
             StreamResult.Accepted,
             StreamResult.Accepted,
             StreamResult.Rejected(MAV_RESULT_DENIED),
+            StreamResult.Accepted,
             StreamResult.Accepted,
             StreamResult.Accepted,
         )
@@ -209,6 +212,7 @@ class TelemetryRequesterTest {
             StreamResult.Accepted,
             StreamResult.Accepted,
             StreamResult.Accepted,
+            StreamResult.Accepted,
         )
     }
 
@@ -240,6 +244,7 @@ class TelemetryRequesterTest {
                 StreamResult.Accepted,
                 StreamResult.Accepted,
                 StreamResult.Accepted,
+                StreamResult.Accepted,
             )
         }
 
@@ -261,11 +266,13 @@ class TelemetryRequesterTest {
                 Log.w(TAG, "Telemetry stream 74 not set: NoAck")
                 Log.w(TAG, "Telemetry stream 24 not set: NoAck")
                 Log.w(TAG, "Telemetry stream 1 not set: NoAck")
+                Log.w(TAG, "Telemetry stream 242 not set: NoAck")
                 Log.i(TAG, "Telemetry stream 30 accepted again")
                 Log.i(TAG, "Telemetry stream 33 accepted again")
                 Log.i(TAG, "Telemetry stream 74 accepted again")
                 Log.i(TAG, "Telemetry stream 24 accepted again")
                 Log.i(TAG, "Telemetry stream 1 accepted again")
+                Log.i(TAG, "Telemetry stream 242 accepted again")
             }
         }
 
@@ -379,6 +386,18 @@ class TelemetryRequesterTest {
             sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + SYS_STATUS_ID
         }
 
+    @Tag("REQ-033")
+    @Test
+    fun `GIVEN a vehicle without home and silent streams WHEN running THEN HOME_POSITION is never requested again`() =
+        testScope.runTest {
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+
+            requester.run(isHeard = { true }, targets = connectedFor(SIXTEEN_SECONDS))
+
+            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + List(REQUESTED_AGAIN_IN_SIXTEEN_SECONDS) { WATCHED_IDS }
+                .flatten()
+        }
+
     @Tag("REQ-016")
     @Test
     fun `GIVEN only another vehicle streams WHEN running THEN the target's streams are requested again`() =
@@ -388,7 +407,7 @@ class TelemetryRequesterTest {
 
             requester.run(isHeard = { true }, targets = connectedFor(SIX_SECONDS))
 
-            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + STREAM_IDS
+            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + WATCHED_IDS
         }
 
     @Test
@@ -488,7 +507,7 @@ class TelemetryRequesterTest {
         const val GCS_SYSTEM_ID = 255
         const val GCS_COMPONENT_ID = 190
         const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
-        const val STREAMS = 5
+        const val STREAMS = 6
         const val VFR_HUD_ID = 74f
         const val ATTITUDE_ID = 30f
         const val MAV_RESULT_ACCEPTED = 0
@@ -516,7 +535,11 @@ class TelemetryRequesterTest {
         // The first request times out at 1 s, so the second one is in flight when the vehicle is lost.
         const val ONE_AND_A_HALF_TIMEOUTS = 1_500L
 
-        val STREAM_IDS = listOf(30f, 33f, 74f, 24f, 1f)
+        val STREAM_IDS = listOf(30f, 33f, 74f, 24f, 1f, 242f)
+        val WATCHED_IDS = listOf(30f, 33f, 74f, 24f, 1f)
+
+        // Allowed again at 5.3 s, 10.3 s and 15.3 s.
+        const val REQUESTED_AGAIN_IN_SIXTEEN_SECONDS = 3
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
         val TARGET = TelemetryTarget(SystemId(VEHICLE_SYSTEM_ID), VEHICLE_ADDRESS)

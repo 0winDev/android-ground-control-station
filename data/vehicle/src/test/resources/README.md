@@ -62,3 +62,16 @@ cited and the bytes listed; every field not named below is the real frame's.
 | `derived/attitude-out-of-range.bin` | roll NaN, pitch -infinity, yaw 0.5 | no roll or pitch; yaw kept |
 | `derived/attitude-past-pi.bin` | roll 3.1415927 (float32 pi), pitch -0.25, yaw 3.1416 | roll at pi kept, yaw past pi dropped |
 | `derived/session-stream.bin` | the whole SITL session (see the README in `:core:mavlink`) | no real value dropped: 130 positions and headings, 260 of each ATTITUDE and VFR_HUD value, 325 GPS courses, 0 GPS yaws |
+
+## Home (#69)
+
+Byte-identical copies of the HOME_POSITION fixtures in `core/mavlink/src/test/resources/` (#66, #69); every field
+not named below is the real frame's: latitude -353633514, longitude 1491652411, altitude 587130, `q` NaN.
+
+| File | Raw values (pymavlink) | Used for |
+|---|---|---|
+| `telemetry/home-position.bin` | the real frame | degE7 and mm converted; `q`, `x/y/z` and approach ignored |
+| `derived/home-position-moved.bin` | latitude -353624514, longitude 1491663411, altitude 590130 | home set again elsewhere |
+| `derived/home-position-lat-past-90.bin` | latitude 900000001 | a home past 90°: the frame is dropped |
+| `derived/home-position-lat-int32-min.bin` | latitude -2147483648 | INT32_MIN, whose absolute value overflows: the frame is dropped |
+| `derived/home-position-null-island.bin` | latitude 0, longitude 0 | never a home: the frame is dropped |

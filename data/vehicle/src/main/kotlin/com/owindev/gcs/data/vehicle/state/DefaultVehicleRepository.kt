@@ -52,10 +52,11 @@ import kotlinx.coroutines.launch
  *   its HEARTBEATs come from, only while that vehicle is CONNECTED (REQ-021): once it is lost, or the
  *   socket closes because nobody observes the link, the vehicle stops hearing this GCS and its own GCS
  *   failsafe can act. It only reads the current state, so it never keeps the link open by itself;
- * - the **telemetry** job ([TelemetryRequester]) asks the active vehicle for the HUD's telemetry each time
- *   it becomes CONNECTED (REQ-023), and never any other system ID. The watchdog tells it of every change
- *   of the active vehicle's link, in order, so a LOST followed at once by a CONNECTED still starts a new
- *   round. It only listens for answers while it is waiting for one.
+ * - the **telemetry** job ([TelemetryRequester]) asks the active vehicle for its telemetry each time it
+ *   becomes CONNECTED (REQ-023), and never any other system ID. The watchdog tells it of every change of the
+ *   active vehicle's link, in order, so a LOST followed at once by a CONNECTED still starts a new round, and
+ *   of a reboot the store detects while it stays CONNECTED, since the autopilot has forgotten the intervals
+ *   (REQ-033). It only listens for answers while it is waiting for one.
  *
  * The first vehicle heard becomes the [activeSystemId] and stays so (REQ-020); the others are kept in the
  * map like any vehicle, never merged into it.
@@ -90,9 +91,9 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val events = Channel<Event>(Channel.UNLIMITED)
 
     /**
-     * Each change of the active vehicle's link, for the telemetry job: its target when it becomes CONNECTED,
-     * `null` when it is lost. A channel, not a state: two changes in a row must both arrive, and there is a
-     * single consumer, so nothing is replayed to a late one.
+     * Each change of the active vehicle's link, for the telemetry job: its target when it becomes CONNECTED or
+     * reboots while CONNECTED, `null` when it is lost. A channel, not a state: two changes in a row must both
+     * arrive, and there is a single consumer, so nothing is replayed to a late one.
      */
     private val activeLinkChanges = Channel<TelemetryTarget?>(Channel.UNLIMITED)
 
@@ -128,7 +129,9 @@ internal class DefaultVehicleRepository @Inject constructor(
                     session.messages.collect { received ->
                         // Marked on arrival, not when the watchdog gets to it.
                         val at = timeSource.markNow()
-                        telemetryStore.record(received, at)
+                        if (telemetryStore.record(received, at)) {
+                            events.send(Event.Rebooted(SystemId(received.systemId)))
+                        }
                         HeartbeatMapper.vehicleStateOf(received)?.let { state ->
                             events.send(Event.Heard(state, at, received.sender))
                         }
@@ -182,6 +185,8 @@ internal class DefaultVehicleRepository @Inject constructor(
                             else -> update(event.systemId, vehicle.copy(link = VehicleLink.LOST))
                         }
                     }
+
+                    is Event.Rebooted -> requestAgainAfterReboot(event.systemId)
                 }
             }
         } finally {
@@ -215,6 +220,17 @@ internal class DefaultVehicleRepository @Inject constructor(
     }
 
     /**
+     * Tells the telemetry job to start a new round if [systemId] is the active vehicle and CONNECTED; otherwise it
+     * gets one when it is CONNECTED again. Only the watchdog calls it.
+     */
+    private fun requestAgainAfterReboot(systemId: SystemId) {
+        val connected = mutableVehicles.value[systemId]?.link == VehicleLink.CONNECTED
+        if (systemId == mutableActiveSystemId.value && connected) {
+            activeLinkChanges.trySend(TelemetryTarget(systemId, addresses.getValue(systemId)))
+        }
+    }
+
+    /**
      * The active vehicle's address while it is CONNECTED, otherwise `null`. CONNECTED is checked twice, as
      * the HUD does: the watchdog's verdict and the rule applied to the age right now, because the watchdog's
      * timer can run late after the device sleeps (#12) and this GCS must not keep announcing itself then.
@@ -240,5 +256,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         data class Heard(val state: VehicleState, val at: ComparableTimeMark, val sender: InetSocketAddress) : Event
 
         data class TimedOut(val systemId: SystemId) : Event
+
+        data class Rebooted(val systemId: SystemId) : Event
     }
 }

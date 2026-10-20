@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
 import com.owindev.gcs.core.domain.telemetry.Attitude
+import com.owindev.gcs.core.domain.telemetry.Home
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -127,6 +128,69 @@ class DefaultTelemetryRepositoryTest {
 
             result.shouldBeNull()
         }
+
+    @Tag("REQ-033")
+    @Test
+    fun `GIVEN an active vehicle heard WHEN no HOME_POSITION has arrived THEN its home is unknown`() =
+        testScope.runTest {
+            activeSystemId.value = SystemId(SYSTEM_1)
+            store.record(received(SYSTEM_1), RECEIVED_AT)
+            repository.activeTelemetry.launchIn(backgroundScope)
+
+            runCurrent()
+            val result = repository.activeTelemetry.value?.home
+
+            result.shouldBeNull()
+        }
+
+    @Tag("REQ-016")
+    @Tag("REQ-033")
+    @Test
+    fun `GIVEN the active vehicle's home known WHEN another vehicle without one becomes active THEN home is unknown`() =
+        testScope.runTest {
+            activeSystemId.value = SystemId(SYSTEM_1)
+            store.record(home(SYSTEM_1, HOME_LATITUDE_DEGE7), RECEIVED_AT)
+            store.record(received(SYSTEM_2), RECEIVED_AT)
+            repository.activeTelemetry.launchIn(backgroundScope)
+            runCurrent()
+
+            activeSystemId.value = SystemId(SYSTEM_2)
+            runCurrent()
+            val result = repository.activeTelemetry.value
+
+            result shouldBeEqualTo Telemetry(attitude = Timed(LEVEL, RECEIVED_AT))
+        }
+
+    @Tag("REQ-033")
+    @Test
+    fun `GIVEN a known home WHEN the vehicle moves it THEN home follows it`() = testScope.runTest {
+        activeSystemId.value = SystemId(SYSTEM_1)
+        store.record(home(SYSTEM_1, HOME_LATITUDE_DEGE7), RECEIVED_AT)
+        repository.activeTelemetry.launchIn(backgroundScope)
+        runCurrent()
+
+        store.record(home(SYSTEM_1, MOVED_LATITUDE_DEGE7), MOVED_AT)
+        runCurrent()
+        val result = repository.activeTelemetry.value?.home
+
+        result shouldBeEqualTo Timed(MOVED_HOME, MOVED_AT)
+    }
+
+    @Tag("REQ-031")
+    @Tag("REQ-033")
+    @Test
+    fun `GIVEN a known home WHEN a HOME_POSITION past the pole arrives THEN keeps the last home`() = testScope.runTest {
+        activeSystemId.value = SystemId(SYSTEM_1)
+        store.record(home(SYSTEM_1, HOME_LATITUDE_DEGE7), RECEIVED_AT)
+        repository.activeTelemetry.launchIn(backgroundScope)
+        runCurrent()
+
+        store.record(home(SYSTEM_1, PAST_NORTH_POLE_DEGE7), MOVED_AT)
+        runCurrent()
+        val result = repository.activeTelemetry.value?.home
+
+        result shouldBeEqualTo Timed(HOME, RECEIVED_AT)
+    }
 }
 
 private const val SYSTEM_1 = 1
@@ -134,9 +198,17 @@ private const val SYSTEM_2 = 2
 private const val MAV_COMP_ID_AUTOPILOT1 = 1
 private const val HALF_PI = (Math.PI / 2).toFloat()
 
+private const val HOME_LATITUDE_DEGE7 = -350_000_000
+private const val MOVED_LATITUDE_DEGE7 = -349_990_000
+private const val PAST_NORTH_POLE_DEGE7 = 900_000_001
+
 private val SENDER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
-private val RECEIVED_AT = TestTimeSource().markNow()
+private val CLOCK = TestTimeSource()
+private val RECEIVED_AT = CLOCK.markNow()
+private val MOVED_AT = CLOCK.markNow()
 private val LEVEL = Attitude(roll = 0.0, pitch = 0.0, yaw = 0.0)
+private val HOME = Home(latitude = -35.0, longitude = 149.0, altitudeMsl = 584.0)
+private val MOVED_HOME = HOME.copy(latitude = -34.999)
 
 private fun received(systemId: Int, roll: Float = 0f) = ReceivedMessage(
     systemId = systemId,
@@ -149,6 +221,28 @@ private fun received(systemId: Int, roll: Float = 0f) = ReceivedMessage(
         rollspeed = 0f,
         pitchspeed = 0f,
         yawspeed = 0f,
+    ),
+    sender = SENDER,
+)
+
+private fun home(systemId: Int, latitude: Int) = ReceivedMessage(
+    systemId = systemId,
+    componentId = MAV_COMP_ID_AUTOPILOT1,
+    message = MavlinkMessage.HomePosition(
+        latitude = latitude,
+        longitude = 1_490_000_000,
+        altitude = 584_000,
+        x = 0f,
+        y = 0f,
+        z = 0f,
+        q1 = Float.NaN,
+        q2 = Float.NaN,
+        q3 = Float.NaN,
+        q4 = Float.NaN,
+        approachX = 0f,
+        approachY = 0f,
+        approachZ = 0f,
+        timeUsec = 443_979_837,
     ),
     sender = SENDER,
 )

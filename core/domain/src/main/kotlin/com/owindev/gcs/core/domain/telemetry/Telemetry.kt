@@ -14,9 +14,10 @@ data class Telemetry(
     val airData: Timed<AirData>? = null,
     val battery: Timed<Battery>? = null,
     val gps: Timed<GpsStatus>? = null,
+    val home: Timed<Home>? = null,
 ) {
 
-    /** The part of [kind], to judge its age with [StalenessRule]; `null` until its first message. */
+    /** The part of [kind], to judge its age with [StalenessRule]; `null` until its first message. [home] has none. */
     operator fun get(kind: TelemetryKind): Timed<*>? = when (kind) {
         TelemetryKind.POSITION -> position
         TelemetryKind.ATTITUDE -> attitude
@@ -49,6 +50,16 @@ data class GlobalPosition(
     val velocityDown: Double,
     val heading: Double?,
 )
+
+/**
+ * Where the vehicle returns to and measures its altitude above home from, as the vehicle reports it. It never goes
+ * stale: a home does not change by getting older, and the vehicle sends none until it has one.
+ *
+ * @property latitude in degrees, WGS84.
+ * @property longitude in degrees, WGS84.
+ * @property altitudeMsl above mean sea level, in m.
+ */
+data class Home(val latitude: Double, val longitude: Double, val altitudeMsl: Double)
 
 /**
  * The vehicle's attitude, each angle in degrees from -180 to 180 as the vehicle sends it; float rounding of
