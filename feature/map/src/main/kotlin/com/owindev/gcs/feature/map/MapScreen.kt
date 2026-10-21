@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -14,14 +15,17 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.UiComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.maplibre.compose.camera.CameraAnimation
 import org.maplibre.compose.camera.CameraMoveReason
@@ -78,15 +82,21 @@ internal fun MapContent(
     onRecenter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val remoteStyle = remoteStyleOf(palette)
+    val context = LocalContext.current
+    val nightStyle by produceState<String?>(initialValue = null) {
+        value = withContext(Dispatchers.IO) {
+            context.assets.open(NIGHT_STYLE_ASSET).bufferedReader().use { it.readText() }
+        }
+    }
     // The vehicle is drawn over the map only once the map has a viewport, which needs a style presented first: the
     // map starts on the fallback, which needs no network, so the vehicle shows at once, and moves to the remote style
     // as soon as it is up.
     var presented by remember { mutableStateOf(false) }
     var failedStyle by remember { mutableStateOf<BaseStyle?>(null) }
-    val useRemote = presented && failedStyle != remoteStyle
+    val remoteStyle = nightStyle?.let { remoteStyleOf(palette, it) }
+    val useRemote = presented && remoteStyle != null && failedStyle != remoteStyle
     val trailColor = MaterialTheme.colorScheme.onSurface.copy(alpha = TRAIL_ALPHA)
-    val baseStyle = if (useRemote) remoteStyle else fallbackStyleOf(MaterialTheme.colorScheme.background)
+    val baseStyle = remoteStyle.takeIf { useRemote } ?: fallbackStyleOf(MaterialTheme.colorScheme.background)
     val mapState = rememberMapState(
         baseStyle = baseStyle,
         initialCameraPosition = CameraPosition(zoom = WORLD_ZOOM),

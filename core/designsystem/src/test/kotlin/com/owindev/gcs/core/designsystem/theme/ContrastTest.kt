@@ -70,14 +70,12 @@ class ContrastTest {
 
     @Tag("REQ-034")
     @Test
-    fun `GIVEN the night map's backgrounds WHEN measuring the live vehicle THEN its fill or outline reaches 3 to 1`() {
-        val backgrounds = FIORD_BACKGROUNDS
+    fun `GIVEN the night map's backgrounds WHEN measuring the live vehicle THEN reaches 3 to 1 on every one`() {
+        val backgrounds = NIGHT_MAP_BACKGROUNDS
 
         val result = backgrounds.filterValues { background ->
-            maxOf(
-                contrast(NightColorScheme.primary, background),
-                contrast(NightColorScheme.surface, background),
-            ) < AA_NON_TEXT
+            contrast(NightColorScheme.primary, background) <
+                AA_NON_TEXT
         }
 
         result.keys.shouldBeEmpty()
@@ -85,12 +83,27 @@ class ContrastTest {
 
     @Tag("REQ-034")
     @Test
-    fun `GIVEN the night map's backgrounds WHEN measuring the stale colour on them THEN some are under 3 to 1`() {
-        val backgrounds = FIORD_BACKGROUNDS
+    fun `GIVEN the night map's backgrounds WHEN measuring the greyed vehicle THEN reaches 3 to 1 on every one`() {
+        val backgrounds = NIGHT_MAP_BACKGROUNDS
 
         val result = backgrounds.filterValues { background -> contrast(NightGcsColors.stale, background) < AA_NON_TEXT }
 
-        result.keys.shouldBeEqualTo(setOf("background", "wood", "park", "residential", "building"))
+        result.keys.shouldBeEmpty()
+    }
+
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN the night map's labels WHEN measuring them on their halo and the background THEN none is under AA`() {
+        val pairs = NIGHT_MAP_LABELS.flatMap { (name, text) ->
+            listOf(
+                "$name on its halo" to (text to NIGHT_MAP_HALO),
+                "$name on the background" to (text to NIGHT_MAP_BACKGROUNDS.getValue("background")),
+            )
+        }.toMap()
+
+        val result = pairs.filterValues { (foreground, background) -> contrast(foreground, background) < AA_TEXT }
+
+        result.keys.shouldBeEmpty()
     }
 
     @Tag("REQ-034")
@@ -117,20 +130,27 @@ class ContrastTest {
 }
 
 /**
- * What the vehicle can be drawn on with OpenFreeMap's `fiord` style, the night map (ADR 0005), as read from
- * https://tiles.openfreemap.org/styles/fiord on 2026-10-21: the background, water and aeroway as they are, and the
- * translucent fills over the background at their opacity at the follow zoom (wood 0.57 of hsl(232,18%,30%), park 0.3
- * of hsl(204,17%,35%), residential 0.6 of rgb(234,234,230), building 0.25 × 0.65 of hsl(232,47%,18%)).
+ * What the vehicle can be drawn on at night: the backgrounds of `feature/map/src/main/assets/map/liberty-night.json`
+ * at the follow zoom, the translucent fills blended over the background, as `tools/map/make_night_style.py` prints them
+ * (generated on 2026-10-21 from OpenFreeMap's liberty).
  */
-private val FIORD_BACKGROUNDS = mapOf(
-    "background" to Color(0xFF45516E),
-    "water" to Color(0xFF38435C),
-    "aeroway" to Color(0xFF3B4359),
-    "wood" to Color(0xFF424863),
-    "park" to Color(0xFF46546C),
-    "residential" to Color(0xFFA8ADB6),
-    "building" to Color(0xFF3E4967),
+private val NIGHT_MAP_BACKGROUNDS = mapOf(
+    "background" to Color(0xFF272523),
+    "water" to Color(0xFF1F2C47),
+    "park" to Color(0xFF242421),
+    "wood" to Color(0xFF242421),
+    "residential" to Color(0xFF272422),
+    "aeroway" to Color(0xFF252423),
+    "building" to Color(0xFF222222),
 )
+
+/** The night map's label colours and the halo they are drawn on, from the same script's output. */
+private val NIGHT_MAP_LABELS = mapOf(
+    "places" to Color(0xFFEBEBEB),
+    "POIs and road names" to Color(0xFFB8B8B8),
+    "water names" to Color(0xFFA5AEC3),
+)
+private val NIGHT_MAP_HALO = Color(0xFF1A1A1A)
 
 private const val AA_TEXT = 4.5
 private const val AAA_TEXT = 7.0

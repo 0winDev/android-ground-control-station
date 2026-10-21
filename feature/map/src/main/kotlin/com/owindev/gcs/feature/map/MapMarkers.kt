@@ -34,8 +34,8 @@ import org.maplibre.compose.overlay.MapOverlayScope
 /**
  * The vehicle where it was last reported, pointing along its heading on a map turned by [mapBearing], with its label.
  * Live, it is the primary colour with the surface colour around it; otherwise an outline in the stale colour inside a
- * dashed ring, so a position that cannot be trusted never looks like one that can (REQ-017, REQ-026, REQ-029). The
- * stale colour falls under 3:1 on most of the night map's tiles, so that arrow sits on a disc of the surface colour
+ * dashed ring, so a position that cannot be trusted never looks like one that can (REQ-017, REQ-026, REQ-029). That
+ * arrow sits on a disc of the surface colour, so it keeps its contrast over any tiles, whatever the style
  * (`ContrastTest`).
  */
 @Composable

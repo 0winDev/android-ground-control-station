@@ -16,7 +16,7 @@ What we know, checked on 2026-10-21:
 - [OpenFreeMap](https://openfreemap.org/) serves OpenStreetMap vector tiles and styles from a public instance:
   "no limits on the number of map views or requests", "no registration, no user database, no API keys, and no
   cookies". Its styles `liberty`, `bright`, `positron`, `dark` and `fiord` answer at
-  `https://tiles.openfreemap.org/styles/<name>`.
+  `https://tiles.openfreemap.org/styles/<name>`, and a script must name itself in its User-Agent or gets a 403.
 - Attribution "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" is required, and MapLibre adds it from the
   tiles' own `attribution`.
 - The [terms](https://openfreemap.org/tos/) do not mention commercial use, keys or attribution. They limit offline
@@ -30,11 +30,17 @@ What we know, checked on 2026-10-21:
 
 ## Decision
 
-We draw the map from OpenFreeMap's public instance over HTTPS: `fiord` with the NIGHT palette and `liberty` with
-DAY. `dark` was tried first, but its roads and boundaries are dark grey on near black and barely read at night;
-`fiord` keeps a dark slate background on which they read without glare. On it the live vehicle (primary fill, surface
-outline) keeps 3:1 against every background, but the stale grey does not, so a greyed vehicle sits on a disc of the
-surface colour (`ContrastTest`). We keep MapLibre's attribution visible and its default ambient cache (50 MiB,
+We draw the map from OpenFreeMap's public instance over HTTPS. By day the style is OpenFreeMap's `liberty`. By night
+it is the same `liberty` recoloured to dark greys by `tools/map/make_night_style.py` and shipped in the app's assets
+(`feature/map/src/main/assets/map/liberty-night.json`), on the same tiles, sprite and glyphs, so both palettes show
+the same layers and labels. OpenFreeMap allows a modified style if we host its JSON ourselves ("When you use a
+customized style, you need to host the style JSON yourself", openfreemap.org/quick_start). `liberty` derives from OSM
+Liberty, whose JSON is BSD 3-Clause and whose design is CC BY: its licence ships beside the style
+(`assets/licenses/BSD-3-Clause-OSM-Liberty.md`), the style's `metadata` says it is recoloured, and the OpenMapTiles and
+OpenStreetMap credit comes with the tiles. `dark` and `fiord` were tried first and dropped: `dark` barely shows roads
+at night, and `fiord` is another map, which loses road names, rivers, POIs and shields. On the night style the live
+vehicle keeps at least 6.4:1, the greyed one 4.9:1 (6.1:1 on the surface-coloured disc it also sits on) and every label
+7:1 on its halo (`ContrastTest`). We keep MapLibre's attribution visible and its default ambient cache (50 MiB,
 app-private, never backed up). We download no offline regions until v1.0.
 
 When the style has not loaded after 10 s, as on a network that answers nothing, the map switches to a style with a

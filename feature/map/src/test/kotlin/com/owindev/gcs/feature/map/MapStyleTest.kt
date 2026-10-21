@@ -11,19 +11,19 @@ import org.maplibre.compose.style.BaseStyle
 class MapStyleTest {
 
     @Test
-    fun `GIVEN the night palette WHEN choosing the style THEN is OpenFreeMap's fiord over HTTPS`() {
+    fun `GIVEN the night palette WHEN choosing the style THEN is the recoloured liberty`() {
         val palette = GcsPalette.NIGHT
 
-        val result = remoteStyleOf(palette)
+        val result = remoteStyleOf(palette, NIGHT_STYLE)
 
-        result shouldBeEqualTo BaseStyle.Uri("https://tiles.openfreemap.org/styles/fiord")
+        result shouldBeEqualTo BaseStyle.Json(NIGHT_STYLE)
     }
 
     @Test
     fun `GIVEN the day palette WHEN choosing the style THEN is OpenFreeMap's liberty over HTTPS`() {
         val palette = GcsPalette.DAY
 
-        val result = remoteStyleOf(palette)
+        val result = remoteStyleOf(palette, NIGHT_STYLE)
 
         result shouldBeEqualTo BaseStyle.Uri("https://tiles.openfreemap.org/styles/liberty")
     }
@@ -40,6 +40,8 @@ class MapStyleTest {
         )
     }
 }
+
+private const val NIGHT_STYLE = """{"version":8,"sources":{},"layers":[]}"""
 
 /** `Night0` in `:core:designsystem`. */
 private const val NIGHT_BACKGROUND = 0xFF0B0E11
