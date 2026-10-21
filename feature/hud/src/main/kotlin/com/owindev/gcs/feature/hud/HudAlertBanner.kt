@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -89,16 +89,19 @@ private fun ShowingBanner(banner: AlertBanner.Showing, onAcknowledge: (occurrenc
                     delay(ACKNOWLEDGE_GUARD)
                     enabled = true
                 }
+                // The banner's own content colour, enabled or not: inside the button LocalContentColor is the button's
+                // primary, which all but vanished on the caution amber (1.1:1). The 1 s guard needs no fading.
                 OutlinedButton(
                     onClick = { onAcknowledge(banner.occurrence) },
                     enabled = enabled,
                     modifier = Modifier.heightIn(min = GcsTheme.sizes.button),
-                    border = BorderStroke(width = 1.dp, color = LocalContentColor.current),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = style.content,
+                        disabledContentColor = style.content,
+                    ),
+                    border = BorderStroke(width = 1.dp, color = style.content),
                 ) {
-                    Text(
-                        text = stringResource(id = R.string.hud_alert_acknowledge).uppercase(),
-                        color = LocalContentColor.current,
-                    )
+                    Text(text = stringResource(id = R.string.hud_alert_acknowledge).uppercase())
                 }
             }
         }

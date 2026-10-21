@@ -188,6 +188,8 @@ private fun textPairs(scheme: ColorScheme, colors: GcsColors): Map<String, Pair<
     "nominal on surfaceContainer" to (colors.nominal to scheme.surfaceContainer),
     "advisory banner" to (colors.advisory to colors.advisoryContainer),
     "caution banner" to (colors.onCaution to colors.caution),
+    "acknowledge button on the caution banner" to (colors.onCaution to colors.caution),
+    "acknowledge button on the advisory banner" to (colors.advisory to colors.advisoryContainer),
     "emergency banner" to (colors.onEmergencyContainer to colors.emergencyContainer),
 )
 
