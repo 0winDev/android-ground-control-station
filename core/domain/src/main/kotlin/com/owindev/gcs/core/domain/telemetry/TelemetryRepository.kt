@@ -14,4 +14,11 @@ interface TelemetryRepository {
      * is lost keeps its last values here, which the consumer must not show as current.
      */
     val activeTelemetry: StateFlow<Telemetry?>
+
+    /**
+     * The trail of the active vehicle (REQ-035), `null` while there is none: only its verified positions in this link
+     * session, so it starts afresh with every replay and when the live link comes back after one. It is followed while
+     * the link is listened to, whoever observes it, and observing it keeps the link open, as [activeTelemetry] does.
+     */
+    val activeTrail: StateFlow<Trail?>
 }
