@@ -1,0 +1,14 @@
+<resources>
+    <string name="map_vehicle_live">SYS %1$d · %2$d m</string>
+    <string name="map_vehicle_not_verified">SYS %1$d · Position not verified</string>
+    <string name="map_vehicle_stale">SYS %1$d · %2$d s ago</string>
+    <string name="map_vehicle_last_position">SYS %1$d · Last pos. %2$d s ago</string>
+    <string name="map_home">Home</string>
+    <string name="map_home_letter">H</string>
+    <string name="map_recenter">Center on the vehicle</string>
+    <string name="map_recenter_off_screen">The vehicle is off the map. Center on it</string>
+    <string name="map_zoom_in">Zoom in</string>
+    <string name="map_zoom_out">Zoom out</string>
+    <string name="map_north_up">North up</string>
+    <string name="map_north_letter">N</string>
+</resources>

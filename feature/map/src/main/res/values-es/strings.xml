@@ -1,0 +1,14 @@
+<resources>
+    <string name="map_vehicle_live">SYS %1$d · %2$d m</string>
+    <string name="map_vehicle_not_verified">SYS %1$d · Posición no verificada</string>
+    <string name="map_vehicle_stale">SYS %1$d · Hace %2$d s</string>
+    <string name="map_vehicle_last_position">SYS %1$d · Última pos. hace %2$d s</string>
+    <string name="map_home">Casa</string>
+    <string name="map_home_letter">H</string>
+    <string name="map_recenter">Centrar en el vehículo</string>
+    <string name="map_recenter_off_screen">El vehículo está fuera del mapa. Centrar en él</string>
+    <string name="map_zoom_in">Acercar</string>
+    <string name="map_zoom_out">Alejar</string>
+    <string name="map_north_up">Norte arriba</string>
+    <string name="map_north_letter">N</string>
+</resources>
