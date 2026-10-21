@@ -166,7 +166,7 @@ class HudViewModel @Inject constructor(
                 sinceLastHeartbeat = active.lastHeartbeat.elapsedNow().inWholeSeconds.seconds,
                 otherVehicles = otherVehicles,
                 localFault = traffic.toLocalFault(),
-                lastData = panelOf(sessionTelemetry, staleness),
+                lastData = panelOf(sessionTelemetry, staleness, lostSince = active.lastHeartbeat),
             )
         }
         return when (traffic) {

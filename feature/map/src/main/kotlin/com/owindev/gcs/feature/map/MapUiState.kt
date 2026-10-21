@@ -36,6 +36,9 @@ sealed interface PositionShown {
     /** No position for longer than its staleness threshold (REQ-026); [age] as the HUD shows ages. */
     data class Stale(val age: Duration) : PositionShown
 
-    /** The vehicle's link is lost (REQ-017); [age] is the last position's, as the HUD shows ages. */
+    /**
+     * The vehicle's link is lost (REQ-017); [age], in whole seconds, is the time since its last HEARTBEAT, as on the
+     * HUD's banner, or the position's own when it had already stopped arriving then.
+     */
     data class LinkLost(val age: Duration) : PositionShown
 }

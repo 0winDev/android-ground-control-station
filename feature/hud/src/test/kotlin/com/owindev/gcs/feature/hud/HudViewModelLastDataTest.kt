@@ -25,6 +25,7 @@ import com.owindev.gcs.core.testing.MainDispatcherExtension
 import io.mockk.every
 import io.mockk.mockk
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -92,6 +93,28 @@ class HudViewModelLastDataTest {
     }
 
     @Tag("REQ-017")
+    @Tag("REQ-026")
+    @Test
+    fun `GIVEN a part that stopped before the link was lost WHEN observing the state THEN shows its own older age`() =
+        runTest {
+            turbineScope {
+                activeSystemId.value = SYSTEM_1
+                vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = FOUR_SECONDS))
+                val received = testScheduler.timeSource.markNow() - TEN_AND_A_HALF_SECONDS
+                activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, received), origin = DataOrigin.LIVE)
+
+                val result = viewModel.state.testIn(backgroundScope)
+
+                result.expectMostRecentItem() shouldBeEqualTo HudUiState.LinkLost(
+                    lastKnown = GUIDED_ARMED_1,
+                    sinceLastHeartbeat = FOUR_SECONDS,
+                    otherVehicles = emptyList(),
+                    lastData = TelemetryPanel(attitude = Reading(LEVEL, stale = true, age = TEN_SECONDS)),
+                )
+            }
+        }
+
+    @Tag("REQ-017")
     @Tag("REQ-037")
     @Test
     fun `GIVEN telemetry of another session and the vehicle lost WHEN observing the state THEN none is last data`() =
@@ -118,6 +141,10 @@ private val SYSTEM_1 = SystemId(1)
 private val GUIDED_ARMED_1 =
     VehicleStatus(systemId = SYSTEM_1.value, flightMode = FlightMode.Named("Guided"), armed = true)
 private val FOUR_SECONDS = 4.seconds
+private val TEN_SECONDS = 10.seconds
+
+/** Whole seconds as the banner counts them: 10·5 s reads 10 s. */
+private val TEN_AND_A_HALF_SECONDS = 10_500.milliseconds
 private val LEVEL = Attitude(roll = 0.0, pitch = 0.0, yaw = 0.0)
 
 private fun <T> fresh(value: T) = Reading(value, stale = false, age = Duration.ZERO)

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.owindev.gcs.core.designsystem.R as DesignSystemR
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.core.designsystem.time.elapsedText
 
 /**
  * The active vehicle's link loss (REQ-017): an emergency banner across the top of the map, the largest and first
@@ -58,11 +59,11 @@ internal fun EmergencyBanner(state: HudUiState.LinkLost) {
             Column(verticalArrangement = Arrangement.spacedBy(ChipSpacing)) {
                 Text(
                     text = stringResource(id = R.string.hud_link_lost_title).uppercase(),
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.displayMedium,
                     color = GcsTheme.colors.onEmergencyContainer,
                 )
                 Text(
-                    text = stringResource(id = R.string.hud_link_lost_since, formatElapsed(state.sinceLastHeartbeat)),
+                    text = stringResource(id = R.string.hud_link_lost_since, elapsedText(state.sinceLastHeartbeat)),
                     style = GcsTheme.telemetryTypography.valueLarge,
                     color = GcsTheme.colors.onEmergencyContainer,
                 )

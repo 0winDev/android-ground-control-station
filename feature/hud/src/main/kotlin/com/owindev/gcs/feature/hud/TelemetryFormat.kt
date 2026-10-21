@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.core.designsystem.time.elapsedText
 import com.owindev.gcs.core.domain.geo.Mgrs
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import kotlin.math.abs
@@ -17,7 +18,7 @@ internal fun valueColor(reading: Reading<*>?, lost: Boolean = false): Color =
     if (lost || reading?.stale == true) GcsTheme.colors.stale else MaterialTheme.colorScheme.onSurface
 
 @Composable
-internal fun ageText(age: Duration): String = stringResource(id = R.string.hud_age_seconds, age.inWholeSeconds)
+internal fun ageText(age: Duration): String = stringResource(id = R.string.hud_age_seconds, elapsedText(age))
 
 @Composable
 internal fun metres(value: Double): String = stringResource(id = R.string.hud_value_metres, shown(value, decimals = 1))

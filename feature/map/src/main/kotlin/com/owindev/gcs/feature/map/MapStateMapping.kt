@@ -55,7 +55,12 @@ internal fun untilMapChanges(
     val nextStale = telemetry?.let(staleness::untilNextStale)
     val untilLost = (linkLossRule.timeout - vehicle.lastHeartbeat.elapsedNow()).takeIf { !lost && it > Duration.ZERO }
     val positionAge = telemetry?.position?.receivedAt?.elapsedNow()
-    val shownAge = positionAge?.takeIf { lost || staleness.isStale(TelemetryKind.POSITION, it) }
+    val shownAge = when {
+        positionAge == null -> null
+        lost -> lostAge(vehicle, positionAge, staleness)
+        staleness.isStale(TelemetryKind.POSITION, positionAge) -> positionAge
+        else -> null
+    }
     val nextAgeSecond = shownAge?.let { AGE_UNIT - (it.inWholeNanoseconds % AGE_UNIT.inWholeNanoseconds).nanoseconds }
     return listOfNotNull(nextStale, untilLost, nextAgeSecond).minOrNull()
 }
@@ -67,11 +72,25 @@ private fun shownOf(
     linkLossRule: LinkLossRule,
     staleness: StalenessRule,
 ): PositionShown = when {
-    linkLossRule.isLost(vehicle) -> PositionShown.LinkLost(shownAge(positionAge))
+    linkLossRule.isLost(vehicle) -> PositionShown.LinkLost(wholeSeconds(lostAge(vehicle, positionAge, staleness)))
     staleness.isStale(TelemetryKind.POSITION, positionAge) -> PositionShown.Stale(shownAge(positionAge))
     !telemetry.isPositionVerified(staleness) -> PositionShown.NotVerified
     else -> PositionShown.Live
 }
+
+/**
+ * How old the position is once the link is lost, on the HUD's one clock (REQ-017): the time since the last HEARTBEAT,
+ * which the banner and the last data count, unless the position had already stopped arriving then and is older. A
+ * position that arrived after that HEARTBEAT reads as old as it, never younger than the banner says.
+ */
+private fun lostAge(vehicle: Vehicle, positionAge: Duration, staleness: StalenessRule): Duration {
+    val sinceHeartbeat = vehicle.lastHeartbeat.elapsedNow()
+    val staleAtLoss = staleness.isStale(TelemetryKind.POSITION, positionAge - sinceHeartbeat)
+    return if (staleAtLoss) positionAge else sinceHeartbeat
+}
+
+/** The banner's rounding: the whole seconds passed. */
+private fun wholeSeconds(age: Duration): Duration = age.inWholeSeconds.seconds
 
 /** The HUD's rounding: whole seconds passed plus one, so a position never reads "0 s ago" while it is greyed. */
 private fun shownAge(age: Duration): Duration = (age.inWholeSeconds + 1).seconds
