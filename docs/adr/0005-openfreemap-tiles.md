@@ -48,6 +48,14 @@ background only, inline JSON that needs no network, and stays on it until the pa
 drop the trail with the style each time. The vehicle, heading and home are drawn over the map and the trail is a
 layer of whatever style is loaded, so none of them depends on the tiles.
 
+The attribution, "OpenFreeMap © OpenMapTiles Data from OpenStreetMap", is always on the map as plain text, never a
+link, so a stray tap in flight never takes the operator out of the app. OpenFreeMap requires the text, not links
+(openfreemap.org, "Attribution"); OpenStreetMap allows plain text and asks that the attribution "should not require
+individuals to interact with the map … to see the attribution", and that where it does not link "the link must be
+provided in an easily locatable part of the web page, software, or application", such as "an 'About' option in a menu"
+(osmfoundation.org/wiki/Licence/Attribution_Guidelines). The links live in a Licences dialog opened from the status
+bar, shown only while no vehicle is armed; it moves to the settings screen with #74.
+
 We use the OpenGL ES runtime. Vulkan is optional on Android 8 devices and unreliable on the emulator.
 
 ## Alternatives considered

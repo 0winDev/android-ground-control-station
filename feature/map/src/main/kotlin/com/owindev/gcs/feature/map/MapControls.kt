@@ -43,7 +43,6 @@ import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.compose.map.MapState
-import org.maplibre.compose.overlay.AttributionLinks
 import org.maplibre.compose.overlay.LocalViewportInsets
 import org.maplibre.compose.overlay.MapOverlayScope
 import org.maplibre.compose.overlay.ScaleBar
@@ -51,7 +50,8 @@ import org.maplibre.compose.overlay.attributions
 
 /**
  * The map's own controls, inside the part of the map nothing covers and on the theme's opaque surfaces, so their
- * contrast holds over any tiles: north up, zoom, recenter, the scale and the tiles' attribution, always visible.
+ * contrast holds over any tiles: north up, zoom, recenter, the scale and the tiles' attribution, always visible and
+ * plain text, never a link a stray tap would follow out of the app.
  * They cover the map too, so a vehicle under them counts as off the visible map.
  */
 @Composable
@@ -111,10 +111,11 @@ internal fun MapOverlayScope.MapControls(mapState: MapState, vehicle: MapVehicle
                     .align(Alignment.BottomStart)
                     .onSizeChanged { attributionHeight = with(density) { it.height.toDp() } },
             ) {
-                AttributionLinks(
-                    attributions = attributions,
+                Text(
+                    text = plainAttribution(attributions),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    textStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
