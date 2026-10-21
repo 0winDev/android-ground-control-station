@@ -20,8 +20,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import org.maplibre.compose.camera.CameraAnimation
 import org.maplibre.compose.camera.CameraMoveReason
 import org.maplibre.compose.camera.CameraPosition
@@ -31,12 +32,13 @@ import org.maplibre.compose.expressions.value.LineCap
 import org.maplibre.compose.expressions.value.LineJoin
 import org.maplibre.compose.layers.CircleLayer
 import org.maplibre.compose.layers.LineLayer
-import org.maplibre.compose.map.MapEvent
 import org.maplibre.compose.map.MapState
 import org.maplibre.compose.map.MaplibreMap
+import org.maplibre.compose.map.StyleLoadState
 import org.maplibre.compose.map.rememberMapState
 import org.maplibre.compose.sources.GeoJsonData
 import org.maplibre.compose.sources.rememberGeoJsonSource
+import org.maplibre.compose.style.BaseStyle
 import org.maplibre.compose.util.MaplibreComposable
 import org.maplibre.spatialk.geojson.MultiLineString
 import org.maplibre.spatialk.geojson.MultiPoint
@@ -77,38 +79,48 @@ internal fun MapContent(
     modifier: Modifier = Modifier,
 ) {
     val remoteStyle = remoteStyleOf(palette)
-    var failedStyle by remember { mutableStateOf<Any?>(null) }
+    // The vehicle is drawn over the map only once the map has a viewport, which needs a style presented first: the
+    // map starts on the fallback, which needs no network, so the vehicle shows at once, and moves to the remote style
+    // as soon as it is up.
+    var presented by remember { mutableStateOf(false) }
+    var failedStyle by remember { mutableStateOf<BaseStyle?>(null) }
+    val useRemote = presented && failedStyle != remoteStyle
     val trailColor = MaterialTheme.colorScheme.onSurface.copy(alpha = TRAIL_ALPHA)
+    val baseStyle = if (useRemote) remoteStyle else fallbackStyleOf(MaterialTheme.colorScheme.background)
     val mapState = rememberMapState(
-        baseStyle = if (failedStyle ==
-            remoteStyle
-        ) {
-            fallbackStyleOf(MaterialTheme.colorScheme.background)
-        } else {
-            remoteStyle
-        },
+        baseStyle = baseStyle,
         initialCameraPosition = CameraPosition(zoom = WORLD_ZOOM),
     ) {
         TrailLayers(trail = state.trail, color = trailColor)
     }
-    val currentRemoteStyle by rememberUpdatedState(remoteStyle)
     val currentOnMapPan by rememberUpdatedState(onMapPan)
     LaunchedEffect(mapState) {
-        mapState.events.collect { event -> if (event is MapEvent.StyleLoadFailed) failedStyle = currentRemoteStyle }
+        mapState.awaitViewport()
+        presented = true
     }
-    // The network may come back: the remote style is tried again while the fallback is shown.
-    LaunchedEffect(failedStyle) {
-        if (failedStyle != null) {
-            delay(STYLE_RETRY)
-            failedStyle = null
+    // A network that answers nothing (a telemetry Wi-Fi without internet) never fails the load, so it is timed out.
+    // Trying again would drop the trail with the style each time, so the fallback stays until the palette changes.
+    LaunchedEffect(mapState, remoteStyle, useRemote) {
+        if (!useRemote) return@LaunchedEffect
+        val loaded = withTimeoutOrNull(STYLE_TIMEOUT) {
+            snapshotFlow {
+                mapState.style.loadState
+            }.first { it == StyleLoadState.Ready || it is StyleLoadState.Failed }
         }
+        if (loaded != StyleLoadState.Ready) failedStyle = remoteStyle
     }
     LaunchedEffect(mapState) {
         snapshotFlow { mapState.cameraMoveReason }
             .filter { it == CameraMoveReason.Gesture }
             .collect { currentOnMapPan() }
     }
-    FollowVehicle(mapState = mapState, vehicle = state.vehicle, following = state.following, insets = viewportInsets)
+    FollowVehicle(
+        mapState = mapState,
+        vehicle = state.vehicle,
+        following = state.following,
+        insets = viewportInsets,
+        style = baseStyle,
+    )
     MaplibreMap(
         modifier = modifier.fillMaxSize(),
         state = mapState,
@@ -116,19 +128,26 @@ internal fun MapContent(
         overlay = {
             state.home?.let { HomeMarker(modifier = Modifier.placedAt(it.toPosition())) }
             state.vehicle?.let { VehicleMarker(vehicle = it, mapBearing = mapState.cameraPosition.bearing) }
-            MapControls(mapState = mapState, vehicle = state.vehicle, following = state.following, onRecenter)
+            MapControls(mapState = mapState, vehicle = state.vehicle, onRecenter = onRecenter)
         },
     )
 }
 
 /**
  * Keeps the vehicle at the centre of the visible map while the camera follows it, zooming in on the first fix. A
- * camera move is cancelled when the insets change, so it is made again then, even for a vehicle standing still.
+ * camera move is cancelled when the insets or the [style] change, so it is made again then, even for a vehicle
+ * standing still.
  */
 @Composable
-private fun FollowVehicle(mapState: MapState, vehicle: MapVehicle?, following: Boolean, insets: PaddingValues) {
+private fun FollowVehicle(
+    mapState: MapState,
+    vehicle: MapVehicle?,
+    following: Boolean,
+    insets: PaddingValues,
+    style: BaseStyle,
+) {
     val position = vehicle?.position
-    LaunchedEffect(mapState, position, following, insets) {
+    LaunchedEffect(mapState, position, following, insets, style) {
         if (position == null || !following) return@LaunchedEffect
         mapState.awaitViewport()
         val zoom = FOLLOW_ZOOM.takeIf { mapState.cameraPosition.zoom < MIN_FOLLOW_ZOOM }
@@ -182,4 +201,4 @@ private const val MIN_FOLLOW_ZOOM = 12.0
 /** GLOBAL_POSITION_INT's period at 5 Hz, so each step ends as the next position arrives. */
 private val FOLLOW_STEP = 200.milliseconds
 
-private val STYLE_RETRY = 30.seconds
+private val STYLE_TIMEOUT = 10.seconds

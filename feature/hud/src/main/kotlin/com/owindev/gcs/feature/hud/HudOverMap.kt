@@ -1,7 +1,7 @@
 package com.owindev.gcs.feature.hud
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,9 +23,9 @@ import androidx.compose.ui.unit.dp
 
 /**
  * The [map] under the HUD's content: a [header] across the top, then the [start] column on the left and the [side]
- * column beside it, and [centre] in the middle of what is left. Each is on the theme's opaque surfaces, so its
- * contrast holds over any tiles. The map is told the part they cover, so it centres the vehicle in the rest and keeps
- * its controls out of them.
+ * column beside it. Each is on the theme's opaque surfaces, so its contrast holds over any tiles. The map is told the
+ * part they cover, so it centres the vehicle in the rest and keeps its controls out of them; on a screen too small
+ * for them, at most [MAX_COVERED] of each side counts as covered, so some map is always left to centre it in.
  */
 @Composable
 internal fun HudOverMap(
@@ -34,18 +34,17 @@ internal fun HudOverMap(
     header: @Composable ColumnScope.() -> Unit = {},
     start: @Composable ColumnScope.() -> Unit = {},
     side: @Composable ColumnScope.() -> Unit = {},
-    centre: @Composable () -> Unit = {},
 ) {
     val density = LocalDensity.current
     var headerHeight by remember { mutableStateOf(0.dp) }
     var startWidth by remember { mutableStateOf(0.dp) }
     var sideHeight by remember { mutableStateOf(0.dp) }
-    // Each part sits one margin in from the edge or from the part before it.
-    val insets = PaddingValues(
-        start = startWidth.coveredWithMargin(),
-        top = headerHeight.coveredWithMargin() + sideHeight.coveredWithMargin(),
-    )
-    Box(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        // Each part sits one margin in from the edge or from the part before it.
+        val insets = PaddingValues(
+            start = minOf(startWidth.coveredWithMargin(), maxWidth * MAX_COVERED),
+            top = minOf(headerHeight.coveredWithMargin() + sideHeight.coveredWithMargin(), maxHeight * MAX_COVERED),
+        )
         map(insets)
         Column(
             modifier = Modifier
@@ -76,15 +75,6 @@ internal fun HudOverMap(
                 )
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(insets)
-                .padding(all = OverlayMargin),
-            contentAlignment = Alignment.Center,
-        ) {
-            centre()
-        }
     }
 }
 
@@ -92,3 +82,6 @@ internal fun HudOverMap(
 private fun Dp.coveredWithMargin(): Dp = if (this > 0.dp) this + OverlayMargin else 0.dp
 
 internal val OverlayMargin = 16.dp
+
+/** The share of the map's width or height that can count as covered. */
+private const val MAX_COVERED = 0.6f

@@ -71,13 +71,6 @@ internal fun HudContent(
             header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
             start = { StartColumn(state = state) },
             side = { SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert) },
-            centre = {
-                if (state.hasMessage()) {
-                    Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-                        MainContent(state = state, modifier = Modifier.padding(all = ScreenPadding))
-                    }
-                }
-            },
         )
         Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
             Box(modifier = Modifier.padding(vertical = ChipSpacing), contentAlignment = Alignment.Center) {
@@ -112,17 +105,27 @@ private fun SideColumn(state: HudUiState, onAcknowledgeAlert: (occurrence: Long)
             OtherVehiclesBanner(systemIds = state.otherVehicles)
         }
 
-        is HudUiState.WaitingForVehicle -> UnstableLinkBanner(linkUnstable = state.linkUnstable)
+        is HudUiState.WaitingForVehicle -> {
+            UnstableLinkBanner(linkUnstable = state.linkUnstable)
+            MessageCard(state = state)
+        }
 
         is HudUiState.LinkLost -> OtherVehiclesBanner(systemIds = state.otherVehicles)
 
-        else -> Unit
+        HudUiState.Starting -> Unit
+
+        // Above the map with the banners, never in its middle, where a vehicle still heard is drawn.
+        else -> MessageCard(state = state)
     }
 }
 
-/** Whether the state is told in words in the middle of the map: waiting for a vehicle, or a fault of the link. */
-private fun HudUiState.hasMessage(): Boolean =
-    this !is HudUiState.Connected && this !is HudUiState.LinkLost && this != HudUiState.Starting
+/** Waiting for a vehicle, or a fault of the link, in words. */
+@Composable
+private fun MessageCard(state: HudUiState) {
+    Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
+        MainContent(state = state, modifier = Modifier.padding(all = ScreenPadding))
+    }
+}
 
 /** The link's traffic in one line under the panel, once a vehicle is heard. */
 @Composable

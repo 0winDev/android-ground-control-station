@@ -13,7 +13,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -24,6 +28,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -46,16 +52,16 @@ import org.maplibre.compose.overlay.attributions
 /**
  * The map's own controls, inside the part of the map nothing covers and on the theme's opaque surfaces, so their
  * contrast holds over any tiles: north up, zoom, recenter, the scale and the tiles' attribution, always visible.
+ * They cover the map too, so a vehicle under them counts as off the visible map.
  */
 @Composable
-internal fun MapOverlayScope.MapControls(
-    mapState: MapState,
-    vehicle: MapVehicle?,
-    following: Boolean,
-    onRecenter: () -> Unit,
-) {
+internal fun MapOverlayScope.MapControls(mapState: MapState, vehicle: MapVehicle?, onRecenter: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val bearing = mapState.cameraPosition.bearing
+    var controlsHeight by remember { mutableStateOf(0.dp) }
+    var attributionHeight by remember { mutableStateOf(0.dp) }
+    val bottomCovered = CONTROLS_MARGIN + maxOf(controlsHeight, attributionHeight)
     Box(
         modifier = Modifier
             .matchParentSize()
@@ -70,13 +76,15 @@ internal fun MapOverlayScope.MapControls(
             )
         }
         Column(
-            modifier = Modifier.align(Alignment.BottomEnd),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
             verticalArrangement = Arrangement.spacedBy(CONTROLS_SPACING),
             horizontalAlignment = Alignment.End,
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(CONTROLS_SPACING)) {
                 RecenterButton(
-                    towardsVehicle = if (following) null else offScreenDirectionOf(mapState, vehicle),
+                    towardsVehicle = offScreenDirectionOf(mapState, vehicle, bottomCovered),
                     enabled = vehicle != null,
                     onClick = onRecenter,
                 )
@@ -98,7 +106,11 @@ internal fun MapOverlayScope.MapControls(
         }
         val attributions = mapState.style.attributions()
         if (attributions.isNotEmpty()) {
-            OnSurface(modifier = Modifier.align(Alignment.BottomStart)) {
+            OnSurface(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .onSizeChanged { attributionHeight = with(density) { it.height.toDp() } },
+            ) {
                 AttributionLinks(
                     attributions = attributions,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -109,9 +121,13 @@ internal fun MapOverlayScope.MapControls(
     }
 }
 
-/** Where the vehicle is from the centre of the visible map, while it is outside it; `null` otherwise. */
+/**
+ * Where the vehicle is from the centre of the visible map while it is outside it, whether or not the camera is meant
+ * to follow it, so the real camera is never trusted less than the flag; `null` otherwise. The map's own controls cover
+ * the [bottomCovered] strip.
+ */
 @Composable
-private fun offScreenDirectionOf(mapState: MapState, vehicle: MapVehicle?): Float? {
+private fun offScreenDirectionOf(mapState: MapState, vehicle: MapVehicle?, bottomCovered: Dp): Float? {
     val insets = LocalViewportInsets.current
     val layoutDirection = LocalLayoutDirection.current
     val viewport = mapState.viewport
@@ -121,7 +137,7 @@ private fun offScreenDirectionOf(mapState: MapState, vehicle: MapVehicle?): Floa
         left = insets.calculateLeftPadding(layoutDirection),
         top = insets.calculateTopPadding(),
         right = viewport.size.width - insets.calculateRightPadding(layoutDirection),
-        bottom = viewport.size.height - insets.calculateBottomPadding(),
+        bottom = viewport.size.height - insets.calculateBottomPadding() - bottomCovered,
     )
     return offScreenDirection(location, visible)
 }
