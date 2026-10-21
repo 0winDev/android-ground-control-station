@@ -102,4 +102,5 @@
     <string name="hud_theme_to_night">To night</string>
     <string name="hud_theme_switch_to_day">Switch to day theme</string>
     <string name="hud_theme_switch_to_night">Switch to night theme</string>
+    <string name="hud_datagram_line">%1$d datagrams · %2$s</string>
 </resources>

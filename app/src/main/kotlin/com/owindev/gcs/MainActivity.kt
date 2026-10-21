@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.feature.hud.HudScreen
+import com.owindev.gcs.feature.map.MapScreen
 import com.owindev.gcs.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -42,6 +43,7 @@ class MainActivity : ComponentActivity() {
                         palette = palette,
                         onToggleTheme = themeViewModel::onThemeToggled,
                         modifier = Modifier.padding(innerPadding),
+                        map = { insets -> MapScreen(palette = palette, viewportInsets = insets) },
                     )
                 }
             }

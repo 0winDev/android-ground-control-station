@@ -11,6 +11,7 @@ import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 // The whole HUD, connected, in both palettes (REQ-030), at a tablet's and a phone's width.
 
@@ -71,3 +72,61 @@ private fun ConnectedPreview(palette: GcsPalette) {
 }
 
 private val PreviewBattery = Battery(voltage = 11.1, current = 12.4, remaining = 18, monitored = true, healthy = true)
+
+private val PreviewArmed = VehicleStatus(systemId = 1, flightMode = FlightMode.Named("Guided"), armed = true)
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun HudContentConnectedPreview() {
+    GcsTheme {
+        HudContent(
+            state = HudUiState.Connected(
+                vehicle = PreviewArmed,
+                port = 14550,
+                datagramCount = 1234,
+                otherVehicles = listOf(2),
+            ),
+            onAcknowledgeAlert = {},
+        )
+    }
+}
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun HudContentConnectedUnstablePreview() {
+    GcsTheme {
+        HudContent(
+            state = HudUiState.Connected(
+                vehicle = PreviewArmed,
+                port = 14550,
+                datagramCount = 1234,
+                otherVehicles = emptyList(),
+                linkUnstable = true,
+            ),
+            onAcknowledgeAlert = {},
+        )
+    }
+}
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun HudContentWaitingPreview() {
+    GcsTheme {
+        HudContent(state = HudUiState.WaitingForVehicle(port = 14550, datagramCount = 0), onAcknowledgeAlert = {})
+    }
+}
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun HudContentLinkLostPreview() {
+    GcsTheme {
+        HudContent(
+            state = HudUiState.LinkLost(
+                lastKnown = PreviewArmed,
+                sinceLastHeartbeat = 7.seconds,
+                otherVehicles = emptyList(),
+            ),
+            onAcknowledgeAlert = {},
+        )
+    }
+}

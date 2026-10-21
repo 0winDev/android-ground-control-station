@@ -12,6 +12,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.UiComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -45,7 +46,9 @@ import org.maplibre.spatialk.geojson.Position
  * The map of the active vehicle (REQ-034) in the [palette] in use. [viewportInsets] is the part of the map other
  * content covers: the camera centres the vehicle in what is left, and the map's controls stay out of it.
  */
+// Without @UiComposable the compiler infers MapLibre's own applier from the map content, and callers cannot use it.
 @Composable
+@UiComposable
 fun MapScreen(
     palette: GcsPalette,
     modifier: Modifier = Modifier,
@@ -64,6 +67,7 @@ fun MapScreen(
 }
 
 @Composable
+@UiComposable
 internal fun MapContent(
     state: MapUiState,
     palette: GcsPalette,
