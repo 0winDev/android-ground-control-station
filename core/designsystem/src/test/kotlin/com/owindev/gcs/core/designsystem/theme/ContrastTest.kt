@@ -68,6 +68,57 @@ class ContrastTest {
         result.keys.shouldBeEmpty()
     }
 
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN the night map's backgrounds WHEN measuring the live vehicle THEN reaches 3 to 1 on every one`() {
+        val backgrounds = NIGHT_MAP_BACKGROUNDS
+
+        val result = backgrounds.filterValues { background ->
+            contrast(NightColorScheme.primary, background) <
+                AA_NON_TEXT
+        }
+
+        result.keys.shouldBeEmpty()
+    }
+
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN the night map's backgrounds WHEN measuring the greyed vehicle THEN reaches 3 to 1 on every one`() {
+        val backgrounds = NIGHT_MAP_BACKGROUNDS
+
+        val result = backgrounds.filterValues { background -> contrast(NightGcsColors.stale, background) < AA_NON_TEXT }
+
+        result.keys.shouldBeEmpty()
+    }
+
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN the night map's labels WHEN measuring them on their halo and the background THEN none is under AA`() {
+        val pairs = NIGHT_MAP_LABELS.flatMap { (name, text) ->
+            listOf(
+                "$name on its halo" to (text to NIGHT_MAP_HALO),
+                "$name on the background" to (text to NIGHT_MAP_BACKGROUNDS.getValue("background")),
+            )
+        }.toMap()
+
+        val result = pairs.filterValues { (foreground, background) -> contrast(foreground, background) < AA_TEXT }
+
+        result.keys.shouldBeEmpty()
+    }
+
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN both palettes WHEN measuring the greyed vehicle on its disc THEN reaches 3 to 1`() {
+        val pairs = listOf(
+            NightGcsColors.stale to NightColorScheme.surface,
+            DayGcsColors.stale to DayColorScheme.surface,
+        )
+
+        val result = pairs.map { (foreground, background) -> contrast(foreground, background) >= AA_NON_TEXT }
+
+        result shouldBeEqualTo listOf(true, true)
+    }
+
     @Test
     fun `GIVEN both palettes WHEN comparing their semantic tokens THEN the day one defines every one the night does`() {
         val night = NightGcsColors
@@ -77,6 +128,29 @@ class ContrastTest {
         result shouldBeEqualTo night::class.java.declaredFields.map { it.name }
     }
 }
+
+/**
+ * What the vehicle can be drawn on at night: the backgrounds of `feature/map/src/main/assets/map/liberty-night.json`
+ * at the follow zoom, the translucent fills blended over the background, as `tools/map/make_night_style.py` prints them
+ * (generated on 2026-10-21 from OpenFreeMap's liberty).
+ */
+private val NIGHT_MAP_BACKGROUNDS = mapOf(
+    "background" to Color(0xFF272523),
+    "water" to Color(0xFF1F2C47),
+    "park" to Color(0xFF242421),
+    "wood" to Color(0xFF242421),
+    "residential" to Color(0xFF272422),
+    "aeroway" to Color(0xFF252423),
+    "building" to Color(0xFF222222),
+)
+
+/** The night map's label colours and the halo they are drawn on, from the same script's output. */
+private val NIGHT_MAP_LABELS = mapOf(
+    "places" to Color(0xFFEBEBEB),
+    "POIs and road names" to Color(0xFFB8B8B8),
+    "water names" to Color(0xFFA5AEC3),
+)
+private val NIGHT_MAP_HALO = Color(0xFF1A1A1A)
 
 private const val AA_TEXT = 4.5
 private const val AAA_TEXT = 7.0
@@ -114,6 +188,8 @@ private fun textPairs(scheme: ColorScheme, colors: GcsColors): Map<String, Pair<
     "nominal on surfaceContainer" to (colors.nominal to scheme.surfaceContainer),
     "advisory banner" to (colors.advisory to colors.advisoryContainer),
     "caution banner" to (colors.onCaution to colors.caution),
+    "acknowledge button on the caution banner" to (colors.onCaution to colors.caution),
+    "acknowledge button on the advisory banner" to (colors.advisory to colors.advisoryContainer),
     "emergency banner" to (colors.onEmergencyContainer to colors.emergencyContainer),
 )
 

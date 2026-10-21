@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Map tiles and styles over HTTPS (ADR 0005). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+</manifest>

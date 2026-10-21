@@ -37,14 +37,15 @@ sealed interface HudUiState {
 
     /**
      * The active vehicle is no longer heard (REQ-017): [lastKnown] is its state at its last HEARTBEAT,
-     * [sinceLastHeartbeat] how long ago that was, in whole seconds. [localFault] is set when the problem is
-     * on this device, not the vehicle.
+     * [sinceLastHeartbeat] how long ago that was, in whole seconds, and [lastData] its last telemetry, which is never
+     * shown as current. [localFault] is set when the problem is on this device, not the vehicle.
      */
     data class LinkLost(
         val lastKnown: VehicleStatus,
         val sinceLastHeartbeat: Duration,
         val otherVehicles: List<Int>,
         val localFault: LocalLinkFault? = null,
+        val lastData: TelemetryPanel = TelemetryPanel(),
     ) : HudUiState
 
     data class PortUnavailable(val port: Int) : HudUiState
@@ -73,3 +74,14 @@ sealed interface LocalLinkFault {
     /** The link failed and is receiving again, but has not stayed up long enough to call it recovered. */
     data object Unstable : LocalLinkFault
 }
+
+/**
+ * Whether the licences can be opened: only with no vehicle or one known to be disarmed, so a stray tap in flight never
+ * takes the operator away from the vehicle. A vehicle whose link is lost counts as it was last heard, armed or not.
+ */
+val HudUiState.licencesAvailable: Boolean
+    get() = when (this) {
+        is HudUiState.Connected -> !vehicle.armed
+        is HudUiState.LinkLost -> !lastKnown.armed
+        else -> true
+    }

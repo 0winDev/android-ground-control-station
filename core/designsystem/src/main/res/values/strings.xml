@@ -1,0 +1,5 @@
+<resources>
+    <string name="elapsed_seconds">%1$d s</string>
+    <string name="elapsed_minutes">%1$d min %2$d s</string>
+    <string name="elapsed_hours">%1$d h %2$d min %3$d s</string>
+</resources>

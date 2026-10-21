@@ -47,7 +47,7 @@
     <string name="hud_east">E</string>
     <string name="hud_west">O</string>
     <string name="hud_mgrs_not_available">No disponible fuera de UTM</string>
-    <string name="hud_age_seconds">Datos de hace %1$d s</string>
+    <string name="hud_age_seconds">Datos de hace %1$s</string>
     <string name="hud_gps_status">%1$s · %2$s</string>
     <string name="hud_battery_status">%1$s · %2$s</string>
     <string name="hud_value_percent">%1$d %%</string>
@@ -58,7 +58,11 @@
     <string name="hud_fix_rtk_fixed">RTK fijo</string>
     <string name="hud_fix_static">Estático</string>
     <string name="hud_fix_unknown">Fix %1$d</string>
-    <string name="hud_position_not_verified">Sin fix 3D de GPS: posición no verificada</string>
+    <string name="hud_position_no_fix">Sin fix 3D de GPS: posición no verificada</string>
+    <string name="hud_position_no_gps">Posición no verificada: sin informe del GPS</string>
+    <string name="hud_position_gps_stale">Posición no verificada: datos del GPS de hace %1$s</string>
+    <string name="hud_position_uninitialised">Posición no verificada: el autopiloto aún no tiene posición</string>
+    <string name="hud_position_link_lost">Posición no verificada: últimos datos de hace %1$s</string>
     <string name="hud_battery_no_monitor">Sin monitor</string>
     <string name="hud_battery_unhealthy">No saludable · %1$s</string>
     <plurals name="hud_other_vehicles">
@@ -96,4 +100,23 @@
     <string name="hud_theme_to_night">A noche</string>
     <string name="hud_theme_switch_to_day">Cambiar al tema de día</string>
     <string name="hud_theme_switch_to_night">Cambiar al tema de noche</string>
+    <string name="hud_datagram_line">%1$d datagramas · %2$s</string>
+    <string name="hud_last_data">Últimos datos · hace %1$s</string>
+    <string name="hud_link_lost_chip">Perdido</string>
+    <string name="hud_licences">Licencias</string>
+    <string name="hud_licences_open">Abrir las licencias</string>
+    <string name="hud_licences_title">Licencias</string>
+    <string name="hud_licences_close">Cerrar</string>
+    <string name="hud_licence_osm">Datos del mapa © colaboradores de OpenStreetMap</string>
+    <string name="hud_licence_osm_terms">Open Database License (ODbL)</string>
+    <string name="hud_licence_openmaptiles">© OpenMapTiles</string>
+    <string name="hud_licence_openmaptiles_terms">Esquema de teselas vectoriales; diseño bajo CC BY 4.0</string>
+    <string name="hud_licence_openfreemap">OpenFreeMap</string>
+    <string name="hud_licence_openfreemap_terms">Teselas, estilos, fuentes e iconos del mapa</string>
+    <string name="hud_licence_osm_liberty">Estilo de mapa OSM Liberty</string>
+    <string name="hud_licence_osm_liberty_terms">JSON del estilo bajo la licencia BSD de 3 cláusulas, diseño bajo CC BY 3.0; recoloreado para el mapa nocturno</string>
+    <string name="hud_licence_fonts">Fuentes Barlow, Barlow Condensed e IBM Plex Mono</string>
+    <string name="hud_licence_fonts_terms">SIL Open Font License 1.1</string>
+    <string name="hud_licence_material_symbols">Material Symbols</string>
+    <string name="hud_licence_material_symbols_terms">Apache License 2.0</string>
 </resources>

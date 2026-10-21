@@ -1,7 +1,9 @@
 package com.owindev.gcs.feature.hud
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,28 +11,34 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
-import com.owindev.gcs.core.domain.vehicle.FlightMode
-import kotlin.time.Duration.Companion.seconds
 
-/** The HUD in the [palette] in use, with the operator's switch between night and day ([onToggleTheme], REQ-030). */
+/**
+ * The HUD in the [palette] in use, with the operator's switch between night and day ([onToggleTheme], REQ-030), laid
+ * over the [map], which it tells the part of it its content covers.
+ */
 @Composable
 fun HudScreen(
     palette: GcsPalette,
     onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
+    map: @Composable (insets: PaddingValues) -> Unit = {},
     viewModel: HudViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -40,6 +48,7 @@ fun HudScreen(
         modifier = modifier,
         palette = palette,
         onToggleTheme = onToggleTheme,
+        map = map,
     )
 }
 
@@ -50,64 +59,101 @@ internal fun HudContent(
     modifier: Modifier = Modifier,
     palette: GcsPalette = GcsPalette.NIGHT,
     onToggleTheme: () -> Unit = {},
+    map: @Composable (insets: PaddingValues) -> Unit = {},
 ) {
-    // Link lost replaces the whole HUD at once, never animated in: it must not be missed or delayed.
-    when (state) {
-        is HudUiState.LinkLost -> LinkLostContent(state = state, modifier = modifier)
-
-        else -> LinkContent(
-            state = state,
-            onAcknowledgeAlert = onAcknowledgeAlert,
-            palette = palette,
-            onToggleTheme = onToggleTheme,
-            modifier = modifier,
+    var licencesOpen by rememberSaveable { mutableStateOf(false) }
+    // Arming closes them: nothing may stand between the operator and an armed vehicle.
+    if (licencesOpen && state.licencesAvailable) LicencesDialog(onDismiss = { licencesOpen = false })
+    LaunchedEffect(state.licencesAvailable) { if (!state.licencesAvailable) licencesOpen = false }
+    Column(modifier = modifier.fillMaxSize()) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Box(modifier = Modifier.padding(horizontal = ScreenPadding, vertical = ContentSpacing)) {
+                StatusBar(
+                    state = state,
+                    palette = palette,
+                    onToggleTheme = onToggleTheme,
+                    onOpenLicences = { licencesOpen = true },
+                )
+            }
+        }
+        // One map whatever the state, so the camera never jumps when the link is lost or comes back.
+        HudOverMap(
+            map = map,
+            modifier = Modifier.weight(1f),
+            // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
+            header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
+            start = { StartColumn(state = state) },
+            side = { SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert) },
         )
+        Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
+            Box(modifier = Modifier.padding(vertical = ChipSpacing), contentAlignment = Alignment.Center) {
+                Disclaimer()
+            }
+        }
+    }
+}
+
+/** The telemetry panel: live while the vehicle is heard, greyed as its last data once the link is lost (REQ-017). */
+@Composable
+private fun StartColumn(state: HudUiState) {
+    when (state) {
+        is HudUiState.Connected -> {
+            TelemetryPanelContent(panel = state.telemetry)
+            DatagramLine(port = state.port, datagramCount = state.datagramCount)
+        }
+
+        is HudUiState.LinkLost -> TelemetryPanelContent(panel = state.lastData, lostFor = state.sinceLastHeartbeat)
+
+        else -> Unit
     }
 }
 
 @Composable
-private fun LinkContent(
-    state: HudUiState,
-    onAcknowledgeAlert: (occurrence: Long) -> Unit,
-    palette: GcsPalette,
-    onToggleTheme: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(all = ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(ContentSpacing),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        StatusBar(state = state, palette = palette, onToggleTheme = onToggleTheme)
-        when (state) {
-            is HudUiState.Connected -> {
-                // The vehicle's own alerts first: the banners below are about this device and the link.
-                AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
-                UnstableLinkBanner(linkUnstable = state.linkUnstable)
-                OtherVehiclesBanner(systemIds = state.otherVehicles)
-            }
-
-            is HudUiState.WaitingForVehicle -> UnstableLinkBanner(linkUnstable = state.linkUnstable)
-
-            else -> Unit
+private fun SideColumn(state: HudUiState, onAcknowledgeAlert: (occurrence: Long) -> Unit) {
+    when (state) {
+        is HudUiState.Connected -> {
+            // The vehicle's own alerts first: the banners below are about this device and the link.
+            AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
+            UnstableLinkBanner(linkUnstable = state.linkUnstable)
+            OtherVehiclesBanner(systemIds = state.otherVehicles)
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(ContentSpacing),
-        ) {
-            if (state is HudUiState.Connected) TelemetryPanelContent(panel = state.telemetry)
-            MainContent(
-                state = state,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f),
-            )
+
+        is HudUiState.WaitingForVehicle -> {
+            UnstableLinkBanner(linkUnstable = state.linkUnstable)
+            MessageCard(state = state)
         }
-        Disclaimer()
+
+        is HudUiState.LinkLost -> OtherVehiclesBanner(systemIds = state.otherVehicles)
+
+        HudUiState.Starting -> Unit
+
+        // Above the map with the banners, never in its middle, where a vehicle still heard is drawn.
+        else -> MessageCard(state = state)
+    }
+}
+
+/** Waiting for a vehicle, or a fault of the link, in words. */
+@Composable
+private fun MessageCard(state: HudUiState) {
+    Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
+        MainContent(state = state, modifier = Modifier.padding(all = ScreenPadding))
+    }
+}
+
+/** The link's traffic in one line under the panel, once a vehicle is heard. */
+@Composable
+private fun DatagramLine(port: Int?, datagramCount: Long) {
+    val source = if (port == null) {
+        stringResource(id = R.string.hud_playing_recording)
+    } else {
+        stringResource(id = R.string.hud_listening_on_port, port)
+    }
+    Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
+        Text(
+            text = stringResource(id = R.string.hud_datagram_line, datagramCount, source),
+            modifier = Modifier.padding(horizontal = ChipPadding, vertical = ChipSpacing),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -127,8 +173,6 @@ private fun MainContent(state: HudUiState, modifier: Modifier = Modifier) {
                 )
                 DatagramCount(port = state.port, datagramCount = state.datagramCount)
             }
-
-            is HudUiState.Connected -> DatagramCount(port = state.port, datagramCount = state.datagramCount)
 
             is HudUiState.PortUnavailable -> Text(
                 text = stringResource(id = R.string.hud_port_unavailable, state.port),
@@ -158,7 +202,7 @@ private fun MainContent(state: HudUiState, modifier: Modifier = Modifier) {
                 textAlign = TextAlign.Center,
             )
 
-            HudUiState.Starting, is HudUiState.LinkLost -> Unit
+            HudUiState.Starting, is HudUiState.Connected, is HudUiState.LinkLost -> Unit
         }
     }
 }
@@ -196,61 +240,3 @@ internal val ContentSpacing = 12.dp
 internal val ChipSpacing = 8.dp
 internal val ChipPadding = 12.dp
 internal val ChipShape = RoundedCornerShape(8.dp)
-
-private val PreviewArmed = VehicleStatus(systemId = 1, flightMode = FlightMode.Named("Guided"), armed = true)
-
-@Preview(widthDp = 1280, heightDp = 800)
-@Composable
-private fun HudContentConnectedPreview() {
-    GcsTheme {
-        HudContent(
-            state = HudUiState.Connected(
-                vehicle = PreviewArmed,
-                port = 14550,
-                datagramCount = 1234,
-                otherVehicles = listOf(2),
-            ),
-            onAcknowledgeAlert = {},
-        )
-    }
-}
-
-@Preview(widthDp = 1280, heightDp = 800)
-@Composable
-private fun HudContentConnectedUnstablePreview() {
-    GcsTheme {
-        HudContent(
-            state = HudUiState.Connected(
-                vehicle = PreviewArmed,
-                port = 14550,
-                datagramCount = 1234,
-                otherVehicles = emptyList(),
-                linkUnstable = true,
-            ),
-            onAcknowledgeAlert = {},
-        )
-    }
-}
-
-@Preview(widthDp = 1280, heightDp = 800)
-@Composable
-private fun HudContentWaitingPreview() {
-    GcsTheme {
-        HudContent(state = HudUiState.WaitingForVehicle(port = 14550, datagramCount = 0), onAcknowledgeAlert = {})
-    }
-}
-
-@Preview(widthDp = 1280, heightDp = 800)
-@Composable
-private fun HudContentLinkLostPreview() {
-    GcsTheme {
-        HudContent(
-            state = HudUiState.LinkLost(
-                lastKnown = PreviewArmed,
-                sinceLastHeartbeat = 7.seconds,
-                otherVehicles = emptyList(),
-            ),
-            onAcknowledgeAlert = {},
-        )
-    }
-}

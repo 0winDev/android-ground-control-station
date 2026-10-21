@@ -14,6 +14,7 @@ import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
+import com.owindev.gcs.core.domain.telemetry.PositionTrust
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
@@ -565,7 +566,7 @@ class HudViewModelTest {
 
                 result.expectMostRecentItem() shouldBeEqualTo connected(
                     TelemetryPanel(
-                        position = fresh(PositionReading(SITL_HOME, SITL_HOME_MGRS, verified = true)),
+                        position = fresh(PositionReading(SITL_HOME, SITL_HOME_MGRS, PositionTrust.VERIFIED)),
                         attitude = fresh(LEVEL),
                         airData = fresh(HOVER),
                         battery = fresh(FULL_BATTERY),
@@ -618,7 +619,7 @@ class HudViewModelTest {
             val result = viewModel.state.testIn(backgroundScope)
 
             result.expectMostRecentItem() shouldBeEqualTo connected(
-                TelemetryPanel(position = fresh(PositionReading(north, Mgrs.NotAvailable, verified = false))),
+                TelemetryPanel(position = fresh(PositionReading(north, Mgrs.NotAvailable, PositionTrust.NO_GPS))),
             )
         }
     }
@@ -637,7 +638,7 @@ class HudViewModelTest {
 
                 result.expectMostRecentItem() shouldBeEqualTo connected(
                     TelemetryPanel(
-                        position = fresh(PositionReading(SITL_HOME, SITL_HOME_MGRS, verified = false)),
+                        position = fresh(PositionReading(SITL_HOME, SITL_HOME_MGRS, PositionTrust.NO_3D_FIX)),
                         gps = fresh(NO_FIX),
                     ),
                 )
@@ -695,25 +696,6 @@ class HudViewModelTest {
             val result = states.expectMostRecentItem()
 
             result shouldBeEqualTo connected(TelemetryPanel(gps = Reading(RTK_FIX, stale = true, age = FOUR_SECONDS)))
-        }
-    }
-
-    @Tag("REQ-029")
-    @Test
-    fun `GIVEN telemetry but the vehicle lost WHEN observing the state THEN only the link loss is shown`() = runTest {
-        turbineScope {
-            activeSystemId.value = SYSTEM_1
-            vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = FOUR_SECONDS))
-            activeTelemetry.value =
-                Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
-
-            val result = viewModel.state.testIn(backgroundScope)
-
-            result.expectMostRecentItem() shouldBeEqualTo HudUiState.LinkLost(
-                lastKnown = GUIDED_ARMED_1,
-                sinceLastHeartbeat = FOUR_SECONDS,
-                otherVehicles = emptyList(),
-            )
         }
     }
 

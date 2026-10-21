@@ -159,12 +159,14 @@ class HudViewModel @Inject constructor(
             .sorted()
         // Losing the active vehicle outranks everything else: it is the emergency (REQ-017). A local
         // fault is still shown on it, because it changes what the operator should look at.
+        val sessionTelemetry = telemetry?.takeIf { it.origin == traffic.origin() }
         if (active != null && active.isLost()) {
             return HudUiState.LinkLost(
                 lastKnown = active.toStatus(),
                 sinceLastHeartbeat = active.lastHeartbeat.elapsedNow().inWholeSeconds.seconds,
                 otherVehicles = otherVehicles,
                 localFault = traffic.toLocalFault(),
+                lastData = panelOf(sessionTelemetry, staleness, lostSince = active.lastHeartbeat),
             )
         }
         return when (traffic) {
@@ -184,7 +186,7 @@ class HudViewModel @Inject constructor(
 
             // No port: the datagrams come from a recording, not from a socket.
             is LinkTraffic.Replaying -> receiving(port = null, traffic.datagrams, active, otherVehicles)
-        }.withTelemetry(telemetry?.takeIf { it.origin == traffic.origin() })
+        }.withTelemetry(sessionTelemetry)
     }
 
     private fun receiving(
@@ -205,7 +207,7 @@ class HudViewModel @Inject constructor(
         )
     }
 
-    /** Only a heard vehicle has a telemetry panel: never while waiting, failing or after the link is lost. */
+    /** Only a heard vehicle has a telemetry panel: never while waiting or failing; a lost one keeps its last data. */
     private fun HudUiState.withTelemetry(telemetry: Telemetry?): HudUiState =
         if (this is HudUiState.Connected) copy(telemetry = panelOf(telemetry, staleness)) else this
 
@@ -217,8 +219,7 @@ class HudViewModel @Inject constructor(
         return if (this is HudUiState.Connected && banner != null) copy(alert = banner) else this
     }
 
-    private fun Vehicle.isLost(): Boolean =
-        link == VehicleLink.LOST || rule.linkAfter(lastHeartbeat.elapsedNow()) == VehicleLink.LOST
+    private fun Vehicle.isLost(): Boolean = rule.isLost(this)
 
     private companion object {
         /** Survives a configuration change without closing the link. */

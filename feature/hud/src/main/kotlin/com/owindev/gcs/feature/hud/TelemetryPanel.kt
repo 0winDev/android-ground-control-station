@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
+import com.owindev.gcs.core.domain.telemetry.PositionTrust
 import kotlin.time.Duration
 
 /**
@@ -29,7 +30,9 @@ data class Reading<T>(val value: T, val stale: Boolean, val age: Duration)
 
 /**
  * The vehicle's position and the same position in [mgrs], `Mgrs.NotAvailable` outside UTM (REQ-027). Shown as
- * current only when [verified] by a fresh 3D GPS fix (`isPositionVerified`); otherwise it may be 0°, 0° or a
- * frozen position, and the HUD says so.
+ * current only when [trust] is `VERIFIED`, by a fresh 3D GPS fix (`isPositionVerified`); otherwise it may be 0°, 0°
+ * or a frozen position, and the HUD says why.
  */
-data class PositionReading(val position: GlobalPosition, val mgrs: Mgrs, val verified: Boolean)
+data class PositionReading(val position: GlobalPosition, val mgrs: Mgrs, val trust: PositionTrust) {
+    val verified: Boolean get() = trust == PositionTrust.VERIFIED
+}

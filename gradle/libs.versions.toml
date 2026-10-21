@@ -18,6 +18,9 @@ composeBom = "2026.09.00"
 lifecycle = "2.11.0"
 androidxHilt = "1.4.0"
 
+# Map (ADR 0002, ADR 0005): pre-1.0, upgraded only in deliberate PRs
+maplibreCompose = "0.20.0"
+
 # Tests
 junit = "5.14.4"
 mockk = "1.14.11"
@@ -35,6 +38,8 @@ ktlint = "1.8.0"
 kover = "0.9.11"
 
 [libraries]
+maplibre-compose = { group = "org.maplibre.compose", name = "maplibre-compose", version.ref = "maplibreCompose" }
+maplibre-compose-runtime-opengl = { group = "org.maplibre.compose", name = "maplibre-compose-runtime-opengl-android", version.ref = "maplibreCompose" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }

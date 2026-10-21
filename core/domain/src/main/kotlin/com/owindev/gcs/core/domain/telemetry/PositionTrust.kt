@@ -19,12 +19,38 @@ package com.owindev.gcs.core.domain.telemetry
  * source is the EKF's own status, EKF_STATUS_REPORT, defined in `ardupilotmega.xml` rather than `common.xml`: a
  * future issue (v0.4 or later), with the decision to use a message outside `common`.
  */
-fun Telemetry.isPositionVerified(staleness: StalenessRule): Boolean {
+fun Telemetry.isPositionVerified(staleness: StalenessRule): Boolean = positionTrust(staleness) == PositionTrust.VERIFIED
+
+/** Why [Telemetry.position] can or cannot be shown as current, judged as [isPositionVerified] says. */
+enum class PositionTrust {
+    VERIFIED,
+
+    /** No position has arrived. */
+    NO_POSITION,
+
+    /** No GPS report has arrived. */
+    NO_GPS,
+
+    /** The GPS stopped reporting: its last report is older than its staleness threshold. */
+    GPS_STALE,
+
+    /** The GPS reports, but without a 3D fix. */
+    NO_3D_FIX,
+
+    /** Exactly 0°, 0°: ArduPilot's position before it has one, even with a 3D fix. */
+    UNINITIALISED,
+}
+
+/** The reason [isPositionVerified] gives, the first that applies in this order. */
+fun Telemetry.positionTrust(staleness: StalenessRule): PositionTrust {
     val gps = gps
     val location = position?.value
-    return gps != null &&
-        location != null &&
-        !(location.latitude == 0.0 && location.longitude == 0.0) &&
-        !staleness.isStale(TelemetryKind.GPS, gps.receivedAt.elapsedNow()) &&
-        gps.value.fixType.isFix3d
+    return when {
+        location == null -> PositionTrust.NO_POSITION
+        gps == null -> PositionTrust.NO_GPS
+        staleness.isStale(TelemetryKind.GPS, gps.receivedAt.elapsedNow()) -> PositionTrust.GPS_STALE
+        !gps.value.fixType.isFix3d -> PositionTrust.NO_3D_FIX
+        location.latitude == 0.0 && location.longitude == 0.0 -> PositionTrust.UNINITIALISED
+        else -> PositionTrust.VERIFIED
+    }
 }
