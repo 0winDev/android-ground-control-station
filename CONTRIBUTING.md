@@ -135,6 +135,8 @@ Hooks are installed with pre-commit (see the [README](README.md#git-hooks)). Nev
 - Body: always [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md). Tick **only** the
   boxes that are actually true; explain anything that could not be verified under Notes.
 - No "Generated with …" footers in issues, PRs or commits.
+- Metadata: every PR gets the issue's **milestone**, its **labels** (`phase:vX.Y`, the type such as `enhancement` or
+  `bug`, and every `area:` it touches) and the owner as **assignee**, set when it is opened.
 
 ## 9. Review and merge
 

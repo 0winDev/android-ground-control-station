@@ -96,8 +96,8 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
    commands, missions or signing; always update the REQ → test matrix.
 6. Commit with `/smart-commit`: Conventional Commits `feat|fix|refactor|test|docs|build|ci|chore`,
    one concept per commit, `(#<issue>)` at the end.
-7. PR with the template, title without prefix, only true checkboxes; CI green; merge commit by the
-   owner only.
+7. PR with the template, title without prefix, only true checkboxes, milestone, labels (phase, type, areas) and the
+   owner as assignee; CI green; merge commit by the owner only.
 8. After each issue: add lessons learned below, pick the next issue in the epic's order. After each
    phase: tag `vX.Y`, GitHub Release, README status.
 
