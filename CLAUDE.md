@@ -264,9 +264,13 @@ the issue number to an existing one.
   change it started after (#71).
 - A clock followed after it started running is anchored on its position, or the time jumps ahead and later freezes
   (#71).
+- A value read inside `combine` from outside its inputs can belong to a newer emission than the inputs: publish what
+  must match (a trail and its session) as one value (#72).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
+- Whatever is kept per system ID grows with every made-up ID on the link: keep history (the trail) for the
+  active vehicle only (#72).
 - An occurrence id fixes a race in the repository, not on screen: a banner that swaps alerts under a finger needs a
   guard, and an acknowledged caution keeps its level beside a newer advisory (#56).
 

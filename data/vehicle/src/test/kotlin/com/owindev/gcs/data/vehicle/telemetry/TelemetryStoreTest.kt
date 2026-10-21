@@ -5,13 +5,16 @@ import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.Home
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import kotlin.time.TestTimeSource
@@ -30,7 +33,7 @@ class TelemetryStoreTest {
 
     @BeforeEach
     fun setUp() {
-        store = TelemetryStore()
+        store = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
     }
 
     @Tag("REQ-016")

@@ -3,8 +3,10 @@ package com.owindev.gcs.data.vehicle.telemetry
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Home
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
@@ -13,6 +15,7 @@ import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.link.sessionOn
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.every
 import io.mockk.mockk
 import java.net.InetAddress
@@ -38,7 +41,7 @@ class DefaultTelemetryRepositoryTest {
     private val vehicleRepository: VehicleRepository = mockk()
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val activeSystemId = MutableStateFlow<SystemId?>(null)
-    private val store = TelemetryStore()
+    private val store = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
     private val session = MutableStateFlow(FIRST_SESSION)
 
     private lateinit var repository: DefaultTelemetryRepository

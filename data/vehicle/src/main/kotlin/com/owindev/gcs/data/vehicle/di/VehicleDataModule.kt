@@ -9,6 +9,7 @@ import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
@@ -64,6 +65,8 @@ abstract class VehicleDataModule {
     @Binds
     internal abstract fun bindTimeSource(clock: PipelineClock): TimeSource.WithComparableMarks
 
+    // One provider per object of a pure Kotlin module, each where its configuration is decided.
+    @Suppress("TooManyFunctions")
     companion object {
 
         /** One transport for the whole app: there is one vehicle link. */
@@ -101,6 +104,10 @@ abstract class VehicleDataModule {
         @Provides
         fun provideAlertRule(staleness: StalenessRule, timeSource: TimeSource.WithComparableMarks): AlertRule =
             AlertRule(staleness = staleness, timeSource = timeSource)
+
+        /** The trail limits decided for v0.3 (REQ-035: 2 m, 5 000 points), trusting positions as the HUD does. */
+        @Provides
+        fun provideTrailRule(staleness: StalenessRule): TrailRule = TrailRule(staleness)
 
         /** The recording thresholds decided for v0.3 (REQ-036, REQ-039: 10 min, 256 MiB); change them here. */
         @Provides

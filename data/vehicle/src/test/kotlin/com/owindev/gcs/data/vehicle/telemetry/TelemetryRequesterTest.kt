@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.telemetry
 import android.util.Log
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
@@ -14,6 +15,7 @@ import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -55,7 +57,7 @@ class TelemetryRequesterTest {
     private val messages = MutableSharedFlow<ReceivedMessage>()
     private val sent = mutableListOf<CommandLong>()
     private val testScope = TestScope()
-    private val store = TelemetryStore()
+    private val store = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
 
     private lateinit var requester: TelemetryRequester
 
