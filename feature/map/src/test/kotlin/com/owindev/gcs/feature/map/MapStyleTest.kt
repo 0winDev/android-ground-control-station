@@ -11,12 +11,12 @@ import org.maplibre.compose.style.BaseStyle
 class MapStyleTest {
 
     @Test
-    fun `GIVEN the night palette WHEN choosing the style THEN is OpenFreeMap's dark over HTTPS`() {
+    fun `GIVEN the night palette WHEN choosing the style THEN is OpenFreeMap's fiord over HTTPS`() {
         val palette = GcsPalette.NIGHT
 
         val result = remoteStyleOf(palette)
 
-        result shouldBeEqualTo BaseStyle.Uri("https://tiles.openfreemap.org/styles/dark")
+        result shouldBeEqualTo BaseStyle.Uri("https://tiles.openfreemap.org/styles/fiord")
     }
 
     @Test

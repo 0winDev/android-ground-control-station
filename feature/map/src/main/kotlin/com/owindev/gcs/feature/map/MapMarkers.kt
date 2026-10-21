@@ -27,13 +27,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.core.designsystem.time.elapsedText
 import kotlin.math.roundToInt
 import org.maplibre.compose.overlay.MapOverlayScope
 
 /**
  * The vehicle where it was last reported, pointing along its heading on a map turned by [mapBearing], with its label.
- * Live, it is the primary colour; otherwise an outline in the stale colour inside a dashed ring, so a position that
- * cannot be trusted never looks like one that can (REQ-017, REQ-026, REQ-029).
+ * Live, it is the primary colour with the surface colour around it; otherwise an outline in the stale colour inside a
+ * dashed ring, so a position that cannot be trusted never looks like one that can (REQ-017, REQ-026, REQ-029). The
+ * stale colour falls under 3:1 on most of the night map's tiles, so that arrow sits on a disc of the surface colour
+ * (`ContrastTest`).
  */
 @Composable
 internal fun MapOverlayScope.VehicleMarker(vehicle: MapVehicle, mapBearing: Double) {
@@ -51,6 +54,7 @@ internal fun MapOverlayScope.VehicleMarker(vehicle: MapVehicle, mapBearing: Doub
         if (live) {
             drawCircle(color = color.copy(alpha = HALO_ALPHA))
         } else {
+            drawCircle(color = outline, radius = size.minDimension / 2 - RING_WIDTH.toPx())
             drawCircle(
                 color = color,
                 radius = size.minDimension / 2 - RING_WIDTH.toPx(),
@@ -126,10 +130,10 @@ private fun vehicleLabel(vehicle: MapVehicle): String = when (val shown = vehicl
     PositionShown.NotVerified -> stringResource(id = R.string.map_vehicle_not_verified, vehicle.systemId)
 
     is PositionShown.Stale ->
-        stringResource(id = R.string.map_vehicle_stale, vehicle.systemId, shown.age.inWholeSeconds)
+        stringResource(id = R.string.map_vehicle_stale, vehicle.systemId, elapsedText(shown.age))
 
     is PositionShown.LinkLost ->
-        stringResource(id = R.string.map_vehicle_last_position, vehicle.systemId, shown.age.inWholeSeconds)
+        stringResource(id = R.string.map_vehicle_last_position, vehicle.systemId, elapsedText(shown.age))
 }
 
 /**

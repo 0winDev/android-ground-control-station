@@ -8,7 +8,7 @@ import org.maplibre.compose.style.BaseStyle
 /** OpenFreeMap's style for [palette], over HTTPS (ADR 0005, N-3). */
 internal fun remoteStyleOf(palette: GcsPalette): BaseStyle = BaseStyle.Uri(
     when (palette) {
-        GcsPalette.NIGHT -> "$OPENFREEMAP_STYLES/dark"
+        GcsPalette.NIGHT -> "$OPENFREEMAP_STYLES/fiord"
         GcsPalette.DAY -> "$OPENFREEMAP_STYLES/liberty"
     },
 )

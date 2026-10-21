@@ -30,13 +30,17 @@ What we know, checked on 2026-10-21:
 
 ## Decision
 
-We draw the map from OpenFreeMap's public instance over HTTPS: `dark` with the NIGHT palette and `liberty` with
-DAY. We keep MapLibre's attribution visible and its default ambient cache (50 MiB, app-private, never backed up).
-We download no offline regions until v1.0.
+We draw the map from OpenFreeMap's public instance over HTTPS: `fiord` with the NIGHT palette and `liberty` with
+DAY. `dark` was tried first, but its roads and boundaries are dark grey on near black and barely read at night;
+`fiord` keeps a dark slate background on which they read without glare. On it the live vehicle (primary fill, surface
+outline) keeps 3:1 against every background, but the stale grey does not, so a greyed vehicle sits on a disc of the
+surface colour (`ContrastTest`). We keep MapLibre's attribution visible and its default ambient cache (50 MiB,
+app-private, never backed up). We download no offline regions until v1.0.
 
-When the style cannot be loaded, the map switches to a local style with a background only, from the app's assets.
-The vehicle, heading, trail and home are our own layers on whatever style is loaded, so they never depend on the
-tiles.
+When the style has not loaded after 10 s, as on a network that answers nothing, the map switches to a style with a
+background only, inline JSON that needs no network, and stays on it until the palette changes: trying again would
+drop the trail with the style each time. The vehicle, heading and home are drawn over the map and the trail is a
+layer of whatever style is loaded, so none of them depends on the tiles.
 
 We use the OpenGL ES runtime. Vulkan is optional on Android 8 devices and unreliable on the emulator.
 

@@ -68,6 +68,44 @@ class ContrastTest {
         result.keys.shouldBeEmpty()
     }
 
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN the night map's backgrounds WHEN measuring the live vehicle THEN its fill or outline reaches 3 to 1`() {
+        val backgrounds = FIORD_BACKGROUNDS
+
+        val result = backgrounds.filterValues { background ->
+            maxOf(
+                contrast(NightColorScheme.primary, background),
+                contrast(NightColorScheme.surface, background),
+            ) < AA_NON_TEXT
+        }
+
+        result.keys.shouldBeEmpty()
+    }
+
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN the night map's backgrounds WHEN measuring the stale colour on them THEN some are under 3 to 1`() {
+        val backgrounds = FIORD_BACKGROUNDS
+
+        val result = backgrounds.filterValues { background -> contrast(NightGcsColors.stale, background) < AA_NON_TEXT }
+
+        result.keys.shouldBeEqualTo(setOf("background", "wood", "park", "residential", "building"))
+    }
+
+    @Tag("REQ-034")
+    @Test
+    fun `GIVEN both palettes WHEN measuring the greyed vehicle on its disc THEN reaches 3 to 1`() {
+        val pairs = listOf(
+            NightGcsColors.stale to NightColorScheme.surface,
+            DayGcsColors.stale to DayColorScheme.surface,
+        )
+
+        val result = pairs.map { (foreground, background) -> contrast(foreground, background) >= AA_NON_TEXT }
+
+        result shouldBeEqualTo listOf(true, true)
+    }
+
     @Test
     fun `GIVEN both palettes WHEN comparing their semantic tokens THEN the day one defines every one the night does`() {
         val night = NightGcsColors
@@ -77,6 +115,22 @@ class ContrastTest {
         result shouldBeEqualTo night::class.java.declaredFields.map { it.name }
     }
 }
+
+/**
+ * What the vehicle can be drawn on with OpenFreeMap's `fiord` style, the night map (ADR 0005), as read from
+ * https://tiles.openfreemap.org/styles/fiord on 2026-10-21: the background, water and aeroway as they are, and the
+ * translucent fills over the background at their opacity at the follow zoom (wood 0.57 of hsl(232,18%,30%), park 0.3
+ * of hsl(204,17%,35%), residential 0.6 of rgb(234,234,230), building 0.25 × 0.65 of hsl(232,47%,18%)).
+ */
+private val FIORD_BACKGROUNDS = mapOf(
+    "background" to Color(0xFF45516E),
+    "water" to Color(0xFF38435C),
+    "aeroway" to Color(0xFF3B4359),
+    "wood" to Color(0xFF424863),
+    "park" to Color(0xFF46546C),
+    "residential" to Color(0xFFA8ADB6),
+    "building" to Color(0xFF3E4967),
+)
 
 private const val AA_TEXT = 4.5
 private const val AAA_TEXT = 7.0
