@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.link
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessages
@@ -9,8 +10,10 @@ import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.every
 import io.mockk.mockk
@@ -57,9 +60,10 @@ class LinkSessionTest {
     @BeforeEach
     fun setUp() {
         session = LinkSession(
-            transport = transport,
+            live = transport,
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
+            pipelineClock = PipelineClock(testScope.testScheduler.timeSource),
             recorder = recorder,
             activeVehicle = activeVehicle,
         )
@@ -345,9 +349,10 @@ class LinkSessionTest {
             )
             val calls = datagramsAnswering(failingWith(IllegalStateException()))
             LinkSession(
-                transport = transport,
+                live = transport,
                 scope = appScope,
                 timeSource = testScheduler.timeSource,
+                pipelineClock = PipelineClock(testScheduler.timeSource),
                 recorder = ignoringRecorder(),
                 activeVehicle = ActiveVehicle(),
             ).messages.launchIn(backgroundScope)
@@ -515,6 +520,7 @@ private fun disarmedStabilizeFromAutopilot() = ReceivedMessage(
         mavlinkVersion = 3,
     ),
     sender = VEHICLE_ADDRESS,
+    session = FIRST_SESSION,
 )
 
 /** [frame] as the codec delimits it on its own. */

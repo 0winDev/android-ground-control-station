@@ -1,5 +1,7 @@
 package com.owindev.gcs.data.vehicle.state
 
+import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.time.atLeastRecheck
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
@@ -7,9 +9,11 @@ import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
@@ -32,6 +36,7 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -68,6 +73,12 @@ import kotlinx.coroutines.launch
  * If the watchdog ever stops (an unexpected exception, or its scope being cancelled), it fails safe: every
  * vehicle goes LOST and the listener stops. An unexpected exception then reaches the application scope,
  * which has no handler, so the process crashes on purpose rather than keep showing links nobody watches.
+ *
+ * A replay (REQ-037) is a session of its own: when the link's [LinkSession.session] changes, the watchdog forgets every
+ * vehicle, timer, address and request target, and the store its telemetry, so nothing live shows in a replay, nor one
+ * replay in the next, nor a replay after it; a message from another session is dropped. The heartbeat and telemetry
+ * jobs only run on the live link, and only the live active vehicle is ever a telemetry target, so a replay never
+ * transmits.
  *
  * Time comes from the injected [timeSource]; on a device it keeps counting while the CPU sleeps, so a
  * vehicle's age is right after waking. Timers use coroutine `delay`, which pauses during sleep, so the
@@ -108,9 +119,17 @@ internal class DefaultVehicleRepository @Inject constructor(
     override val vehicles: StateFlow<Map<SystemId, Vehicle>> by lazy {
         scope.launch { watch() }
         scope.launch { listenWhileObserved() }
-        scope.launch { heartbeatSender.run(::activeAddressWhileConnected) }
-        scope.launch { telemetryRequester.run(activeLinkChanges.receiveAsFlow(), ::activeHeardNow) }
+        scope.launch { session.session.collect { current -> events.send(Event.SessionChanged(current)) } }
+        scope.launch { whileLive { heartbeatSender.run(::activeAddressWhileConnected) } }
+        scope.launch { whileLive { telemetryRequester.run(activeLinkChanges.receiveAsFlow(), ::activeHeardNow) } }
         mutableVehicles.asStateFlow()
+    }
+
+    /** Runs [job] while the link is the live one, never during a replay (REQ-037). */
+    private suspend fun whileLive(job: suspend () -> Unit) {
+        session.session.map { it.origin }.distinctUntilChanged().collectLatest { origin ->
+            if (origin == DataOrigin.LIVE) job()
+        }
     }
 
     override val activeSystemId: StateFlow<SystemId?> by lazy {
@@ -130,10 +149,10 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Marked on arrival, not when the watchdog gets to it.
                         val at = timeSource.markNow()
                         if (telemetryStore.record(received, at)) {
-                            events.send(Event.Rebooted(SystemId(received.systemId)))
+                            events.send(Event.Rebooted(SystemId(received.systemId), received.session))
                         }
                         HeartbeatMapper.vehicleStateOf(received)?.let { state ->
-                            events.send(Event.Heard(state, at, received.sender))
+                            events.send(Event.Heard(state, at, received.sender, received.session))
                         }
                     }
                 }
@@ -142,11 +161,13 @@ internal class DefaultVehicleRepository @Inject constructor(
 
     private suspend fun watch() = coroutineScope {
         val timers = mutableMapOf<SystemId, Job>()
+        // Where the store starts too: a session that began before the watchdog did still arrives as a change.
+        var current = FIRST_SESSION
 
         fun startTimer(systemId: SystemId, after: Duration) {
             timers.remove(systemId)?.cancel()
             timers[systemId] = launch {
-                delay(after)
+                delay(after.atLeastRecheck())
                 events.send(Event.TimedOut(systemId))
             }
         }
@@ -154,14 +175,15 @@ internal class DefaultVehicleRepository @Inject constructor(
         try {
             for (event in events) {
                 when (event) {
-                    is Event.Heard -> {
+                    // Still in flight from the session before: it belongs to nothing shown now.
+                    is Event.Heard -> if (event.session == current) {
                         val systemId = event.state.systemId
                         val elapsed = event.at.elapsedNow()
                         // Normally CONNECTED; LOST only if the watchdog got to this HEARTBEAT after the
                         // timeout had already passed, so a late event never flashes CONNECTED.
                         val link = rule.linkAfter(elapsed)
                         addresses += systemId to event.sender
-                        update(systemId, Vehicle(event.state, link, event.at))
+                        update(systemId, Vehicle(event.state, link, event.at, origin = event.session.origin))
                         if (link == VehicleLink.CONNECTED) {
                             startTimer(systemId, rule.timeout - elapsed)
                         } else {
@@ -183,7 +205,9 @@ internal class DefaultVehicleRepository @Inject constructor(
                         }
                     }
 
-                    is Event.Rebooted -> requestAgainAfterReboot(event.systemId)
+                    is Event.Rebooted -> requestAgainAfterReboot(event, current)
+
+                    is Event.SessionChanged -> current = changeSession(from = current, to = event.session, timers)
                 }
             }
         } finally {
@@ -200,13 +224,33 @@ internal class DefaultVehicleRepository @Inject constructor(
     }
 
     /**
+     * Forgets every vehicle, timer, address and telemetry of the session [from], if [to] is another one, and returns
+     * the session now. Any request target still queued is dropped, so none outlives its session, and the telemetry job
+     * is told no vehicle is to be asked. Only the watchdog calls it, and only it sends targets.
+     */
+    private fun changeSession(from: SessionId, to: SessionId, timers: MutableMap<SystemId, Job>): SessionId {
+        if (to == from) return from
+        timers.values.forEach(Job::cancel)
+        timers.clear()
+        addresses = emptyMap()
+        mutableVehicles.value = emptyMap()
+        telemetryStore.startSession(to)
+        do {
+            val drained = activeLinkChanges.tryReceive().isSuccess
+        } while (drained)
+        activeLinkChanges.trySend(null)
+        return to
+    }
+
+    /**
      * Writes [vehicle] and tells the telemetry job if the active vehicle's link changed. Only the watchdog
      * calls it, after writing the vehicle's address.
      */
     private fun update(systemId: SystemId, vehicle: Vehicle) {
         val before = mutableVehicles.value[systemId]?.link ?: VehicleLink.LOST
         mutableVehicles.value += systemId to vehicle
-        if (systemId == activeVehicle.systemId.value && vehicle.link != before) {
+        // Only the live vehicle is ever asked for anything: a replayed one has no address to send to.
+        if (systemId == activeVehicle.systemId.value && vehicle.origin == DataOrigin.LIVE && vehicle.link != before) {
             val target = if (vehicle.link == VehicleLink.CONNECTED) {
                 TelemetryTarget(systemId, addresses.getValue(systemId))
             } else {
@@ -217,11 +261,15 @@ internal class DefaultVehicleRepository @Inject constructor(
     }
 
     /**
-     * Tells the telemetry job to start a new round if [systemId] is the active vehicle and CONNECTED; otherwise it
-     * gets one when it is CONNECTED again. Only the watchdog calls it.
+     * Tells the telemetry job to start a new round if the [reboot] is of the [current] session and the active vehicle,
+     * CONNECTED; otherwise it gets one when it is CONNECTED again. Only the watchdog calls it.
      */
-    private fun requestAgainAfterReboot(systemId: SystemId) {
-        val connected = mutableVehicles.value[systemId]?.link == VehicleLink.CONNECTED
+    private fun requestAgainAfterReboot(reboot: Event.Rebooted, current: SessionId) {
+        // A reboot seen in the session before belongs to a vehicle nobody shows any more.
+        if (reboot.session != current) return
+        val systemId = reboot.systemId
+        val vehicle = mutableVehicles.value[systemId]
+        val connected = vehicle?.link == VehicleLink.CONNECTED && vehicle.origin == DataOrigin.LIVE
         if (systemId == activeVehicle.systemId.value && connected) {
             activeLinkChanges.trySend(TelemetryTarget(systemId, addresses.getValue(systemId)))
         }
@@ -236,6 +284,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         val systemId = activeVehicle.systemId.value
         val vehicle = systemId?.let(mutableVehicles.value::get)
         val connected = vehicle != null &&
+            vehicle.origin == DataOrigin.LIVE &&
             vehicle.link == VehicleLink.CONNECTED &&
             rule.linkAfter(vehicle.lastHeartbeat.elapsedNow()) == VehicleLink.CONNECTED
         return if (connected) addresses[systemId] else null
@@ -250,10 +299,17 @@ internal class DefaultVehicleRepository @Inject constructor(
     private fun activeHeardNow(): Boolean = listening && activeAddressWhileConnected() != null
 
     private sealed interface Event {
-        data class Heard(val state: VehicleState, val at: ComparableTimeMark, val sender: InetSocketAddress) : Event
+        data class Heard(
+            val state: VehicleState,
+            val at: ComparableTimeMark,
+            val sender: InetSocketAddress,
+            val session: SessionId,
+        ) : Event
 
         data class TimedOut(val systemId: SystemId) : Event
 
-        data class Rebooted(val systemId: SystemId) : Event
+        data class Rebooted(val systemId: SystemId, val session: SessionId) : Event
+
+        data class SessionChanged(val session: SessionId) : Event
     }
 }

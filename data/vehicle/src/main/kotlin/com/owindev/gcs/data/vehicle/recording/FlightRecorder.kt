@@ -103,12 +103,19 @@ internal class FlightRecorder(
             setupSigning = setupSigningCount.get(),
         )
 
+    /**
+     * The name of the log being replayed, which retention never deletes (REQ-037), `null` once no replay reads it. Set
+     * before the replay closes the live session, whose closing applies the limit.
+     */
+    @Volatile
+    var replayed: String? = null
+
     /** A frame from the link, with its decoded [message] when it has one; called from the receive loop. */
     fun received(frame: RawFrame, message: ReceivedMessage?) {
         val atMillis = clock.millis()
         message?.let(HeartbeatMapper::vehicleStateOf)?.let { state ->
             // Marked on arrival, as the vehicle repository marks it, not when the writer gets to it.
-            if (state.systemId == activeVehicle.systemId.value) heard(HeardAt(atMillis, timeSource.markNow()))
+            if (state.systemId == activeVehicle.liveSystemId) heard(HeardAt(atMillis, timeSource.markNow()))
         }
         offer(frame.bytes, micros(atMillis))
     }
@@ -286,7 +293,7 @@ internal class FlightRecorder(
     private fun deleteOldest(kept: String?) {
         val recordings = directory.listFiles { file -> file.isFile && file.name.endsWith(EXTENSION) }.orEmpty()
             .map { Recording(name = it.name, sizeBytes = it.length(), lastModifiedMillis = it.lastModified()) }
-        rule.toDelete(recordings, kept).forEach { recording ->
+        rule.toDelete(recordings, kept, replayed).forEach { recording ->
             if (File(directory, recording.name).delete()) {
                 Log.i(TAG, "Deleted ${recording.name} to stay within the recordings limit")
             } else {

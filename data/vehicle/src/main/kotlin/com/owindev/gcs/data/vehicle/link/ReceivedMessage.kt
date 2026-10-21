@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.link
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import java.net.InetSocketAddress
 
@@ -7,11 +8,15 @@ import java.net.InetSocketAddress
  * A decoded message with the sender it came from. The codec's messages carry no header, so the system
  * and component IDs are taken from the frame here, where the data layer needs them to tell vehicles
  * (and their components) apart. [sender] is the UDP address the datagram came from: where replies to
- * that system go.
+ * that system go, and a replay's [REPLAY_SENDER][com.owindev.gcs.data.vehicle.replay.REPLAY_SENDER], where nothing
+ * goes. [session] is the link session it came in, live or a replay (REQ-037).
  */
 internal data class ReceivedMessage(
     val systemId: Int,
     val componentId: Int,
     val message: MavlinkMessage,
     val sender: InetSocketAddress,
-)
+    val session: SessionId,
+) {
+    val origin: DataOrigin get() = session.origin
+}

@@ -10,7 +10,9 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.link.liveSession
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import io.mockk.CapturingSlot
@@ -59,15 +61,16 @@ class TelemetryFromLinkTest {
         coEvery { telemetryRequester.run(any(), capture(isHeard)) } coAnswers { awaitCancellation() }
         repository = DefaultVehicleRepository(
             session = LinkSession(
-                transport = transport,
+                live = transport,
                 scope = testScope.backgroundScope,
                 timeSource = testScope.testScheduler.timeSource,
+                pipelineClock = PipelineClock(testScope.testScheduler.timeSource),
                 recorder = ignoringRecorder(),
                 activeVehicle = activeVehicle,
             ),
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
+            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession())),
             telemetryRequester = telemetryRequester,
             telemetryStore = store,
             activeVehicle = activeVehicle,
@@ -150,15 +153,16 @@ class TelemetryFromLinkTest {
             every { transport.datagrams() } returns datagrams(HEARTBEAT)
             val sleepy = DefaultVehicleRepository(
                 session = LinkSession(
-                    transport = transport,
+                    live = transport,
                     scope = backgroundScope,
                     timeSource = testScheduler.timeSource,
+                    pipelineClock = PipelineClock(testScheduler.timeSource),
                     recorder = ignoringRecorder(),
                     activeVehicle = activeVehicle,
                 ),
                 timeSource = deviceClock,
                 rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
+                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession())),
                 telemetryRequester = telemetryRequester,
                 telemetryStore = store,
                 activeVehicle = activeVehicle,

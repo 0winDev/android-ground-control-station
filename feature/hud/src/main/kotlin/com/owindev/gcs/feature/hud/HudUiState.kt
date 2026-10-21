@@ -10,10 +10,11 @@ sealed interface HudUiState {
     data object Starting : HudUiState
 
     /**
-     * Listening on [port], but no vehicle has been heard yet. [linkUnstable] while the link is receiving
-     * again after a failure but has not stayed up long enough to call it recovered.
+     * Listening on [port], or playing a recording when it is `null` (REQ-037), but no vehicle has been heard yet.
+     * [linkUnstable] while the link is receiving again after a failure but has not stayed up long enough to call it
+     * recovered.
      */
-    data class WaitingForVehicle(val port: Int, val datagramCount: Long, val linkUnstable: Boolean = false) :
+    data class WaitingForVehicle(val port: Int?, val datagramCount: Long, val linkUnstable: Boolean = false) :
         HudUiState
 
     /**
@@ -22,11 +23,11 @@ sealed interface HudUiState {
      * timeout: past it, the state is [LinkLost]. [linkUnstable] as in [WaitingForVehicle]: the vehicle is
      * still decided by its HEARTBEATs, the warning only says the link on this device may fail again.
      * [telemetry] is the vehicle's, each part with its staleness (REQ-029). [alert] is its alert banner (REQ-028),
-     * only while it is heard: [LinkLost] outranks every alert (REQ-017).
+     * only while it is heard: [LinkLost] outranks every alert (REQ-017). [port] as in [WaitingForVehicle].
      */
     data class Connected(
         val vehicle: VehicleStatus,
-        val port: Int,
+        val port: Int?,
         val datagramCount: Long,
         val otherVehicles: List<Int>,
         val linkUnstable: Boolean = false,
@@ -52,6 +53,9 @@ sealed interface HudUiState {
     data class PortUnavailableRetrying(val port: Int) : HudUiState
 
     data object LinkError : HudUiState
+
+    /** The recording being replayed could not be read any further (REQ-037): no live link is open meanwhile. */
+    data object ReplayUnreadable : HudUiState
 }
 
 /** What the HUD shows of one vehicle (REQ-018). */

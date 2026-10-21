@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.link
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.mavlink.MavlinkEncoder
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
@@ -28,11 +29,15 @@ import kotlinx.coroutines.sync.withLock
  * the opposite when the frame did not leave.
  *
  * Every frame sent goes to the [recorder] (REQ-036), under the same lock, so the log keeps them in sequence order.
+ *
+ * Nothing is sent while the [session] plays a replay (REQ-037): [SendResult.NotOpen], as for a closed link. Its senders
+ * never run then; this is the last guard, checked under the lock before every frame.
  */
 @Singleton
 internal class GcsMessageSender @Inject constructor(
     private val transport: UdpTransport,
     private val recorder: FlightRecorder,
+    private val session: LinkSession,
 ) {
 
     private val lock = Mutex()
@@ -47,6 +52,7 @@ internal class GcsMessageSender @Inject constructor(
         send(to) { sequence -> MavlinkEncoder.encode(sequence, GCS_SYSTEM_ID, GCS_COMPONENT_ID, commandLong) }
 
     private suspend fun send(to: InetSocketAddress, encode: (sequence: Int) -> ByteArray): SendResult = lock.withLock {
+        if (session.session.value.origin != DataOrigin.LIVE) return@withLock SendResult.NotOpen
         val frame = encode(sequence)
         val result = transport.send(frame, to)
         if (result == SendResult.Sent) {

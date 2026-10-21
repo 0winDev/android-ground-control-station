@@ -4,6 +4,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import kotlin.time.Duration
@@ -139,6 +140,7 @@ class AlertBannerTest {
         occurrence = occurrence,
         raisedAt = clock.markNow(),
         acknowledged = acknowledged,
+        origin = DataOrigin.LIVE,
     )
 }
 

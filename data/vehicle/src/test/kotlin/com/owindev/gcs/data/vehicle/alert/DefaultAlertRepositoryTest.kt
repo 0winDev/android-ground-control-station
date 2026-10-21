@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
@@ -22,6 +23,9 @@ import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
+import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
+import com.owindev.gcs.data.vehicle.link.sessionOn
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -54,6 +58,7 @@ class DefaultAlertRepositoryTest {
     private val vehicleRepository: VehicleRepository = mockk()
     private val activeSystemId = MutableStateFlow<SystemId?>(VEHICLE)
     private val vehicles = MutableStateFlow(mapOf(VEHICLE to vehicle(VEHICLE, clock.markNow())))
+    private val session = MutableStateFlow(FIRST_SESSION)
 
     private lateinit var repository: DefaultAlertRepository
 
@@ -67,6 +72,7 @@ class DefaultAlertRepositoryTest {
         repository = DefaultAlertRepository(
             telemetryRepository,
             vehicleRepository,
+            sessionOn(session),
             AlertRule(timeSource = clock),
             clock,
             testScope.backgroundScope,
@@ -88,6 +94,22 @@ class DefaultAlertRepositoryTest {
             val result = repository.activeAlerts.value
 
             result shouldBeEqualTo Alerts.NotEvaluated
+        }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN a live alert WHEN a replay of the same system ID starts THEN its alerts start afresh, as recorded`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = 20)
+            repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
+
+            session.value = REPLAY_SESSION
+            activeTelemetry.value = telemetry(remaining = 20).copy(origin = DataOrigin.REPLAY)
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(2).copy(origin = DataOrigin.REPLAY)))
         }
 
     @Test
@@ -388,17 +410,24 @@ class DefaultAlertRepositoryTest {
 
     /** Active as [occurrence], raised now unless [raisedAt] says otherwise. */
     private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false, raisedAt: TimeMark = clock.markNow()) =
-        ActiveAlert(alert = this, occurrence = occurrence, raisedAt = raisedAt, acknowledged = acknowledged)
+        ActiveAlert(
+            alert = this,
+            occurrence = occurrence,
+            raisedAt = raisedAt,
+            acknowledged = acknowledged,
+            origin = DataOrigin.LIVE,
+        )
 
     /** Only a GPS with a 3D fix, kept fresh: the battery never arrives. */
-    private fun gpsOnly(): Telemetry = Telemetry(gps = Timed(GPS_3D_FIX, clock.markNow() + LONG_AFTER))
+    private fun gpsOnly(): Telemetry =
+        Telemetry(gps = Timed(GPS_3D_FIX, clock.markNow() + LONG_AFTER), origin = DataOrigin.LIVE)
 
     /** Battery and GPS with a 3D fix, received [receivedAt]. */
     private fun telemetry(remaining: Int, receivedAt: TimeMark = clock.markNow()): Telemetry =
         telemetry(battery(remaining), receivedAt)
 
     private fun telemetry(battery: Battery, receivedAt: TimeMark = clock.markNow()): Telemetry =
-        Telemetry(battery = Timed(battery, receivedAt), gps = Timed(GPS_3D_FIX, receivedAt))
+        Telemetry(battery = Timed(battery, receivedAt), gps = Timed(GPS_3D_FIX, receivedAt), origin = DataOrigin.LIVE)
 }
 
 private const val TAG = "AlertRepository"
@@ -438,6 +467,7 @@ private fun vehicle(systemId: SystemId, heardAt: TimeMark, armed: Boolean = fals
     state = VehicleState(systemId, VehicleType.COPTER, FlightMode.Named("Stabilize"), armed = armed),
     link = VehicleLink.CONNECTED,
     lastHeartbeat = heardAt,
+    origin = DataOrigin.LIVE,
 )
 
 private fun battery(remaining: Int) = Battery(

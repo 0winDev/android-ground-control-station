@@ -5,15 +5,23 @@ import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
+import com.owindev.gcs.core.domain.replay.ReplayRepository
+import com.owindev.gcs.core.domain.replay.ReplayRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
+import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
+import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
+import com.owindev.gcs.data.vehicle.replay.DefaultReplayRepository
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
+import com.owindev.gcs.data.vehicle.replay.TlogDatagramSource
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import com.owindev.gcs.data.vehicle.telemetry.DefaultTelemetryRepository
@@ -48,6 +56,14 @@ abstract class VehicleDataModule {
     @Binds
     internal abstract fun bindAlertRepository(impl: DefaultAlertRepository): AlertRepository
 
+    /** The live link's datagrams come from the one transport. */
+    @Binds
+    internal abstract fun bindLiveSource(transport: UdpTransport): DatagramSource
+
+    /** One clock for the whole pipeline (see [providePipelineClock]). */
+    @Binds
+    internal abstract fun bindTimeSource(clock: PipelineClock): TimeSource.WithComparableMarks
+
     companion object {
 
         /** One transport for the whole app: there is one vehicle link. */
@@ -61,9 +77,17 @@ abstract class VehicleDataModule {
         @ApplicationScope
         fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-        /** Monotonic and counting through device sleep, never wall-clock time (see [ElapsedRealtimeTimeSource]). */
+        /**
+         * One clock for the whole pipeline: the device's, monotonic and counting through sleep, never wall-clock time
+         * (see [ElapsedRealtimeTimeSource]), or a replay's while one plays (REQ-037).
+         */
         @Provides
-        fun provideTimeSource(): TimeSource.WithComparableMarks = ElapsedRealtimeTimeSource
+        @Singleton
+        internal fun providePipelineClock(): PipelineClock = PipelineClock(device = ElapsedRealtimeTimeSource)
+
+        /** The device's own time, for what a paused replay must not stop (REQ-037). */
+        @Provides
+        fun provideDeviceClock(): DeviceClock = DeviceClock(ElapsedRealtimeTimeSource)
 
         /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
         @Provides
@@ -82,22 +106,50 @@ abstract class VehicleDataModule {
         @Provides
         fun provideRecordingRule(): RecordingRule = RecordingRule()
 
-        /** Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. */
+        /**
+         * Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. Only
+         * the live link is recorded, so its link loss is timed on the device clock, never a replay's.
+         */
         @Provides
         @Singleton
         internal fun provideFlightRecorder(
             @ApplicationContext context: Context,
             rule: RecordingRule,
             activeVehicle: ActiveVehicle,
-            timeSource: TimeSource.WithComparableMarks,
             @ApplicationScope scope: CoroutineScope,
         ): FlightRecorder = FlightRecorder(
             directory = File(context.filesDir, RECORDINGS_FOLDER),
             rule = rule,
             activeVehicle = activeVehicle,
-            timeSource = timeSource,
+            timeSource = ElapsedRealtimeTimeSource,
             clock = Clock.systemDefaultZone(),
             scope = scope + Dispatchers.IO,
+        )
+
+        /** Replays only the GCS's own recordings (REQ-037), read on `Dispatchers.IO`. */
+        // One parameter per collaborator of the repository, as its constructor has.
+        @Suppress("LongParameterList")
+        @Provides
+        @Singleton
+        internal fun provideReplayRepository(
+            @ApplicationContext context: Context,
+            session: LinkSession,
+            vehicleRepository: VehicleRepository,
+            clock: PipelineClock,
+            recorder: FlightRecorder,
+            linkLossRule: LinkLossRule,
+            @ApplicationScope scope: CoroutineScope,
+        ): ReplayRepository = DefaultReplayRepository(
+            session = session,
+            vehicleRepository = vehicleRepository,
+            clock = clock,
+            recorder = recorder,
+            rule = ReplayRule(linkLossRule),
+            recordings = File(context.filesDir, RECORDINGS_FOLDER),
+            replaySource = { recording, replayClock ->
+                TlogDatagramSource(recording, replayClock, ioDispatcher = Dispatchers.IO)
+            },
+            scope = scope,
         )
     }
 }

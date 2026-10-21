@@ -124,6 +124,7 @@ private fun LinkChip(state: HudUiState) {
         is HudUiState.PortUnavailable,
         is HudUiState.PortUnavailableRetrying,
         HudUiState.LinkError,
+        HudUiState.ReplayUnreadable,
         -> stringResource(id = R.string.hud_link_failed) to GcsTheme.colors.emergency
 
         HudUiState.Starting,

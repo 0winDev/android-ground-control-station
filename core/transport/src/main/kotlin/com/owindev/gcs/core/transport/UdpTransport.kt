@@ -4,6 +4,7 @@ import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetSocketAddress
+import java.net.UnknownHostException
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,7 @@ class UdpTransport(
     val port: Int = DEFAULT_PORT,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val socketFactory: (Int) -> DatagramSocket = ::DatagramSocket,
-) {
+) : DatagramSource {
 
     /** The socket of the current collection of [datagrams], `null` while nobody collects it. */
     private val openSocket = AtomicReference<DatagramSocket?>(null)
@@ -48,7 +49,7 @@ class UdpTransport(
      * another [IOException] if receiving fails while the socket is open. Cancelling the collector is
      * not a failure: the flow just stops.
      */
-    fun datagrams(): Flow<Datagram> = callbackFlow {
+    override fun datagrams(): Flow<Datagram> = callbackFlow {
         val socket = socketFactory(port)
         openSocket.set(socket)
         launch(ioDispatcher) { receiveInto(socket) }
@@ -63,9 +64,11 @@ class UdpTransport(
      * Sends [payload] as one datagram to [to], from the socket [datagrams] is receiving on.
      *
      * Never throws on I/O: [SendResult.NotOpen] when no collection holds the socket (the link is closed),
-     * [SendResult.Failed] when the operating system rejects the datagram.
+     * [SendResult.Failed] when the operating system rejects the datagram or [to] is not a resolved address, which no
+     * datagram can be sent to.
      */
     suspend fun send(payload: ByteArray, to: InetSocketAddress): SendResult = withContext(ioDispatcher) {
+        if (to.isUnresolved) return@withContext SendResult.Failed(UnknownHostException("Unresolved destination"))
         val socket = openSocket.get() ?: return@withContext SendResult.NotOpen
         try {
             socket.send(DatagramPacket(payload, payload.size, to))

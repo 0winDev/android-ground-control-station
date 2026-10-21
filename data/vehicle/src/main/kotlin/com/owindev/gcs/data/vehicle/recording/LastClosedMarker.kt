@@ -44,6 +44,6 @@ internal class LastClosedMarker(private val directory: File) {
         private const val MAX_BYTES = 255L
 
         /** One file in the folder: no separators, so a name can never point outside it. */
-        private val LOG_NAME = Regex("[A-Za-z0-9_-][A-Za-z0-9._-]*\\.tlog")
+        val LOG_NAME = Regex("[A-Za-z0-9_-][A-Za-z0-9._-]*\\.tlog")
     }
 }

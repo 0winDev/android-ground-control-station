@@ -238,7 +238,7 @@ the issue number to an existing one.
 - A reader that does not check checksums cannot anchor a plausibility window on one record: a false record taken
   from garbage would anchor a timestamp no real record is near. Anchor on two consecutive records (#68).
 - A test of a tolerant reader can pass for the wrong reason (another recovery path masked the rule): check it with a
-  mutation of the rule it guards (#68).
+  mutation of the rule it guards (#68, #71).
 - On a 1 m boundary a nanometre decides the MGRS digit, so reference points stay at least 1 cm off one; GEOTRANS
   2.4.2 is not sub-mm accurate and disagrees with GeoConvert at exactly 84°N (#40).
 
@@ -258,6 +258,12 @@ the issue number to an existing one.
   request round halfway, so detect it once per system (#69).
 - Anything that waits for an answer subscribes to `messages` and reopens a closed socket: gate background sends on
   "the link is listened to", not only on CONNECTED (#39).
+- Two sessions of the same kind look alike in a conflated `StateFlow`: tell them apart by an epoch, not only by
+  kind (#71).
+- A consumer started lazily must start from the producer's first state, never its current one, or it misses the
+  change it started after (#71).
+- A clock followed after it started running is anchored on its position, or the time jumps ahead and later freezes
+  (#71).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
@@ -294,3 +300,5 @@ the issue number to an existing one.
 - On Windows `@TempDir` cannot delete a file a test leaves open: close what the SUT opened in `@AfterEach` (#70).
 - CI never runs `check`: its Coverage step calls each module's `koverVerify` by name, so a module with a new
   minimum must be added there too, or the minimum only fails locally (#63).
+- On Windows `File.canonicalFile` does not resolve symbolic links: check a path's folder with `toRealPath()` (#71).
+- Never reflow KDoc by script: it merges lists and rewraps untouched paragraphs; wrap long lines by hand (#71).

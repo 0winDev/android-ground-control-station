@@ -1,10 +1,12 @@
 package com.owindev.gcs.data.vehicle.state
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -143,7 +145,13 @@ private const val DISARMED_GUIDED_BASE_MODE = 89
 private const val ARMED_GUIDED_BASE_MODE = 217
 
 private fun received(message: MavlinkMessage, componentId: Int = MAV_COMP_ID_AUTOPILOT1, systemId: Int = SYSTEM_ID) =
-    ReceivedMessage(systemId = systemId, componentId = componentId, message = message, sender = SENDER)
+    ReceivedMessage(
+        systemId = systemId,
+        componentId = componentId,
+        message = message,
+        sender = SENDER,
+        session = FIRST_SESSION,
+    )
 
 /** The mapper ignores where a message came from; any address will do. */
 private val SENDER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)

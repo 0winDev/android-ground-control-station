@@ -4,6 +4,7 @@ import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import com.owindev.gcs.data.vehicle.link.LinkSession
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -22,12 +23,14 @@ import kotlinx.coroutines.flow.stateIn
  *
  * Its last value expires as soon as nobody observes it (`replayExpiration` zero, as in the HUD, #13), so a new
  * observer never starts from a remembered value; and every value carries the time it arrived, so one that
- * stopped arriving still reads stale.
+ * stopped arriving still reads stale. Only the link session's own telemetry is ever shown: until the store has moved
+ * on to a new session, the one before reads as nothing received yet (REQ-037).
  */
 @Singleton
 internal class DefaultTelemetryRepository @Inject constructor(
     store: TelemetryStore,
     vehicleRepository: VehicleRepository,
+    session: LinkSession,
     @ApplicationScope scope: CoroutineScope,
 ) : TelemetryRepository {
 
@@ -35,9 +38,11 @@ internal class DefaultTelemetryRepository @Inject constructor(
         vehicleRepository.vehicles,
         vehicleRepository.activeSystemId,
         store.telemetry,
-    ) { _, activeSystemId, telemetry ->
+        session.session,
+    ) { _, activeSystemId, telemetry, current ->
         // Heard but nothing received from it yet: every part null, which is not the same as no vehicle.
-        activeSystemId?.let { telemetry[it] ?: Telemetry() }
+        val kept = telemetry.takeIf { store.session == current }.orEmpty()
+        activeSystemId?.let { kept[it] ?: Telemetry(origin = current.origin) }
     }
         .stateIn(
             scope = scope,

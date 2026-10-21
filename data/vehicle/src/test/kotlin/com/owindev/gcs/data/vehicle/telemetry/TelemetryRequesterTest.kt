@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
 import android.util.Log
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
@@ -9,6 +10,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.SendResult
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
@@ -167,6 +169,7 @@ class TelemetryRequesterTest {
                     targetComponent = targetComponent,
                 ),
                 sender = VEHICLE_ADDRESS,
+                session = FIRST_SESSION,
             )
         }
 
@@ -460,7 +463,13 @@ class TelemetryRequesterTest {
                         now < (resumeAt[message] ?: Long.MAX_VALUE)
                     if (!stopped) {
                         store.record(
-                            ReceivedMessage(systemId, AUTOPILOT_COMPONENT_ID, message, VEHICLE_ADDRESS),
+                            ReceivedMessage(
+                                systemId,
+                                AUTOPILOT_COMPONENT_ID,
+                                message,
+                                VEHICLE_ADDRESS,
+                                session = FIRST_SESSION,
+                            ),
                             testScheduler.timeSource.markNow(),
                         )
                     }
@@ -624,6 +633,7 @@ class TelemetryRequesterTest {
                     targetComponent = targetComponent,
                 ),
                 sender = VEHICLE_ADDRESS,
+                session = FIRST_SESSION,
             )
 
         fun setMessageInterval(messageId: Int, intervalMicros: Float) = CommandLong(

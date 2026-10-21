@@ -1,5 +1,6 @@
 package com.owindev.gcs.core.domain.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.TestTimeSource
 import org.amshove.kluent.shouldBeEqualTo
 import org.junit.jupiter.api.BeforeEach
@@ -19,6 +20,7 @@ class TelemetryTest {
             airData = Timed(AIR_DATA, RECEIVED_AT),
             battery = Timed(BATTERY, RECEIVED_AT),
             gps = Timed(GPS, RECEIVED_AT),
+            origin = DataOrigin.LIVE,
         )
     }
 
@@ -39,7 +41,7 @@ class TelemetryTest {
 
     @Test
     fun `GIVEN nothing received WHEN reading each kind THEN there is no part`() {
-        val empty = Telemetry()
+        val empty = Telemetry(origin = DataOrigin.LIVE)
 
         val result = TelemetryKind.entries.associateWith { kind -> empty[kind] }
 

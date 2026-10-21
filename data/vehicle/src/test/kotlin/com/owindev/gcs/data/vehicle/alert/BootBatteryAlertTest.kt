@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.alert
 import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.Telemetry
@@ -11,6 +12,7 @@ import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryMapper
 import java.net.InetAddress
@@ -45,7 +47,10 @@ class BootBatteryAlertTest {
 
         val result = rule.evaluate(emptyList(), telemetry, armed = false, clock.markNow() - SETTLED, ::nextOccurrence)
 
-        result shouldBeEqualTo listOf(ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow()))
+        result shouldBeEqualTo
+            listOf(
+                ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow(), origin = DataOrigin.LIVE),
+            )
     }
 
     @Test
@@ -55,8 +60,8 @@ class BootBatteryAlertTest {
         val result = rule.evaluate(emptyList(), telemetry, armed = true, clock.markNow() - SETTLED, ::nextOccurrence)
 
         result shouldBeEqualTo listOf(
-            ActiveAlert(Alert.BatteryUnhealthy, occurrence = 2, raisedAt = clock.markNow()),
-            ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow()),
+            ActiveAlert(Alert.BatteryUnhealthy, occurrence = 2, raisedAt = clock.markNow(), origin = DataOrigin.LIVE),
+            ActiveAlert(Alert.BatteryUnknown, occurrence = 1, raisedAt = clock.markNow(), origin = DataOrigin.LIVE),
         )
     }
 
@@ -65,9 +70,18 @@ class BootBatteryAlertTest {
     /** The real boot SYS_STATUS mapped as received now, with a fresh 3D GPS fix so only the battery is judged. */
     private fun bootTelemetry(): Telemetry {
         val frame = MavlinkParser(MavlinkMessages).parse(readFixture(SYS_STATUS_BOOT)).single()
-        val received = ReceivedMessage(frame.systemId, frame.componentId, MavlinkDecoder.decode(frame), SENDER)
+        val received =
+            ReceivedMessage(
+                frame.systemId,
+                frame.componentId,
+                MavlinkDecoder.decode(frame),
+                SENDER,
+                session = FIRST_SESSION,
+            )
         val now = clock.markNow()
-        return checkNotNull(TelemetryMapper.update(Telemetry(gps = Timed(GPS_3D_FIX, now)), received, now))
+        return checkNotNull(
+            TelemetryMapper.update(Telemetry(gps = Timed(GPS_3D_FIX, now), origin = DataOrigin.LIVE), received, now),
+        )
     }
 }
 

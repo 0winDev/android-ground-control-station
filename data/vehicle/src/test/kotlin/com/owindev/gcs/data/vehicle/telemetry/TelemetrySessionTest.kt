@@ -1,11 +1,13 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkFrame
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -39,13 +41,18 @@ class TelemetrySessionTest {
             .filter { it.systemId == VEHICLE_SYSTEM_ID }
             .map(::received)
 
-        val result = messages.mapNotNull { mapper.update(Telemetry(), it, RECEIVED_AT) }
+        val result = messages.mapNotNull { mapper.update(Telemetry(origin = DataOrigin.LIVE), it, RECEIVED_AT) }
 
         valueCounts(result) shouldBeEqualTo PYMAVLINK_VALUE_COUNTS.toSortedMap()
     }
 
-    private fun received(frame: MavlinkFrame) =
-        ReceivedMessage(frame.systemId, frame.componentId, MavlinkDecoder.decode(frame), SENDER)
+    private fun received(frame: MavlinkFrame) = ReceivedMessage(
+        frame.systemId,
+        frame.componentId,
+        MavlinkDecoder.decode(frame),
+        SENDER,
+        session = FIRST_SESSION,
+    )
 }
 
 private const val SESSION_STREAM = "derived/session-stream.bin"

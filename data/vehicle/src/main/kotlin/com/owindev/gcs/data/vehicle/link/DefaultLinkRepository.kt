@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.link
 import android.util.Log
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
+import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 @Singleton
 internal class DefaultLinkRepository @Inject constructor(
     private val session: LinkSession,
+    private val transport: UdpTransport,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : LinkRepository {
 
@@ -37,16 +39,27 @@ internal class DefaultLinkRepository @Inject constructor(
             .stateIn(
                 scope = scope,
                 started = SharingStarted.WhileSubscribed(LINK_STOP_TIMEOUT),
-                initialValue = LinkTraffic.Receiving(port = session.port, datagrams = 0),
+                initialValue = LinkTraffic.Receiving(port = transport.port, datagrams = 0),
             )
     }
 
     private fun LinkStatus.toLinkTraffic(): LinkTraffic = when (this) {
-        is LinkStatus.Running -> LinkTraffic.Receiving(port = session.port, datagrams = datagrams)
-        is LinkStatus.Recovering -> LinkTraffic.Recovering(port = session.port, datagrams = datagrams)
-        LinkStatus.Unavailable -> LinkTraffic.Unavailable(port = session.port)
-        LinkStatus.UnavailableRetrying -> LinkTraffic.UnavailableRetrying(port = session.port)
+        is LinkStatus.Running -> LinkTraffic.Receiving(port = transport.port, datagrams = datagrams)
+
+        is LinkStatus.Recovering -> LinkTraffic.Recovering(port = transport.port, datagrams = datagrams)
+
+        LinkStatus.Unavailable -> LinkTraffic.Unavailable(port = transport.port)
+
+        LinkStatus.UnavailableRetrying -> LinkTraffic.UnavailableRetrying(port = transport.port)
+
         is LinkStatus.Failed -> LinkTraffic.Failed
+
+        is LinkStatus.Replaying -> LinkTraffic.Replaying(datagrams = datagrams)
+
+        // The traffic of a recording played to its end: what follows is the silence the vehicle repository shows.
+        is LinkStatus.ReplayEnded -> LinkTraffic.Replaying(datagrams = datagrams)
+
+        is LinkStatus.ReplayFailed -> LinkTraffic.ReplayFailed
     }
 
     /**
@@ -60,6 +73,10 @@ internal class DefaultLinkRepository @Inject constructor(
                 Log.w(TAG, "Vehicle link failed unexpectedly; reopening it", status.cause)
                 failing = true
             }
+
+            // Only the kind of failure: its message names the file, which stays out of the log.
+            status is LinkStatus.ReplayFailed ->
+                Log.w(TAG, "Reading the recording failed: ${status.cause::class.java.simpleName}")
 
             status is LinkStatus.Running && status.datagrams > 0 && failing -> {
                 Log.i(TAG, "Vehicle link reopened")

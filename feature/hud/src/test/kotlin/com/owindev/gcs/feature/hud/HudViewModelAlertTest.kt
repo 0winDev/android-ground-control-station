@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.domain.telemetry.Battery
@@ -13,6 +14,7 @@ import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -30,6 +32,7 @@ import io.mockk.just
 import io.mockk.mockk
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -75,7 +78,7 @@ class HudViewModelAlertTest {
             alertRepository,
             LinkLossRule(),
             StalenessRule(),
-            mainDispatcher.testDispatcher.scheduler.timeSource,
+            DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
         )
     }
 
@@ -96,7 +99,11 @@ class HudViewModelAlertTest {
         runTest {
             turbineScope {
                 heardVehicle(VehicleLink.CONNECTED, heardAgo = Duration.ZERO)
-                activeTelemetry.value = Telemetry(battery = Timed(LOW_BATTERY, testScheduler.timeSource.markNow()))
+                activeTelemetry.value =
+                    Telemetry(
+                        battery = Timed(LOW_BATTERY, testScheduler.timeSource.markNow()),
+                        origin = DataOrigin.LIVE,
+                    )
                 activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = 1)))
 
                 val result = viewModel.state.testIn(backgroundScope)
@@ -139,6 +146,36 @@ class HudViewModelAlertTest {
                 delay(ACKNOWLEDGE_GUARD)
 
                 viewModel.onAlertAcknowledged(occurrence = OCCURRENCE)
+
+                verifyOnce {
+                    alertRepository.acknowledge(OCCURRENCE)
+                }
+            }
+        }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN a paused replay WHEN a caution has been read for the guard time THEN it can be acknowledged`() =
+        runTest {
+            turbineScope {
+                val device = TestTimeSource()
+                val paused = HudViewModel(
+                    linkRepository,
+                    vehicleRepository,
+                    telemetryRepository,
+                    alertRepository,
+                    LinkLossRule(),
+                    StalenessRule(),
+                    DeviceClock(device),
+                )
+                every { alertRepository.acknowledge(any()) } just runs
+                heardVehicle(VehicleLink.CONNECTED, heardAgo = Duration.ZERO)
+                activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = OCCURRENCE)))
+                paused.state.launchIn(backgroundScope)
+                delay(1.milliseconds)
+                device += ACKNOWLEDGE_GUARD
+
+                paused.onAlertAcknowledged(occurrence = OCCURRENCE)
 
                 verifyOnce {
                     alertRepository.acknowledge(OCCURRENCE)
@@ -210,6 +247,7 @@ class HudViewModelAlertTest {
                 ),
                 link = link,
                 lastHeartbeat = testScheduler.timeSource.markNow() - heardAgo,
+                origin = DataOrigin.LIVE,
             ),
         )
     }
@@ -218,6 +256,7 @@ class HudViewModelAlertTest {
         alert = alert,
         occurrence = occurrence,
         raisedAt = testScheduler.timeSource.markNow(),
+        origin = DataOrigin.LIVE,
     )
 }
 

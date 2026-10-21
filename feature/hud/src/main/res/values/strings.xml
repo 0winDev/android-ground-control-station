@@ -1,5 +1,7 @@
 <resources>
     <string name="hud_datagrams_received">Datagrams received</string>
+    <string name="hud_replay_unreadable">The recording could not be read. No live link is open during a replay.</string>
+    <string name="hud_playing_recording">Playing a recording</string>
     <string name="hud_listening_on_port">Listening on UDP port %1$d</string>
     <string name="hud_port_unavailable">Cannot listen on UDP port %1$d: another app is using it.</string>
     <string name="hud_port_unavailable_retrying">UDP port %1$d was taken while reconnecting. Retrying until it is free.</string>

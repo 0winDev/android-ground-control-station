@@ -4,11 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.time.DeviceClock
+import com.owindev.gcs.core.domain.time.atLeastRecheck
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
@@ -20,7 +23,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
-import kotlin.time.TimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -51,7 +53,8 @@ import kotlinx.coroutines.flow.stateIn
  * The active vehicle's alerts are shown in a banner while it is heard (REQ-028), the most urgent not yet
  * acknowledged; acknowledging one passes its occurrence to [AlertRepository], which decides what can be
  * acknowledged, but only the occurrence on the banner and only once it has been there for [ACKNOWLEDGE_GUARD],
- * timed on [timeSource]. Link lost hides them, as it outranks every alert (REQ-017).
+ * timed on the [deviceClock], since a paused replay must not stop the operator's reading time. Link lost hides them,
+ * as it outranks every alert (REQ-017).
  *
  * Nothing remembered is ever shown: when nobody observes the HUD for [STOP_TIMEOUT], the state goes back
  * to [HudUiState.Starting], so coming back never flashes an old CONNECTED before the fresh state.
@@ -67,7 +70,7 @@ class HudViewModel @Inject constructor(
     private val alertRepository: AlertRepository,
     private val rule: LinkLossRule,
     private val staleness: StalenessRule,
-    private val timeSource: TimeSource.WithComparableMarks,
+    private val deviceClock: DeviceClock,
 ) : ViewModel() {
 
     /** The alert on the banner and since when; written as each state is built, read by [onAlertAcknowledged]. */
@@ -91,7 +94,7 @@ class HudViewModel @Inject constructor(
             flow {
                 while (true) {
                     emit(telemetry)
-                    delay(untilPanelChanges(telemetry, staleness) ?: awaitCancellation())
+                    delay(untilPanelChanges(telemetry, staleness)?.atLeastRecheck() ?: awaitCancellation())
                 }
             }
         }
@@ -129,7 +132,7 @@ class HudViewModel @Inject constructor(
     private fun ticksFor(lastHeartbeat: TimeMark): Flow<Unit> = flow {
         while (true) {
             emit(Unit)
-            delay(untilNextCheck(lastHeartbeat.elapsedNow()))
+            delay(untilNextCheck(lastHeartbeat.elapsedNow()).atLeastRecheck())
         }
     }
 
@@ -146,8 +149,10 @@ class HudViewModel @Inject constructor(
         vehicles: Map<SystemId, Vehicle>,
         telemetry: Telemetry?,
     ): HudUiState {
-        val active = activeSystemId?.let(vehicles::get)
-        val otherVehicles = vehicles
+        // Only the link session's own vehicles: one from the session before is never shown in this one (REQ-037).
+        val heard = vehicles.filterValues { it.origin == traffic.origin() }
+        val active = activeSystemId?.let(heard::get)
+        val otherVehicles = heard
             .filter { (systemId, vehicle) -> systemId != activeSystemId && !vehicle.isLost() }
             .keys
             .map(SystemId::value)
@@ -169,16 +174,21 @@ class HudViewModel @Inject constructor(
 
             LinkTraffic.Failed -> HudUiState.LinkError
 
+            LinkTraffic.ReplayFailed -> HudUiState.ReplayUnreadable
+
             is LinkTraffic.Receiving -> receiving(traffic.port, traffic.datagrams, active, otherVehicles)
 
             // Data is arriving, so the vehicle is shown as usual; the warning only says the link may fail again.
             is LinkTraffic.Recovering ->
                 receiving(traffic.port, traffic.datagrams, active, otherVehicles, linkUnstable = true)
-        }.withTelemetry(telemetry)
+
+            // No port: the datagrams come from a recording, not from a socket.
+            is LinkTraffic.Replaying -> receiving(port = null, traffic.datagrams, active, otherVehicles)
+        }.withTelemetry(telemetry?.takeIf { it.origin == traffic.origin() })
     }
 
     private fun receiving(
-        port: Int,
+        port: Int?,
         datagrams: Long,
         active: Vehicle?,
         otherVehicles: List<Int>,
@@ -203,7 +213,7 @@ class HudViewModel @Inject constructor(
     private fun HudUiState.withAlerts(alerts: Alerts): HudUiState {
         val banner = (this as? HudUiState.Connected)?.let { alertBannerOf(alerts, it.telemetry) }
         val occurrence = (banner as? AlertBanner.Showing)?.occurrence
-        if (occurrence != shown?.occurrence) shown = occurrence?.let { ShownAlert(it, timeSource.markNow()) }
+        if (occurrence != shown?.occurrence) shown = occurrence?.let { ShownAlert(it, deviceClock.markNow()) }
         return if (this is HudUiState.Connected && banner != null) copy(alert = banner) else this
     }
 
@@ -227,8 +237,14 @@ private fun Vehicle.toStatus() = VehicleStatus(
     armed = state.armed,
 )
 
+/** Where this traffic comes from: a replay's or the live link's. */
+private fun LinkTraffic.origin(): DataOrigin = when (this) {
+    is LinkTraffic.Replaying, LinkTraffic.ReplayFailed -> DataOrigin.REPLAY
+    else -> DataOrigin.LIVE
+}
+
 private fun LinkTraffic.toLocalFault(): LocalLinkFault? = when (this) {
-    is LinkTraffic.Receiving -> null
+    is LinkTraffic.Receiving, is LinkTraffic.Replaying, LinkTraffic.ReplayFailed -> null
     is LinkTraffic.Recovering -> LocalLinkFault.Unstable
     is LinkTraffic.Unavailable -> LocalLinkFault.PortUnavailable(port = port)
     is LinkTraffic.UnavailableRetrying -> LocalLinkFault.PortUnavailableRetrying(port = port)

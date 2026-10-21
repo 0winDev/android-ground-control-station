@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
@@ -8,6 +9,8 @@ import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
+import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -42,12 +45,27 @@ class TelemetryStoreTest {
         val result = store.telemetry.value
 
         result shouldBeEqualTo mapOf(
-            SystemId(1) to Telemetry(attitude = Timed(LEVEL, FIRST)),
-            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND)),
+            SystemId(1) to Telemetry(attitude = Timed(LEVEL, FIRST), origin = DataOrigin.LIVE),
+            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND), origin = DataOrigin.LIVE),
         )
     }
 
     @Tag("REQ-026")
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN live telemetry WHEN a replay session starts THEN it is forgotten and only the replay's is kept`() {
+        store.record(received(systemId = 1, message = attitude(roll = 0f)), FIRST)
+
+        store.startSession(REPLAY_SESSION)
+        store.record(received(systemId = 2, message = attitude(roll = 0f)), SECOND)
+        store.record(received(systemId = 2, message = sysStatus()).copy(session = REPLAY_SESSION), SECOND)
+        val result = store.telemetry.value
+
+        result shouldBeEqualTo mapOf(
+            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND), origin = DataOrigin.REPLAY),
+        )
+    }
+
     @Test
     fun `GIVEN a newer message of the same kind WHEN recording it THEN replaces the value and its time`() {
         store.record(received(systemId = 1, message = attitude(roll = 0f)), FIRST)
@@ -55,7 +73,8 @@ class TelemetryStoreTest {
         store.record(received(systemId = 1, message = attitude(roll = HALF_PI)), SECOND)
         val result = store.telemetry.value
 
-        result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(attitude = Timed(ROLLED_90, SECOND)))
+        result shouldBeEqualTo
+            mapOf(SystemId(1) to Telemetry(attitude = Timed(ROLLED_90, SECOND), origin = DataOrigin.LIVE))
     }
 
     @Tag("REQ-031")
@@ -66,7 +85,8 @@ class TelemetryStoreTest {
         store.record(received(systemId = 1, message = globalPositionInt(lat = PAST_NORTH_POLE_DEGE7)), SECOND)
         val result = store.telemetry.value
 
-        result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(position = Timed(SOUTH_POSITION, FIRST)))
+        result shouldBeEqualTo
+            mapOf(SystemId(1) to Telemetry(position = Timed(SOUTH_POSITION, FIRST), origin = DataOrigin.LIVE))
     }
 
     @Tag("REQ-016")
@@ -114,7 +134,8 @@ class TelemetryStoreTest {
         val result = store.telemetry.value
 
         rebooted.shouldBeTrue()
-        result shouldBeEqualTo mapOf(SystemId(1) to Telemetry(attitude = Timed(LEVEL, SECOND)))
+        result shouldBeEqualTo
+            mapOf(SystemId(1) to Telemetry(attitude = Timed(LEVEL, SECOND), origin = DataOrigin.LIVE))
     }
 
     @Tag("REQ-033")
@@ -232,7 +253,7 @@ private val ROLLED_90 = Attitude(roll = 90.00000250447816, pitch = 0.0, yaw = 0.
 private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
 
 private fun received(systemId: Int, message: MavlinkMessage) =
-    ReceivedMessage(systemId, MAV_COMP_ID_AUTOPILOT1, message, SENDER)
+    ReceivedMessage(systemId, MAV_COMP_ID_AUTOPILOT1, message, SENDER, session = FIRST_SESSION)
 
 private fun attitude(roll: Float, timeBootMs: Long = 397_119) = MavlinkMessage.Attitude(
     timeBootMs = timeBootMs,

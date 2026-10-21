@@ -9,6 +9,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import io.mockk.coEvery
@@ -37,9 +38,10 @@ class ActiveVehicleFromLinkTest {
     private val telemetryRequester: TelemetryRequester = mockk()
     private val activeVehicle = ActiveVehicle()
     private val session = LinkSession(
-        transport = transport,
+        live = transport,
         scope = testScope.backgroundScope,
         timeSource = testScope.testScheduler.timeSource,
+        pipelineClock = PipelineClock(testScope.testScheduler.timeSource),
         recorder = ignoringRecorder(),
         activeVehicle = activeVehicle,
     )
@@ -53,7 +55,7 @@ class ActiveVehicleFromLinkTest {
             session = session,
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder())),
+            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session)),
             telemetryRequester = telemetryRequester,
             telemetryStore = TelemetryStore(),
             activeVehicle = activeVehicle,

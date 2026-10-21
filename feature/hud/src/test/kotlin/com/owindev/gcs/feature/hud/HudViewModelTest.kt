@@ -5,6 +5,7 @@ import app.cash.turbine.turbineScope
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.geo.Mgrs
+import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.domain.telemetry.AirData
@@ -18,6 +19,7 @@ import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -79,7 +81,7 @@ class HudViewModelTest {
             alertRepository,
             LinkLossRule(),
             StalenessRule(),
-            mainDispatcher.testDispatcher.scheduler.timeSource,
+            DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
         )
     }
 
@@ -396,7 +398,7 @@ class HudViewModelTest {
                     alertRepository,
                     LinkLossRule(timeout = CUSTOM_TIMEOUT),
                     StalenessRule(),
-                    mainDispatcher.testDispatcher.scheduler.timeSource,
+                    DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
                 )
                 val states = custom.state.testIn(backgroundScope)
 
@@ -556,6 +558,7 @@ class HudViewModelTest {
                     airData = Timed(HOVER, now),
                     battery = Timed(FULL_BATTERY, now),
                     gps = Timed(RTK_FIX, now),
+                    origin = DataOrigin.LIVE,
                 )
 
                 val result = viewModel.state.testIn(backgroundScope)
@@ -577,7 +580,8 @@ class HudViewModelTest {
     fun `GIVEN only the attitude received WHEN observing the state THEN the other parts are not shown`() = runTest {
         turbineScope {
             connectedVehicle()
-            activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+            activeTelemetry.value =
+                Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
 
             val result = viewModel.state.testIn(backgroundScope)
 
@@ -592,7 +596,8 @@ class HudViewModelTest {
         turbineScope {
             connectedVehicle()
             val withoutRoll = Attitude(roll = null, pitch = 3.0, yaw = null)
-            activeTelemetry.value = Telemetry(attitude = Timed(withoutRoll, testScheduler.timeSource.markNow()))
+            activeTelemetry.value =
+                Telemetry(attitude = Timed(withoutRoll, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
 
             val result = viewModel.state.testIn(backgroundScope)
 
@@ -607,7 +612,8 @@ class HudViewModelTest {
         turbineScope {
             connectedVehicle()
             val north = SITL_HOME.copy(latitude = NORTH_OF_UTM)
-            activeTelemetry.value = Telemetry(position = Timed(north, testScheduler.timeSource.markNow()))
+            activeTelemetry.value =
+                Telemetry(position = Timed(north, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
 
             val result = viewModel.state.testIn(backgroundScope)
 
@@ -624,7 +630,8 @@ class HudViewModelTest {
             turbineScope {
                 connectedVehicle()
                 val now = testScheduler.timeSource.markNow()
-                activeTelemetry.value = Telemetry(position = Timed(SITL_HOME, now), gps = Timed(NO_FIX, now))
+                activeTelemetry.value =
+                    Telemetry(position = Timed(SITL_HOME, now), gps = Timed(NO_FIX, now), origin = DataOrigin.LIVE)
 
                 val result = viewModel.state.testIn(backgroundScope)
 
@@ -643,7 +650,8 @@ class HudViewModelTest {
     fun `GIVEN attitude that stops arriving WHEN 1 ms is left to its threshold THEN is not stale yet`() = runTest {
         turbineScope {
             connectedVehicle()
-            activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+            activeTelemetry.value =
+                Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
             val states = viewModel.state.testIn(backgroundScope)
 
             delay(ATTITUDE_STALE_AFTER - 1.milliseconds)
@@ -660,7 +668,8 @@ class HudViewModelTest {
         runTest {
             turbineScope {
                 connectedVehicle()
-                activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+                activeTelemetry.value =
+                    Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
                 val states = viewModel.state.testIn(backgroundScope)
 
                 delay(ATTITUDE_STALE_AFTER)
@@ -679,7 +688,7 @@ class HudViewModelTest {
         turbineScope {
             connectedVehicle()
             val received = testScheduler.timeSource.markNow() - TWO_AND_A_HALF_SECONDS
-            activeTelemetry.value = Telemetry(gps = Timed(RTK_FIX, received))
+            activeTelemetry.value = Telemetry(gps = Timed(RTK_FIX, received), origin = DataOrigin.LIVE)
             val states = viewModel.state.testIn(backgroundScope)
 
             delay(SIX_HUNDRED_MILLISECONDS)
@@ -695,7 +704,8 @@ class HudViewModelTest {
         turbineScope {
             activeSystemId.value = SYSTEM_1
             vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = FOUR_SECONDS))
-            activeTelemetry.value = Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()))
+            activeTelemetry.value =
+                Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
 
             val result = viewModel.state.testIn(backgroundScope)
 
@@ -717,6 +727,7 @@ class HudViewModelTest {
                 vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = FOUR_SECONDS))
                 activeTelemetry.value = Telemetry(
                     attitude = Timed(LEVEL, testScheduler.timeSource.markNow() - FOUR_SECONDS),
+                    origin = DataOrigin.LIVE,
                 )
                 val states = viewModel.state.testIn(backgroundScope)
 
@@ -825,4 +836,5 @@ private fun TestScope.vehicle(systemId: SystemId, link: VehicleLink, heardAgo: D
         state = VehicleState(systemId = systemId, type = VehicleType.COPTER, flightMode = mode, armed = true),
         link = link,
         lastHeartbeat = testScheduler.timeSource.markNow() - heardAgo,
+        origin = DataOrigin.LIVE,
     )
