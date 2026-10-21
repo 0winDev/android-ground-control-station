@@ -217,8 +217,7 @@ class HudViewModel @Inject constructor(
         return if (this is HudUiState.Connected && banner != null) copy(alert = banner) else this
     }
 
-    private fun Vehicle.isLost(): Boolean =
-        link == VehicleLink.LOST || rule.linkAfter(lastHeartbeat.elapsedNow()) == VehicleLink.LOST
+    private fun Vehicle.isLost(): Boolean = rule.isLost(this)
 
     private companion object {
         /** Survives a configuration change without closing the link. */

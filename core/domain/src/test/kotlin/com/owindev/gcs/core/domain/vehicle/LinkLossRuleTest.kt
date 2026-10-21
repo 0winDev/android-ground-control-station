@@ -1,9 +1,11 @@
 package com.owindev.gcs.core.domain.vehicle
 
+import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
 import org.amshove.kluent.invoking
 import org.amshove.kluent.shouldBeEqualTo
 import org.amshove.kluent.shouldThrow
@@ -13,6 +15,8 @@ import org.junit.jupiter.api.Test
 
 @Tag("REQ-017")
 class LinkLossRuleTest {
+
+    private val clock = TestTimeSource()
 
     private lateinit var rule: LinkLossRule
 
@@ -83,6 +87,35 @@ class LinkLossRuleTest {
     }
 
     @Test
+    fun `GIVEN a vehicle the watchdog has not marked lost WHEN its age reaches the timeout THEN is lost`() {
+        val vehicle = clock.vehicle(VehicleLink.CONNECTED)
+        clock += 3.seconds
+
+        val result = rule.isLost(vehicle)
+
+        result shouldBeEqualTo true
+    }
+
+    @Test
+    fun `GIVEN a vehicle heard just now WHEN the watchdog has not marked it lost THEN is not lost`() {
+        val vehicle = clock.vehicle(VehicleLink.CONNECTED)
+        clock += 3.seconds - 1.nanoseconds
+
+        val result = rule.isLost(vehicle)
+
+        result shouldBeEqualTo false
+    }
+
+    @Test
+    fun `GIVEN a vehicle the watchdog marked lost WHEN its age is under the timeout THEN is lost`() {
+        val vehicle = clock.vehicle(VehicleLink.LOST)
+
+        val result = rule.isLost(vehicle)
+
+        result shouldBeEqualTo true
+    }
+
+    @Test
     fun `GIVEN a zero timeout WHEN creating the rule THEN is rejected`() {
         val creating = { LinkLossRule(timeout = Duration.ZERO) }
 
@@ -102,3 +135,10 @@ class LinkLossRuleTest {
 }
 
 private val CUSTOM_TIMEOUT = 500.milliseconds
+
+private fun TestTimeSource.vehicle(link: VehicleLink) = Vehicle(
+    state = VehicleState(SystemId(1), VehicleType.COPTER, FlightMode.Named("Loiter"), armed = true),
+    link = link,
+    lastHeartbeat = markNow(),
+    origin = DataOrigin.LIVE,
+)

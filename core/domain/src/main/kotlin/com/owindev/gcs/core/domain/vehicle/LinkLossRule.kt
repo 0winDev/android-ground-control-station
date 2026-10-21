@@ -20,6 +20,13 @@ class LinkLossRule(val timeout: Duration = DEFAULT_TIMEOUT) {
     fun linkAfter(sinceLastHeartbeat: Duration): VehicleLink =
         if (sinceLastHeartbeat >= timeout) VehicleLink.LOST else VehicleLink.CONNECTED
 
+    /**
+     * Whether [vehicle]'s link is lost now: the watchdog's [VehicleLink.LOST], or this rule applied to its age right
+     * now, since the watchdog's timer can run late after the device sleeps (#12). Every screen judges it here.
+     */
+    fun isLost(vehicle: Vehicle): Boolean =
+        vehicle.link == VehicleLink.LOST || linkAfter(vehicle.lastHeartbeat.elapsedNow()) == VehicleLink.LOST
+
     companion object {
         /** REQ-017's default. */
         val DEFAULT_TIMEOUT: Duration = 3.seconds
