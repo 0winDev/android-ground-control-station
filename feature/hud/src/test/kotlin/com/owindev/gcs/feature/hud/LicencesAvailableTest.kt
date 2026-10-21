@@ -3,8 +3,10 @@ package com.owindev.gcs.feature.hud
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import kotlin.time.Duration.Companion.seconds
 import org.amshove.kluent.shouldBeEqualTo
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
+@Tag("REQ-034")
 class LicencesAvailableTest {
 
     @Test
