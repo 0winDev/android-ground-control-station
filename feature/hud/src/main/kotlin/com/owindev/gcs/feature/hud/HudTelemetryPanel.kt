@@ -18,6 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.core.designsystem.time.elapsedText
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.geo.Mgrs
@@ -25,6 +26,7 @@ import com.owindev.gcs.core.domain.telemetry.AirData
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
+import com.owindev.gcs.core.domain.telemetry.PositionTrust
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -83,7 +85,11 @@ internal fun TelemetryPanelContent(panel: TelemetryPanel, modifier: Modifier = M
                 )
             }
             HorizontalDivider()
-            PositionLines(reading = panel.position, lost = lost)
+            PositionLines(
+                reading = panel.position,
+                warning = positionWarningOf(panel.position, panel.gps, lostFor),
+                lost = lost,
+            )
         }
     }
 }
@@ -109,7 +115,7 @@ private fun AttitudeLine(reading: Reading<Attitude>?, lost: Boolean) {
 }
 
 @Composable
-private fun PositionLines(reading: Reading<PositionReading>?, lost: Boolean) {
+private fun PositionLines(reading: Reading<PositionReading>?, warning: PositionWarning?, lost: Boolean) {
     val position = reading?.value?.position
     // Not verified is shown like stale, and said in words: it may be 0°, 0° or a frozen position.
     val notVerified = reading != null && !reading.value.verified
@@ -117,9 +123,9 @@ private fun PositionLines(reading: Reading<PositionReading>?, lost: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(ValueSpacing)) {
         Label(text = stringResource(id = R.string.hud_label_position))
         // Read before the digits, which stay readable: the last known position helps find the vehicle.
-        if (notVerified) {
+        if (warning != null) {
             Text(
-                text = stringResource(id = R.string.hud_position_not_verified),
+                text = warningText(warning),
                 style = MaterialTheme.typography.bodySmall,
                 color = GcsTheme.colors.caution,
             )
@@ -162,7 +168,7 @@ private fun ValueCell(
 @Composable
 private fun LastDataHeader(age: Duration) {
     Text(
-        text = stringResource(id = R.string.hud_last_data, age.inWholeSeconds).uppercase(),
+        text = stringResource(id = R.string.hud_last_data, elapsedText(age)).uppercase(),
         style = MaterialTheme.typography.labelLarge,
         color = GcsTheme.colors.stale,
     )
@@ -208,7 +214,7 @@ internal val PreviewPanel = TelemetryPanel(
         PositionReading(
             PreviewPosition,
             Mgrs.Grid(zone = 55, band = 'H', square = "FA", easting = 96720, northing = 84509),
-            verified = true,
+            trust = PositionTrust.VERIFIED,
         ),
         stale = false,
         age = Duration.ZERO,
@@ -251,7 +257,7 @@ private fun TelemetryPanelMissingPreview() {
                     PositionReading(
                         PreviewPosition.copy(latitude = 85.0, heading = null),
                         Mgrs.NotAvailable,
-                        verified = false,
+                        trust = PositionTrust.NO_3D_FIX,
                     ),
                     stale = false,
                     age = Duration.ZERO,

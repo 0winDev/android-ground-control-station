@@ -107,6 +107,37 @@ class PositionTrustTest {
         result.shouldBeFalse()
     }
 
+    @Test
+    fun `GIVEN each reason a position cannot be trusted WHEN judging it THEN says that reason`() {
+        val now = clock.markNow()
+        val cases = mapOf(
+            PositionTrust.NO_POSITION to Telemetry(gps = Timed(gps(GpsFixType.Fix3d), now), origin = DataOrigin.LIVE),
+            PositionTrust.NO_GPS to Telemetry(position = Timed(CANBERRA, now), origin = DataOrigin.LIVE),
+            PositionTrust.GPS_STALE to Telemetry(
+                position = Timed(CANBERRA, now),
+                gps = Timed(gps(GpsFixType.Fix3d), now - GPS_STALE_AFTER),
+                origin = DataOrigin.LIVE,
+            ),
+            PositionTrust.NO_3D_FIX to telemetry(gps(GpsFixType.Fix2d)),
+            PositionTrust.UNINITIALISED to telemetry(gps(GpsFixType.Fix3d), NULL_ISLAND),
+            PositionTrust.VERIFIED to telemetry(gps(GpsFixType.Fix3d)),
+        )
+
+        val result = cases.mapValues { (_, telemetry) -> telemetry.positionTrust(staleness) }
+
+        result shouldBeEqualTo cases.keys.associateWith { it }
+    }
+
+    @Test
+    fun `GIVEN a stale GPS without a 3D fix WHEN judging the position THEN says the GPS stopped first`() {
+        val telemetry = telemetry(gps(GpsFixType.NoFix))
+        clock += GPS_STALE_AFTER
+
+        val result = telemetry.positionTrust(staleness)
+
+        result shouldBeEqualTo PositionTrust.GPS_STALE
+    }
+
     /** [position] and [gps], both received now. */
     private fun telemetry(gps: GpsStatus, position: GlobalPosition = CANBERRA): Telemetry {
         val now = clock.markNow()
