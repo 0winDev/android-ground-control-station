@@ -23,7 +23,9 @@ import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -144,9 +146,10 @@ internal fun MapContent(
 }
 
 /**
- * Keeps the vehicle at the centre of the visible map while the camera follows it, zooming in on the first fix. A
- * camera move is cancelled when the insets or the [style] change, so it is made again then, even for a vehicle
- * standing still.
+ * Keeps the vehicle at the centre of the visible map while the camera follows it, zooming in on the first fix. Each
+ * move runs to its end before the next one, towards the latest position: restarting it for every position, five a
+ * second, cancelled each move before the camera went anywhere, so a moving vehicle was left behind (seen in SITL). A
+ * move is also cancelled when the insets or the [style] change, so following starts again then.
  */
 @Composable
 private fun FollowVehicle(
@@ -156,15 +159,17 @@ private fun FollowVehicle(
     insets: PaddingValues,
     style: BaseStyle,
 ) {
-    val position = vehicle?.position
-    LaunchedEffect(mapState, position, following, insets, style) {
-        if (position == null || !following) return@LaunchedEffect
+    val position by rememberUpdatedState(vehicle?.position)
+    LaunchedEffect(mapState, following, insets, style) {
+        if (!following) return@LaunchedEffect
         mapState.awaitViewport()
-        val zoom = FOLLOW_ZOOM.takeIf { mapState.cameraPosition.zoom < MIN_FOLLOW_ZOOM }
-        mapState.animateCamera(
-            update = CameraUpdate(center = position.toPosition(), zoom = zoom),
-            animation = CameraAnimation.Ease { duration = FOLLOW_STEP },
-        )
+        snapshotFlow { position }.filterNotNull().conflate().collect { target ->
+            val zoom = FOLLOW_ZOOM.takeIf { mapState.cameraPosition.zoom < MIN_FOLLOW_ZOOM }
+            mapState.animateCamera(
+                update = CameraUpdate(center = target.toPosition(), zoom = zoom),
+                animation = CameraAnimation.Ease { duration = FOLLOW_STEP },
+            )
+        }
     }
 }
 
