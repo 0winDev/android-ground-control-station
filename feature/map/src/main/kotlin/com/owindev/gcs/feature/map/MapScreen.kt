@@ -108,7 +108,7 @@ internal fun MapContent(
             .filter { it == CameraMoveReason.Gesture }
             .collect { currentOnMapPan() }
     }
-    FollowVehicle(mapState = mapState, vehicle = state.vehicle, following = state.following)
+    FollowVehicle(mapState = mapState, vehicle = state.vehicle, following = state.following, insets = viewportInsets)
     MaplibreMap(
         modifier = modifier.fillMaxSize(),
         state = mapState,
@@ -121,12 +121,16 @@ internal fun MapContent(
     )
 }
 
-/** Keeps the vehicle at the centre of the visible map while the camera follows it, zooming in on the first fix. */
+/**
+ * Keeps the vehicle at the centre of the visible map while the camera follows it, zooming in on the first fix. A
+ * camera move is cancelled when the insets change, so it is made again then, even for a vehicle standing still.
+ */
 @Composable
-private fun FollowVehicle(mapState: MapState, vehicle: MapVehicle?, following: Boolean) {
+private fun FollowVehicle(mapState: MapState, vehicle: MapVehicle?, following: Boolean, insets: PaddingValues) {
     val position = vehicle?.position
-    LaunchedEffect(mapState, position, following) {
+    LaunchedEffect(mapState, position, following, insets) {
         if (position == null || !following) return@LaunchedEffect
+        mapState.awaitViewport()
         val zoom = FOLLOW_ZOOM.takeIf { mapState.cameraPosition.zoom < MIN_FOLLOW_ZOOM }
         mapState.animateCamera(
             update = CameraUpdate(center = position.toPosition(), zoom = zoom),

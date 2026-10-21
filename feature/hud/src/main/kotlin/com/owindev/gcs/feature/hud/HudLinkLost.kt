@@ -3,7 +3,6 @@ package com.owindev.gcs.feature.hud
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,27 +28,11 @@ import com.owindev.gcs.core.designsystem.theme.GcsTheme
 
 /**
  * The active vehicle's link loss (REQ-017): an emergency banner across the top of the map, the largest and first
- * thing on screen, with the time without signal and the last known state; under it, the last data greyed with its
- * age and the map with the vehicle where it was last reported, greyed with the age of that position. Nothing in it
- * reads as current.
+ * thing on screen, with the time without signal and the last known state. Under it the HUD greys the last data and
+ * the map the vehicle where it was last reported, each with its age, so nothing reads as current.
  */
 @Composable
-internal fun LinkLostContent(
-    state: HudUiState.LinkLost,
-    map: @Composable (insets: PaddingValues) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    HudOverMap(
-        map = map,
-        modifier = modifier,
-        header = { EmergencyBanner(state = state) },
-        start = { TelemetryPanelContent(panel = state.lastData, lostFor = state.sinceLastHeartbeat) },
-        side = { OtherVehiclesBanner(systemIds = state.otherVehicles) },
-    )
-}
-
-@Composable
-private fun EmergencyBanner(state: HudUiState.LinkLost) {
+internal fun EmergencyBanner(state: HudUiState.LinkLost) {
     val lastKnown = state.lastKnown
     Surface(
         modifier = Modifier

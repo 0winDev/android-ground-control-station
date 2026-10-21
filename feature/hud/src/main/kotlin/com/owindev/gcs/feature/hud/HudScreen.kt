@@ -63,17 +63,22 @@ internal fun HudContent(
                 StatusBar(state = state, palette = palette, onToggleTheme = onToggleTheme)
             }
         }
-        // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
-        when (state) {
-            is HudUiState.LinkLost -> LinkLostContent(state = state, map = map, modifier = Modifier.weight(1f))
-
-            else -> LinkContent(
-                state = state,
-                onAcknowledgeAlert = onAcknowledgeAlert,
-                map = map,
-                modifier = Modifier.weight(1f),
-            )
-        }
+        // One map whatever the state, so the camera never jumps when the link is lost or comes back.
+        HudOverMap(
+            map = map,
+            modifier = Modifier.weight(1f),
+            // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
+            header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
+            start = { StartColumn(state = state) },
+            side = { SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert) },
+            centre = {
+                if (state.hasMessage()) {
+                    Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
+                        MainContent(state = state, modifier = Modifier.padding(all = ScreenPadding))
+                    }
+                }
+            },
+        )
         Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
             Box(modifier = Modifier.padding(vertical = ChipSpacing), contentAlignment = Alignment.Center) {
                 Disclaimer()
@@ -82,45 +87,42 @@ internal fun HudContent(
     }
 }
 
+/** The telemetry panel: live while the vehicle is heard, greyed as its last data once the link is lost (REQ-017). */
 @Composable
-private fun LinkContent(
-    state: HudUiState,
-    onAcknowledgeAlert: (occurrence: Long) -> Unit,
-    map: @Composable (insets: PaddingValues) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    HudOverMap(
-        map = map,
-        modifier = modifier,
-        start = {
-            if (state is HudUiState.Connected) {
-                TelemetryPanelContent(panel = state.telemetry)
-                DatagramLine(port = state.port, datagramCount = state.datagramCount)
-            }
-        },
-        side = {
-            when (state) {
-                is HudUiState.Connected -> {
-                    // The vehicle's own alerts first: the banners below are about this device and the link.
-                    AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
-                    UnstableLinkBanner(linkUnstable = state.linkUnstable)
-                    OtherVehiclesBanner(systemIds = state.otherVehicles)
-                }
+private fun StartColumn(state: HudUiState) {
+    when (state) {
+        is HudUiState.Connected -> {
+            TelemetryPanelContent(panel = state.telemetry)
+            DatagramLine(port = state.port, datagramCount = state.datagramCount)
+        }
 
-                is HudUiState.WaitingForVehicle -> UnstableLinkBanner(linkUnstable = state.linkUnstable)
+        is HudUiState.LinkLost -> TelemetryPanelContent(panel = state.lastData, lostFor = state.sinceLastHeartbeat)
 
-                else -> Unit
-            }
-        },
-        centre = {
-            if (state !is HudUiState.Connected && state != HudUiState.Starting) {
-                Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-                    MainContent(state = state, modifier = Modifier.padding(all = ScreenPadding))
-                }
-            }
-        },
-    )
+        else -> Unit
+    }
 }
+
+@Composable
+private fun SideColumn(state: HudUiState, onAcknowledgeAlert: (occurrence: Long) -> Unit) {
+    when (state) {
+        is HudUiState.Connected -> {
+            // The vehicle's own alerts first: the banners below are about this device and the link.
+            AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
+            UnstableLinkBanner(linkUnstable = state.linkUnstable)
+            OtherVehiclesBanner(systemIds = state.otherVehicles)
+        }
+
+        is HudUiState.WaitingForVehicle -> UnstableLinkBanner(linkUnstable = state.linkUnstable)
+
+        is HudUiState.LinkLost -> OtherVehiclesBanner(systemIds = state.otherVehicles)
+
+        else -> Unit
+    }
+}
+
+/** Whether the state is told in words in the middle of the map: waiting for a vehicle, or a fault of the link. */
+private fun HudUiState.hasMessage(): Boolean =
+    this !is HudUiState.Connected && this !is HudUiState.LinkLost && this != HudUiState.Starting
 
 /** The link's traffic in one line under the panel, once a vehicle is heard. */
 @Composable
