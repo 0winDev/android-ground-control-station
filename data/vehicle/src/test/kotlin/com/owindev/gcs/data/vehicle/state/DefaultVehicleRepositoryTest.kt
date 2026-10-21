@@ -2,6 +2,7 @@ package com.owindev.gcs.data.vehicle.state
 
 import android.util.Log
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -82,7 +83,7 @@ class DefaultVehicleRepositoryTest {
     private val transport: UdpTransport = mockk()
     private val telemetryRequester: TelemetryRequester = mockk()
     private val telemetryTargets: CapturingSlot<Flow<TelemetryTarget?>> = slot()
-    private val telemetryStore = TelemetryStore()
+    private val telemetryStore = TelemetryStore(TrailRule(StalenessRule()))
 
     private lateinit var repository: DefaultVehicleRepository
 

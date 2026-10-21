@@ -1,6 +1,10 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.Telemetry
+import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.telemetry.Trail
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
@@ -15,7 +19,6 @@ import kotlin.time.TimeMark
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 
 /**
  * The last telemetry of every vehicle heard, keyed by system ID (REQ-016, REQ-026): a vehicle's telemetry
@@ -25,15 +28,20 @@ import kotlinx.coroutines.flow.update
  * it is filled for exactly as long as the link is listened to. Nothing is ever removed: a vehicle that stops
  * sending keeps its last values, which grow stale. Only its home is forgotten, when it reboots (REQ-033).
  *
+ * Each vehicle's [trails] (REQ-035) follow its positions as they arrive, one at a time, so none is lost to a consumer
+ * that observes late or seldom.
+ *
  * It holds one link session at a time, live or a replay (REQ-037): [startSession] forgets everything, and a message
  * from another session is dropped. The listener and the vehicle repository's watchdog both call it, hence the lock.
  */
 @Singleton
-internal class TelemetryStore @Inject constructor() {
+internal class TelemetryStore @Inject constructor(private val trailRule: TrailRule) {
 
     private val lock = Any()
 
     private val mutableTelemetry = MutableStateFlow<Map<SystemId, Telemetry>>(emptyMap())
+
+    private val mutableTrails = MutableStateFlow<Map<SystemId, Trail>>(emptyMap())
 
     /** The last `time_boot_ms` of each autopilot message that carries one, by system ID and message; under [lock]. */
     private val lastBootTimes = mutableMapOf<Pair<SystemId, KClass<out MavlinkMessage>>, Long>()
@@ -44,6 +52,8 @@ internal class TelemetryStore @Inject constructor() {
         private set
 
     val telemetry: StateFlow<Map<SystemId, Telemetry>> = mutableTelemetry.asStateFlow()
+
+    val trails: StateFlow<Map<SystemId, Trail>> = mutableTrails.asStateFlow()
 
     /**
      * Keeps [received] if it is telemetry from a vehicle's autopilot, marked [receivedAt], and returns whether it
@@ -57,21 +67,30 @@ internal class TelemetryStore @Inject constructor() {
         if (received.systemId == BROADCAST_SYSTEM_ID || received.session != session) return false
         val systemId = SystemId(received.systemId)
         val rebooted = isReboot(systemId, received)
-        mutableTelemetry.update { all ->
-            val known = all[systemId]
-            val kept = if (rebooted) known?.copy(home = null) else known
-            val updated =
-                TelemetryMapper.update(kept ?: Telemetry(origin = session.origin), received, receivedAt) ?: kept
-            if (updated == null || updated == known) all else all + (systemId to updated)
+        val known = mutableTelemetry.value[systemId]
+        val kept = if (rebooted) known?.copy(home = null) else known
+        val updated = TelemetryMapper.update(kept ?: Telemetry(origin = session.origin), received, receivedAt) ?: kept
+        if (updated != null && updated != known) {
+            mutableTelemetry.value += systemId to updated
+            // A new position part, not an equal one: a GLOBAL_POSITION_INT has just arrived.
+            if (updated.position !== kept?.position) followPosition(systemId, kept?.position, updated)
         }
         return rebooted
     }
 
-    /** Forgets every vehicle's telemetry and keeps only [session]'s from now on. */
+    // Under lock, its only writer besides startSession.
+    private fun followPosition(systemId: SystemId, previous: Timed<GlobalPosition>?, telemetry: Telemetry) {
+        val trail = mutableTrails.value[systemId] ?: Trail.EMPTY
+        val next = trailRule.after(trail, previous, telemetry)
+        if (next !== trail) mutableTrails.value += systemId to next
+    }
+
+    /** Forgets every vehicle's telemetry and trail and keeps only [session]'s from now on. */
     fun startSession(session: SessionId) = synchronized(lock) {
         this.session = session
         lastBootTimes.clear()
         mutableTelemetry.value = emptyMap()
+        mutableTrails.value = emptyMap()
     }
 
     /**

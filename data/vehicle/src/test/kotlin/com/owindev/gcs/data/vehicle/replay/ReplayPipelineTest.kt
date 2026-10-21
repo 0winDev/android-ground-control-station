@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.replay.ReplayRule
 import com.owindev.gcs.core.domain.replay.ReplayState
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
@@ -80,7 +81,7 @@ class ReplayPipelineTest {
     private val transport: UdpTransport = mockk()
     private val recorder: FlightRecorder = ignoringRecorder()
     private val activeVehicle = ActiveVehicle()
-    private val store = TelemetryStore()
+    private val store = TelemetryStore(TrailRule(StalenessRule()))
     private val recordings get() = File(temp, "tlogs").apply { mkdirs() }
 
     private lateinit var session: LinkSession

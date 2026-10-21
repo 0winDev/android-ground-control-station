@@ -1,5 +1,7 @@
 package com.owindev.gcs.data.vehicle.telemetry
 
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.VehicleLink
@@ -50,7 +52,7 @@ class TelemetryFromLinkTest {
     private val transport: UdpTransport = mockk()
     private val telemetryRequester: TelemetryRequester = mockk()
     private val isHeard: CapturingSlot<() -> Boolean> = slot()
-    private val store = TelemetryStore()
+    private val store = TelemetryStore(TrailRule(StalenessRule()))
     private val activeVehicle = ActiveVehicle()
 
     private lateinit var repository: DefaultVehicleRepository

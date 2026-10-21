@@ -1,5 +1,7 @@
 package com.owindev.gcs.data.vehicle.state
 
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.transport.Datagram
@@ -68,7 +70,7 @@ class SessionChangeTest {
             rule = LinkLossRule(),
             heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session)),
             telemetryRequester = telemetryRequester,
-            telemetryStore = TelemetryStore(),
+            telemetryStore = TelemetryStore(TrailRule(StalenessRule())),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
         )
