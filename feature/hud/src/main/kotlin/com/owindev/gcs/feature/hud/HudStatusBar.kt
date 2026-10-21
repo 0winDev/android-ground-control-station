@@ -36,7 +36,12 @@ import com.owindev.gcs.core.domain.vehicle.FlightMode
  * values, all greyed as the last data under the banner (REQ-017).
  */
 @Composable
-internal fun StatusBar(state: HudUiState, palette: GcsPalette, onToggleTheme: () -> Unit) {
+internal fun StatusBar(
+    state: HudUiState,
+    palette: GcsPalette,
+    onToggleTheme: () -> Unit,
+    onOpenLicences: () -> Unit = {},
+) {
     val noValue = stringResource(id = R.string.hud_no_value)
     val lost = state is HudUiState.LinkLost
     val vehicle = (state as? HudUiState.Connected)?.vehicle ?: (state as? HudUiState.LinkLost)?.lastKnown
@@ -48,6 +53,7 @@ internal fun StatusBar(state: HudUiState, palette: GcsPalette, onToggleTheme: ()
         horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
     ) {
         ThemeToggle(palette = palette, onToggle = onToggleTheme)
+        if (state.licencesAvailable) LicencesButton(onClick = onOpenLicences)
         FlowRow(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(space = ChipSpacing, alignment = Alignment.End),

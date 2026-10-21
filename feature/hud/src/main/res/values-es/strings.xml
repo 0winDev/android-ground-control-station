@@ -103,4 +103,20 @@
     <string name="hud_datagram_line">%1$d datagramas · %2$s</string>
     <string name="hud_last_data">Últimos datos · hace %1$s</string>
     <string name="hud_link_lost_chip">Perdido</string>
+    <string name="hud_licences">Licencias</string>
+    <string name="hud_licences_open">Abrir las licencias</string>
+    <string name="hud_licences_title">Licencias</string>
+    <string name="hud_licences_close">Cerrar</string>
+    <string name="hud_licence_osm">Datos del mapa © colaboradores de OpenStreetMap</string>
+    <string name="hud_licence_osm_terms">Open Database License (ODbL)</string>
+    <string name="hud_licence_openmaptiles">© OpenMapTiles</string>
+    <string name="hud_licence_openmaptiles_terms">Esquema de teselas vectoriales; diseño bajo CC BY 4.0</string>
+    <string name="hud_licence_openfreemap">OpenFreeMap</string>
+    <string name="hud_licence_openfreemap_terms">Teselas, estilos, fuentes e iconos del mapa</string>
+    <string name="hud_licence_osm_liberty">Estilo de mapa OSM Liberty</string>
+    <string name="hud_licence_osm_liberty_terms">JSON del estilo bajo la licencia BSD de 3 cláusulas, diseño bajo CC BY 3.0; recoloreado para el mapa nocturno</string>
+    <string name="hud_licence_fonts">Fuentes Barlow, Barlow Condensed e IBM Plex Mono</string>
+    <string name="hud_licence_fonts_terms">SIL Open Font License 1.1</string>
+    <string name="hud_licence_material_symbols">Material Symbols</string>
+    <string name="hud_licence_material_symbols_terms">Apache License 2.0</string>
 </resources>

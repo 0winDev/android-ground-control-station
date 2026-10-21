@@ -14,7 +14,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -57,10 +61,19 @@ internal fun HudContent(
     onToggleTheme: () -> Unit = {},
     map: @Composable (insets: PaddingValues) -> Unit = {},
 ) {
+    var licencesOpen by rememberSaveable { mutableStateOf(false) }
+    // Arming closes them: nothing may stand between the operator and an armed vehicle.
+    if (licencesOpen && state.licencesAvailable) LicencesDialog(onDismiss = { licencesOpen = false })
+    LaunchedEffect(state.licencesAvailable) { if (!state.licencesAvailable) licencesOpen = false }
     Column(modifier = modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surface) {
             Box(modifier = Modifier.padding(horizontal = ScreenPadding, vertical = ContentSpacing)) {
-                StatusBar(state = state, palette = palette, onToggleTheme = onToggleTheme)
+                StatusBar(
+                    state = state,
+                    palette = palette,
+                    onToggleTheme = onToggleTheme,
+                    onOpenLicences = { licencesOpen = true },
+                )
             }
         }
         // One map whatever the state, so the camera never jumps when the link is lost or comes back.
