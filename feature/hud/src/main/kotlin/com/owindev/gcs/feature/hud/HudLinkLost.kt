@@ -1,8 +1,9 @@
 package com.owindev.gcs.feature.hud
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,65 +27,75 @@ import androidx.compose.ui.unit.dp
 import com.owindev.gcs.core.designsystem.R as DesignSystemR
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 
-/** Full-screen emergency for the active vehicle's link loss (REQ-017), with its last known state. */
+/**
+ * The active vehicle's link loss (REQ-017): an emergency banner across the top of the map, the largest and first
+ * thing on screen, with the time without signal and the last known state; under it, the last data greyed with its
+ * age and the map with the vehicle where it was last reported, greyed with the age of that position. Nothing in it
+ * reads as current.
+ */
 @Composable
-internal fun LinkLostContent(state: HudUiState.LinkLost, modifier: Modifier = Modifier) {
+internal fun LinkLostContent(
+    state: HudUiState.LinkLost,
+    map: @Composable (insets: PaddingValues) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    HudOverMap(
+        map = map,
+        modifier = modifier,
+        header = { EmergencyBanner(state = state) },
+        start = { TelemetryPanelContent(panel = state.lastData, lostFor = state.sinceLastHeartbeat) },
+        side = { OtherVehiclesBanner(systemIds = state.otherVehicles) },
+    )
+}
+
+@Composable
+private fun EmergencyBanner(state: HudUiState.LinkLost) {
     val lastKnown = state.lastKnown
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(GcsTheme.colors.emergencyContainer)
-            .padding(all = ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(ContentSpacing),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Announced by TalkBack as soon as it appears, interrupting whatever was being read.
+            .semantics { liveRegion = LiveRegionMode.Assertive },
+        shape = ChipShape,
+        color = GcsTheme.colors.emergencyContainer,
+        border = BorderStroke(width = EmergencyBorder, color = GcsTheme.colors.emergency),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                // Announced by TalkBack as soon as it appears, interrupting whatever was being read.
-                .semantics { liveRegion = LiveRegionMode.Assertive },
-            verticalArrangement = Arrangement.spacedBy(space = ContentSpacing, alignment = Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Row(
+            modifier = Modifier.padding(all = ScreenPadding),
+            horizontalArrangement = Arrangement.spacedBy(ScreenPadding),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Decorative: the title right below says the same in words.
+            // Decorative: the title right beside it says the same in words.
             Icon(
                 painter = painterResource(id = DesignSystemR.drawable.ic_link_lost),
                 contentDescription = null,
                 tint = GcsTheme.colors.emergency,
                 modifier = Modifier.size(EmergencyIconSize),
             )
-            Text(
-                text = stringResource(id = R.string.hud_link_lost_title).uppercase(),
-                style = MaterialTheme.typography.displayLarge,
-                color = GcsTheme.colors.onEmergencyContainer,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = stringResource(id = R.string.hud_link_lost_since, formatElapsed(state.sinceLastHeartbeat)),
-                style = GcsTheme.telemetryTypography.valueLarge,
-                color = GcsTheme.colors.onEmergencyContainer,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = stringResource(id = R.string.hud_last_known).uppercase(),
-                style = MaterialTheme.typography.labelLarge,
-                color = GcsTheme.colors.stale,
-            )
-            Text(
-                text = listOf(
-                    stringResource(id = R.string.hud_system, lastKnown.systemId),
-                    flightModeText(lastKnown.flightMode),
-                    armedText(lastKnown.armed),
-                ).joinToString(separator = " · ").uppercase(),
-                style = MaterialTheme.typography.headlineMedium,
-                color = GcsTheme.colors.stale,
-                textAlign = TextAlign.Center,
-            )
-            state.localFault?.let { fault -> LocalFaultText(fault = fault) }
+            Column(verticalArrangement = Arrangement.spacedBy(ChipSpacing)) {
+                Text(
+                    text = stringResource(id = R.string.hud_link_lost_title).uppercase(),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = GcsTheme.colors.onEmergencyContainer,
+                )
+                Text(
+                    text = stringResource(id = R.string.hud_link_lost_since, formatElapsed(state.sinceLastHeartbeat)),
+                    style = GcsTheme.telemetryTypography.valueLarge,
+                    color = GcsTheme.colors.onEmergencyContainer,
+                )
+                Text(
+                    text = listOf(
+                        stringResource(id = R.string.hud_last_known),
+                        stringResource(id = R.string.hud_system, lastKnown.systemId),
+                        flightModeText(lastKnown.flightMode),
+                        armedText(lastKnown.armed),
+                    ).joinToString(separator = " · ").uppercase(),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = GcsTheme.colors.onEmergencyContainer,
+                )
+                state.localFault?.let { fault -> LocalFaultText(fault = fault) }
+            }
         }
-        OtherVehiclesBanner(systemIds = state.otherVehicles)
-        Disclaimer()
     }
 }
 
@@ -149,3 +160,4 @@ private fun CautionBanner(text: String) {
 }
 
 private val EmergencyIconSize = 72.dp
+private val EmergencyBorder = 2.dp

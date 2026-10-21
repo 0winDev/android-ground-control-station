@@ -65,7 +65,7 @@ internal fun HudContent(
         }
         // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
         when (state) {
-            is HudUiState.LinkLost -> LinkLostContent(state = state, modifier = Modifier.weight(1f))
+            is HudUiState.LinkLost -> LinkLostContent(state = state, map = map, modifier = Modifier.weight(1f))
 
             else -> LinkContent(
                 state = state,

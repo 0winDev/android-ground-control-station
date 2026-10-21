@@ -97,4 +97,6 @@
     <string name="hud_theme_switch_to_day">Cambiar al tema de día</string>
     <string name="hud_theme_switch_to_night">Cambiar al tema de noche</string>
     <string name="hud_datagram_line">%1$d datagramas · %2$s</string>
+    <string name="hud_last_data">Últimos datos · hace %1$d s</string>
+    <string name="hud_link_lost_chip">Perdido</string>
 </resources>

@@ -699,25 +699,6 @@ class HudViewModelTest {
     }
 
     @Tag("REQ-029")
-    @Test
-    fun `GIVEN telemetry but the vehicle lost WHEN observing the state THEN only the link loss is shown`() = runTest {
-        turbineScope {
-            activeSystemId.value = SYSTEM_1
-            vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = FOUR_SECONDS))
-            activeTelemetry.value =
-                Telemetry(attitude = Timed(LEVEL, testScheduler.timeSource.markNow()), origin = DataOrigin.LIVE)
-
-            val result = viewModel.state.testIn(backgroundScope)
-
-            result.expectMostRecentItem() shouldBeEqualTo HudUiState.LinkLost(
-                lastKnown = GUIDED_ARMED_1,
-                sinceLastHeartbeat = FOUR_SECONDS,
-                otherVehicles = emptyList(),
-            )
-        }
-    }
-
-    @Tag("REQ-029")
     @Tag("REQ-026")
     @Test
     fun `GIVEN the link was lost WHEN the vehicle is heard again THEN its old telemetry shows stale with its age`() =

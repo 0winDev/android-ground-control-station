@@ -127,9 +127,9 @@ private fun LinkChip(state: HudUiState) {
         HudUiState.ReplayUnreadable,
         -> stringResource(id = R.string.hud_link_failed) to GcsTheme.colors.emergency
 
-        HudUiState.Starting,
-        is HudUiState.LinkLost,
-        -> stringResource(id = R.string.hud_no_value) to MaterialTheme.colorScheme.onSurface
+        is HudUiState.LinkLost -> stringResource(id = R.string.hud_link_lost_chip) to GcsTheme.colors.emergency
+
+        HudUiState.Starting -> stringResource(id = R.string.hud_no_value) to MaterialTheme.colorScheme.onSurface
     }
     StatusChip(label = stringResource(id = R.string.hud_label_link), value = value, valueColor = color)
 }

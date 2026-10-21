@@ -13,8 +13,8 @@ import kotlin.time.Duration
 // How the HUD writes telemetry values: units in the strings, numbers in the device's locale (REQ-029).
 
 @Composable
-internal fun valueColor(reading: Reading<*>?): Color =
-    if (reading?.stale == true) GcsTheme.colors.stale else MaterialTheme.colorScheme.onSurface
+internal fun valueColor(reading: Reading<*>?, lost: Boolean = false): Color =
+    if (lost || reading?.stale == true) GcsTheme.colors.stale else MaterialTheme.colorScheme.onSurface
 
 @Composable
 internal fun ageText(age: Duration): String = stringResource(id = R.string.hud_age_seconds, age.inWholeSeconds)

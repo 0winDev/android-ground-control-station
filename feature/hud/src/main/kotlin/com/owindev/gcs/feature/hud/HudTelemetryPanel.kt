@@ -32,9 +32,13 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The active vehicle's telemetry, as the prototype's left panel (REQ-029). A value the vehicle does not know, or
  * sent out of range, is shown as no value; a stale one is greyed and shows its age, never colour alone.
+ *
+ * With [lostFor] set, the link is lost (REQ-017): every value is greyed under a "last data" header with that age, so
+ * none of it reads as current, whatever arrived last.
  */
 @Composable
-internal fun TelemetryPanelContent(panel: TelemetryPanel, modifier: Modifier = Modifier) {
+internal fun TelemetryPanelContent(panel: TelemetryPanel, modifier: Modifier = Modifier, lostFor: Duration? = null) {
+    val lost = lostFor != null
     Surface(
         modifier = modifier.width(PanelWidth),
         shape = ChipShape,
@@ -44,19 +48,22 @@ internal fun TelemetryPanelContent(panel: TelemetryPanel, modifier: Modifier = M
             modifier = Modifier.padding(all = ContentSpacing),
             verticalArrangement = Arrangement.spacedBy(ContentSpacing),
         ) {
-            AttitudeLine(reading = panel.attitude)
+            lostFor?.let { LastDataHeader(age = it) }
+            AttitudeLine(reading = panel.attitude, lost = lost)
             Row(horizontalArrangement = Arrangement.spacedBy(ContentSpacing)) {
                 ValueCell(
                     label = stringResource(id = R.string.hud_label_altitude),
                     value = panel.position?.value?.position?.let { metres(it.altitudeAboveHome) },
                     reading = panel.position,
                     modifier = Modifier.weight(1f),
+                    lost = lost,
                 )
                 ValueCell(
                     label = stringResource(id = R.string.hud_label_ground_speed),
                     value = panel.airData?.value?.groundspeed?.let { speed(it) },
                     reading = panel.airData,
                     modifier = Modifier.weight(1f),
+                    lost = lost,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(ContentSpacing)) {
@@ -65,23 +72,25 @@ internal fun TelemetryPanelContent(panel: TelemetryPanel, modifier: Modifier = M
                     value = panel.position?.value?.position?.heading?.let { degrees(it) },
                     reading = panel.position,
                     modifier = Modifier.weight(1f),
+                    lost = lost,
                 )
                 ValueCell(
                     label = stringResource(id = R.string.hud_label_vertical_speed),
                     value = panel.airData?.value?.let(AirData::climbRate)?.let { climbRate(it) },
                     reading = panel.airData,
                     modifier = Modifier.weight(1f),
+                    lost = lost,
                 )
             }
             HorizontalDivider()
-            PositionLines(reading = panel.position)
+            PositionLines(reading = panel.position, lost = lost)
         }
     }
 }
 
 /** Roll and pitch together: a horizon needs both, so with either one missing neither is shown (#49). */
 @Composable
-private fun AttitudeLine(reading: Reading<Attitude>?) {
+private fun AttitudeLine(reading: Reading<Attitude>?, lost: Boolean) {
     val roll = reading?.value?.roll
     val pitch = reading?.value?.pitch
     val text = if (roll != null && pitch != null) {
@@ -93,18 +102,18 @@ private fun AttitudeLine(reading: Reading<Attitude>?) {
         Text(
             text = text.uppercase(),
             style = MaterialTheme.typography.labelLarge,
-            color = valueColor(reading),
+            color = valueColor(reading, lost),
         )
         AgeText(reading = reading)
     }
 }
 
 @Composable
-private fun PositionLines(reading: Reading<PositionReading>?) {
+private fun PositionLines(reading: Reading<PositionReading>?, lost: Boolean) {
     val position = reading?.value?.position
     // Not verified is shown like stale, and said in words: it may be 0°, 0° or a frozen position.
     val notVerified = reading != null && !reading.value.verified
-    val color = if (notVerified) GcsTheme.colors.stale else valueColor(reading)
+    val color = if (notVerified) GcsTheme.colors.stale else valueColor(reading, lost)
     Column(verticalArrangement = Arrangement.spacedBy(ValueSpacing)) {
         Label(text = stringResource(id = R.string.hud_label_position))
         // Read before the digits, which stay readable: the last known position helps find the vehicle.
@@ -131,16 +140,32 @@ private fun PositionLines(reading: Reading<PositionReading>?) {
 }
 
 @Composable
-private fun ValueCell(label: String, value: String?, reading: Reading<*>?, modifier: Modifier = Modifier) {
+private fun ValueCell(
+    label: String,
+    value: String?,
+    reading: Reading<*>?,
+    modifier: Modifier = Modifier,
+    lost: Boolean = false,
+) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(ValueSpacing)) {
         Label(text = label)
         Text(
             text = value ?: stringResource(id = R.string.hud_no_value),
             style = GcsTheme.telemetryTypography.valueLarge,
-            color = valueColor(reading),
+            color = valueColor(reading, lost),
         )
         AgeText(reading = reading)
     }
+}
+
+/** The prototype's "last data · 7 s ago": how old the panel is since the link was last heard. */
+@Composable
+private fun LastDataHeader(age: Duration) {
+    Text(
+        text = stringResource(id = R.string.hud_last_data, age.inWholeSeconds).uppercase(),
+        style = MaterialTheme.typography.labelLarge,
+        color = GcsTheme.colors.stale,
+    )
 }
 
 @Composable
