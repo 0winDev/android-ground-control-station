@@ -32,13 +32,17 @@ import com.owindev.gcs.core.domain.vehicle.FlightMode
 /**
  * System, link, mode and armed state of the active vehicle, as chips like the prototype's top bar, and the operator's
  * switch between night and day (REQ-030). The switch keeps its place on the left; the chips wrap onto another line
- * when the screen is too narrow, so none is pushed off it or hidden.
+ * when the screen is too narrow, so none is pushed off it or hidden. Once the link is lost they keep the last known
+ * values, all greyed as the last data under the banner (REQ-017).
  */
 @Composable
 internal fun StatusBar(state: HudUiState, palette: GcsPalette, onToggleTheme: () -> Unit) {
     val noValue = stringResource(id = R.string.hud_no_value)
-    val vehicle = (state as? HudUiState.Connected)?.vehicle
-    val armed = vehicle?.armed == true
+    val lost = state is HudUiState.LinkLost
+    val vehicle = (state as? HudUiState.Connected)?.vehicle ?: (state as? HudUiState.LinkLost)?.lastKnown
+    val telemetry = (state as? HudUiState.Connected)?.telemetry ?: (state as? HudUiState.LinkLost)?.lastData
+    val armed = vehicle?.armed == true && !lost
+    val plainColor = if (lost) GcsTheme.colors.stale else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
@@ -52,18 +56,20 @@ internal fun StatusBar(state: HudUiState, palette: GcsPalette, onToggleTheme: ()
             StatusChip(
                 label = stringResource(id = R.string.hud_label_system),
                 value = vehicle?.let { stringResource(id = R.string.hud_system, it.systemId) } ?: noValue,
+                valueColor = plainColor,
             )
             LinkChip(state = state)
-            GpsChip(reading = (state as? HudUiState.Connected)?.telemetry?.gps)
-            BatteryChip(reading = (state as? HudUiState.Connected)?.telemetry?.battery)
+            GpsChip(reading = telemetry?.gps, lost = lost)
+            BatteryChip(reading = telemetry?.battery, lost = lost)
             StatusChip(
                 label = stringResource(id = R.string.hud_label_mode),
                 value = vehicle?.let { flightModeText(it.flightMode) } ?: noValue,
+                valueColor = plainColor,
             )
             StatusChip(
                 label = stringResource(id = R.string.hud_label_state),
                 value = vehicle?.let { armedText(it.armed) } ?: noValue,
-                valueColor = if (armed) GcsTheme.colors.caution else MaterialTheme.colorScheme.onSurface,
+                valueColor = if (armed) GcsTheme.colors.caution else plainColor,
                 containerColor = if (armed) {
                     GcsTheme.colors.cautionContainer
                 } else {
@@ -136,7 +142,7 @@ private fun LinkChip(state: HudUiState) {
 
 /** Fix and satellites, as the prototype's GPS chip; greyed with its age once stale (REQ-029). */
 @Composable
-private fun GpsChip(reading: Reading<GpsStatus>?) {
+private fun GpsChip(reading: Reading<GpsStatus>?, lost: Boolean) {
     val noValue = stringResource(id = R.string.hud_no_value)
     val gps = reading?.value
     val value = gps?.let {
@@ -149,7 +155,7 @@ private fun GpsChip(reading: Reading<GpsStatus>?) {
     StatusChip(
         label = stringResource(id = R.string.hud_label_gps),
         value = withAge(value, reading),
-        valueColor = valueColor(reading),
+        valueColor = valueColor(reading, lost),
     )
 }
 
@@ -158,7 +164,7 @@ private fun GpsChip(reading: Reading<GpsStatus>?) {
  * monitor and an unhealthy battery are said in words, the latter also in the emergency colour (#41).
  */
 @Composable
-private fun BatteryChip(reading: Reading<Battery>?) {
+private fun BatteryChip(reading: Reading<Battery>?, lost: Boolean) {
     val noValue = stringResource(id = R.string.hud_no_value)
     val state = batteryChipStateOf(reading?.value)
     val value = when (state) {
@@ -175,11 +181,12 @@ private fun BatteryChip(reading: Reading<Battery>?) {
             if (state.healthy) measured else stringResource(id = R.string.hud_battery_unhealthy, measured)
         }
     }
-    val unhealthy = state is BatteryChipState.Measured && !state.healthy
+    // A battery last reported unhealthy keeps saying so in words; once the link is lost it is greyed like the rest.
+    val unhealthy = state is BatteryChipState.Measured && !state.healthy && !lost
     StatusChip(
         label = stringResource(id = R.string.hud_label_battery),
         value = withAge(value, reading),
-        valueColor = if (unhealthy && reading?.stale != true) GcsTheme.colors.emergency else valueColor(reading),
+        valueColor = if (unhealthy && reading?.stale != true) GcsTheme.colors.emergency else valueColor(reading, lost),
         containerColor = if (unhealthy) {
             GcsTheme.colors.emergencyContainer
         } else {
