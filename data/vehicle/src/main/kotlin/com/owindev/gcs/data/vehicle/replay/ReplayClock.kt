@@ -35,8 +35,9 @@ internal class ReplayClock(private val device: TimeSource.WithComparableMarks) {
     }
 
     /**
-     * Suspends until the clock plays and its position has reached [target], so a paused replay delivers nothing, not even
-     * what was already due. The position is read again after each wait, since a pause may have come in the middle of it.
+     * Suspends until the clock plays and its position has reached [target], so a paused replay delivers nothing, not
+     * even what was already due. The position is read again after each wait, since a pause may have come in the middle
+     * of it.
      */
     suspend fun awaitPosition(target: Duration) {
         do {

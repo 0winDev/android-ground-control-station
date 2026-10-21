@@ -86,6 +86,38 @@ class PipelineClockTest {
 
     @Tag("REQ-037")
     @Test
+    fun `GIVEN a replay clock that played before it was followed WHEN it is followed THEN no time jumps ahead`() {
+        val replay = clock.newReplayClock()
+        replay.play()
+        device += UNOBSERVED
+        val mark = clock.markNow()
+
+        clock.startReplay(replay)
+        val result = mark.elapsedNow()
+
+        result shouldBeEqualTo Duration.ZERO
+    }
+
+    @Tag("REQ-017")
+    @Test
+    fun `GIVEN a replay that played before it was followed WHEN it ends THEN a live mark ages with the device`() {
+        val replay = clock.newReplayClock()
+        replay.play()
+        device += UNOBSERVED
+        clock.startReplay(replay)
+        device += PLAYED
+        clock.markNow()
+        clock.endReplay()
+        val mark = clock.markNow()
+
+        device += LIVE
+        val result = mark.elapsedNow()
+
+        result shouldBeEqualTo LIVE
+    }
+
+    @Tag("REQ-037")
+    @Test
     fun `GIVEN a paused replay that ended WHEN time passes THEN follows the device again`() {
         val replay = clock.newReplayClock().also(clock::startReplay)
         replay.play()
@@ -105,3 +137,4 @@ class PipelineClockTest {
 private val LIVE = 5.seconds
 private val PLAYED = 2.seconds
 private val PAUSED = 30.seconds
+private val UNOBSERVED = 30.seconds

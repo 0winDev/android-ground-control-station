@@ -101,8 +101,10 @@ internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
  * Instead of the live link it can play a recording ([replay], REQ-037), through the same parser and decoder, until
  * [live] gives the link back. The two never run together: the live session, its socket and its recording are closed
  * before the replay's first datagram. A replay is passive: it has no socket, never retries, never feeds the recorder,
- * and pins the replay's own active vehicle. Each switch starts a new [session], set before the source changes, so
- * anything that must not reach the vehicle can check it first, and every message carries the session it belongs to.
+ * and pins the replay's own active vehicle. Each switch starts a new [session], and every message carries the session
+ * it belongs to. A replay's session is set before its source starts, so anything that must not reach the vehicle can
+ * check it first; the live session is set once the replay's source is told to stop, so nothing is sent before then,
+ * and a live message that arrives before the watchdog moves on is dropped as another session's.
  * The pipeline's time switches inside each source, once the one before has finished: the [pipelineClock] follows the
  * replay's clock from its first datagram and the device again from the live link's, so a live datagram is never marked
  * on a replay's time. A replay that ends or fails stays in [status] until [live] or until nobody observes it; observed

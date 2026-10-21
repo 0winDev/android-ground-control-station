@@ -259,6 +259,38 @@ class ReplayPipelineTest {
         }
 
     @Test
+    fun `GIVEN a replay started before anyone observed WHEN observed THEN its vehicle and telemetry show`() =
+        testScope.runTest {
+            repository.play(recordingOf(0L to HEARTBEAT, 100L to POSITION))
+
+            vehicles.vehicles.launchIn(backgroundScope)
+            delay(1.seconds)
+            val result = vehicles.vehicles.value.keys to store.telemetry.value.keys
+
+            result shouldBeEqualTo (setOf(VEHICLE) to setOf(VEHICLE))
+        }
+
+    @Tag("REQ-017")
+    @Test
+    fun `GIVEN a replay played while nobody observed WHEN the live vehicle then goes silent THEN is LOST on time`() =
+        testScope.runTest {
+            coEvery { transport.send(any(), any()) } returns SendResult.Sent
+            repository.play(recordingOf(*everySecond(count = 60, HEARTBEAT)))
+            delay(UNOBSERVED)
+            val observer = vehicles.vehicles.launchIn(backgroundScope)
+            delay(1.seconds)
+            every { transport.datagrams() } returns liveSocketWith(HEARTBEAT)
+            val stoppedAt = currentTime
+            repository.stop()
+
+            vehicles.vehicles.first { it[VEHICLE]?.link == VehicleLink.LOST }
+            val result = (currentTime - stoppedAt).milliseconds
+
+            result shouldBeEqualTo LinkLossRule.DEFAULT_TIMEOUT
+            observer.cancel()
+        }
+
+    @Test
     fun `GIVEN a replay WHEN it is stopped THEN its vehicle is forgotten and the live one is active again`() =
         testScope.runTest {
             every { transport.datagrams() } returns liveSocketWith(HEARTBEAT)
@@ -364,6 +396,7 @@ private val VEHICLE = SystemId(1)
 private val PAUSE = 30.seconds
 private val PLAYED_THROUGH = 40.seconds
 private val LIVE_LOST: Duration = 4.seconds
+private val UNOBSERVED = 30.seconds
 private val TIMEOUT_EDGE = LinkLossRule.DEFAULT_TIMEOUT - 1.milliseconds
 
 /** 20 checks a second at most over the pause, with room: an unbounded re-check would read the clock every 1 ms. */

@@ -23,7 +23,7 @@ sealed interface ReplayState {
         override val origin = DataOrigin.REPLAY
     }
 
-    /** [recording] has nothing more to play; its time goes on, so what it showed grows stale until [ReplayRepository.stop]. */
+    /** [recording] has nothing more to play; its time goes on, so what it showed grows stale until it is stopped. */
     data class Ended(val recording: File) : ReplayState {
         override val origin = DataOrigin.REPLAY
     }

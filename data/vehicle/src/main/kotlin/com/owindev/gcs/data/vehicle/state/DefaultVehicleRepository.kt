@@ -76,8 +76,9 @@ import kotlinx.coroutines.launch
  *
  * A replay (REQ-037) is a session of its own: when the link's [LinkSession.session] changes, the watchdog forgets every
  * vehicle, timer, address and request target, and the store its telemetry, so nothing live shows in a replay, nor one
- * replay in the next, nor a replay after it; a message from another session is dropped. The heartbeat and telemetry jobs only run on the live link, and only
- * the live active vehicle is ever a telemetry target, so a replay never transmits.
+ * replay in the next, nor a replay after it; a message from another session is dropped. The heartbeat and telemetry
+ * jobs only run on the live link, and only the live active vehicle is ever a telemetry target, so a replay never
+ * transmits.
  *
  * Time comes from the injected [timeSource]; on a device it keeps counting while the CPU sleeps, so a
  * vehicle's age is right after waking. Timers use coroutine `delay`, which pauses during sleep, so the
@@ -148,7 +149,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Marked on arrival, not when the watchdog gets to it.
                         val at = timeSource.markNow()
                         if (telemetryStore.record(received, at)) {
-                            events.send(Event.Rebooted(SystemId(received.systemId)))
+                            events.send(Event.Rebooted(SystemId(received.systemId), received.session))
                         }
                         HeartbeatMapper.vehicleStateOf(received)?.let { state ->
                             events.send(Event.Heard(state, at, received.sender, received.session))
@@ -204,7 +205,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         }
                     }
 
-                    is Event.Rebooted -> requestAgainAfterReboot(event.systemId)
+                    is Event.Rebooted -> requestAgainAfterReboot(event, current)
 
                     is Event.SessionChanged -> current = changeSession(from = current, to = event.session, timers)
                 }
@@ -223,9 +224,9 @@ internal class DefaultVehicleRepository @Inject constructor(
     }
 
     /**
-     * Forgets every vehicle, timer, address and telemetry of the session [from], if [to] is another one, and returns the
-     * session now. Any request target still queued is dropped, so none outlives its session, and the telemetry job is
-     * told no vehicle is to be asked. Only the watchdog calls it, and only it sends targets.
+     * Forgets every vehicle, timer, address and telemetry of the session [from], if [to] is another one, and returns
+     * the session now. Any request target still queued is dropped, so none outlives its session, and the telemetry job
+     * is told no vehicle is to be asked. Only the watchdog calls it, and only it sends targets.
      */
     private fun changeSession(from: SessionId, to: SessionId, timers: MutableMap<SystemId, Job>): SessionId {
         if (to == from) return from
@@ -260,10 +261,13 @@ internal class DefaultVehicleRepository @Inject constructor(
     }
 
     /**
-     * Tells the telemetry job to start a new round if [systemId] is the active vehicle and CONNECTED; otherwise it
-     * gets one when it is CONNECTED again. Only the watchdog calls it.
+     * Tells the telemetry job to start a new round if the [reboot] is of the [current] session and the active vehicle,
+     * CONNECTED; otherwise it gets one when it is CONNECTED again. Only the watchdog calls it.
      */
-    private fun requestAgainAfterReboot(systemId: SystemId) {
+    private fun requestAgainAfterReboot(reboot: Event.Rebooted, current: SessionId) {
+        // A reboot seen in the session before belongs to a vehicle nobody shows any more.
+        if (reboot.session != current) return
+        val systemId = reboot.systemId
         val vehicle = mutableVehicles.value[systemId]
         val connected = vehicle?.link == VehicleLink.CONNECTED && vehicle.origin == DataOrigin.LIVE
         if (systemId == activeVehicle.systemId.value && connected) {
@@ -304,7 +308,7 @@ internal class DefaultVehicleRepository @Inject constructor(
 
         data class TimedOut(val systemId: SystemId) : Event
 
-        data class Rebooted(val systemId: SystemId) : Event
+        data class Rebooted(val systemId: SystemId, val session: SessionId) : Event
 
         data class SessionChanged(val session: SessionId) : Event
     }

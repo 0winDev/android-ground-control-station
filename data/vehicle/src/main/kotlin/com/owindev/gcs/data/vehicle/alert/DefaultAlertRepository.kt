@@ -83,13 +83,7 @@ internal class DefaultAlertRepository @Inject constructor(
         .combine(session.session) { systemId, current -> systemId?.let { ActiveIn(current, it) } }
         .distinctUntilChanged()
         .flatMapLatest { active ->
-            if (active ==
-                null
-            ) {
-                flowOf(null)
-            } else {
-                evaluationsOfNewVehicle(active.systemId, active.session.origin)
-            }
+            active?.let { evaluationsOfNewVehicle(it.systemId, it.session.origin) } ?: flowOf(null)
         }
 
     /**

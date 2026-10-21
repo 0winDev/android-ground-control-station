@@ -78,13 +78,6 @@ internal class FlightRecorder(
     private val events = Channel<Any>(Channel.UNLIMITED)
     private val pending = AtomicInteger()
     private val droppedCount = AtomicLong()
-
-    /**
-     * The name of the log being replayed, which retention never deletes (REQ-037), `null` once no replay reads it. Set
-     * before the replay closes the live session, whose closing applies the limit.
-     */
-    @Volatile
-    var replayed: String? = null
     private val signedUnknownCount = AtomicLong()
     private val setupSigningCount = AtomicLong()
     private val mutableStatus = MutableStateFlow(RecorderStatus.IDLE)
@@ -109,6 +102,13 @@ internal class FlightRecorder(
             signedUnknownMessage = signedUnknownCount.get(),
             setupSigning = setupSigningCount.get(),
         )
+
+    /**
+     * The name of the log being replayed, which retention never deletes (REQ-037), `null` once no replay reads it. Set
+     * before the replay closes the live session, whose closing applies the limit.
+     */
+    @Volatile
+    var replayed: String? = null
 
     /** A frame from the link, with its decoded [message] when it has one; called from the receive loop. */
     fun received(frame: RawFrame, message: ReceivedMessage?) {

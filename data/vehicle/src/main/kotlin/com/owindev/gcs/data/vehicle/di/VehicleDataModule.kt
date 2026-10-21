@@ -107,8 +107,8 @@ abstract class VehicleDataModule {
         fun provideRecordingRule(): RecordingRule = RecordingRule()
 
         /**
-         * Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. Only the
-         * live link is recorded, so its link loss is timed on the device clock, never a replay's.
+         * Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. Only
+         * the live link is recorded, so its link loss is timed on the device clock, never a replay's.
          */
         @Provides
         @Singleton

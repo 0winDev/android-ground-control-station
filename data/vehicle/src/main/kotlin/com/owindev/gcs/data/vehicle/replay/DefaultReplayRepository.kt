@@ -117,8 +117,8 @@ internal class DefaultReplayRepository(
     /**
      * [file] by its real path if it is one of the GCS's recordings: a regular file named as the recorder names its logs
      * (`.tlog`, never the marker) right in [recordings], by real paths, links resolved, which a canonical path does not
-     * do on every platform, so neither `..` nor a link can reach another file. `null` for anything else, a file that does
-     * not exist included. The replay opens the real path it returns, never the name it was given.
+     * do on every platform, so neither `..` nor a link can reach another file. `null` for anything else, a file that
+     * does not exist included. The replay opens the real path it returns, never the name it was given.
      */
     private fun recordingAt(file: File): File? = try {
         val real = file.toPath().toRealPath()
