@@ -266,6 +266,9 @@ the issue number to an existing one.
   (#71).
 - A value read inside `combine` from outside its inputs can belong to a newer emission than the inputs: publish what
   must match (a trail and its session) as one value (#72).
+- A camera move restarted for every position (5 Hz) is cancelled before the camera moves: follow with one conflated
+  loop, and check your own timing before blaming the library's gesture reason (#73).
+- Ages shown side by side need one clock and one rounding, or the banner says 116 s and the panel 117 s (#73).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
@@ -273,6 +276,7 @@ the issue number to an existing one.
   active vehicle only (#72).
 - An occurrence id fixes a race in the repository, not on screen: a banner that swaps alerts under a finger needs a
   guard, and an acknowledged caution keeps its level beside a newer advisory (#56).
+- A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough (no WSL/Docker). Its mirror binds the port it sends to and only one
@@ -290,6 +294,7 @@ the issue number to an existing one.
   (#25).
 - A SITL TCP port can stay silent for a whole session (5762 sent nothing while 5763 worked): count raw bytes on it
   first (#70).
+- In flight the map must be checked moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 
 **Emulator, Windows and tooling**
 - `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first and
@@ -306,3 +311,9 @@ the issue number to an existing one.
   minimum must be added there too, or the minimum only fails locally (#63).
 - On Windows `File.canonicalFile` does not resolve symbolic links: check a path's folder with `toRealPath()` (#71).
 - Never reflow KDoc by script: it merges lists and rewraps untouched paragraphs; wrap long lines by hand (#71).
+- MapLibre's engine ignores the system proxy and draws no overlay before a style is presented: test a dead network
+  with a build that points the style at an unreachable host, and start the map on an offline style (#73).
+- A night map is the day style recoloured, not another style (`fiord` lost labels); OpenFreeMap answers 403 to a
+  script without an identifying User-Agent (#73).
+- A screen holding MapLibre content needs `@UiComposable`, or the compiler infers MapLibre's applier for callers (#73).
+- Never `--no-verify` a split commit: run the hooks on it, they check the files as staged (#73).
