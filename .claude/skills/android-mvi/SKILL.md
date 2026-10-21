@@ -73,8 +73,8 @@ fun HudScreen(
 ```
 
 `collectAsStateWithLifecycle` comes from `androidx.lifecycle:lifecycle-runtime-compose` and
-`hiltViewModel` from `androidx.hilt:hilt-lifecycle-viewmodel-compose`; `:feature:hud` declares them.
-Move them to the `gcs.android.feature` convention plugin when a second feature needs them.
+`hiltViewModel` from `androidx.hilt:hilt-lifecycle-viewmodel-compose`; the `gcs.android.feature` convention plugin
+adds them to every feature.
 
 ## Testing
 
