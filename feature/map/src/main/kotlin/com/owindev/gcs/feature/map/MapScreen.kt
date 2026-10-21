@@ -149,7 +149,8 @@ internal fun MapContent(
  * Keeps the vehicle at the centre of the visible map while the camera follows it, zooming in on the first fix. Each
  * move runs to its end before the next one, towards the latest position: restarting it for every position, five a
  * second, cancelled each move before the camera went anywhere, so a moving vehicle was left behind (seen in SITL). A
- * move is also cancelled when the insets or the [style] change, so following starts again then.
+ * move is also cancelled when the insets or the [style] change, so following starts again then. Within
+ * [FOLLOW_DEAD_ZONE] of the centre the camera stays, so a GPS's noise at rest never shakes the map.
  */
 @Composable
 private fun FollowVehicle(
@@ -163,8 +164,15 @@ private fun FollowVehicle(
     LaunchedEffect(mapState, following, insets, style) {
         if (!following) return@LaunchedEffect
         mapState.awaitViewport()
+        var restarted = true
         snapshotFlow { position }.filterNotNull().conflate().collect { target ->
             val zoom = FOLLOW_ZOOM.takeIf { mapState.cameraPosition.zoom < MIN_FOLLOW_ZOOM }
+            // The first move after a restart re-centres for the new insets or style, however small.
+            val centre = mapState.screenLocationFromPosition(mapState.cameraPosition.center)
+            val vehicleOnScreen = mapState.screenLocationFromPosition(target.toPosition())
+            val still = centre != null && vehicleOnScreen != null && withinDeadZone(centre, vehicleOnScreen)
+            if (!restarted && zoom == null && still) return@collect
+            restarted = false
             mapState.animateCamera(
                 update = CameraUpdate(center = target.toPosition(), zoom = zoom),
                 animation = CameraAnimation.Ease { duration = FOLLOW_STEP },
