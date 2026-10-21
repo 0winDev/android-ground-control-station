@@ -21,11 +21,12 @@ internal class PipelineClock(private val device: TimeSource.WithComparableMarks)
     private val replay = AtomicReference<Replay?>(null)
     private val highest = AtomicLong(Long.MIN_VALUE)
 
-    /** Starts a replay's time where the pipeline's is now, and returns its clock, paused. */
-    fun startReplay(): ReplayClock {
-        val clock = ReplayClock(device)
-        replay.set(Replay(startedAt = read(), clock = clock))
-        return clock
+    /** A new replay clock on the device's time, paused at zero. */
+    fun newReplayClock(): ReplayClock = ReplayClock(device)
+
+    /** Follows [clock] from where the pipeline's time is now; already following it, nothing changes. */
+    fun startReplay(clock: ReplayClock) {
+        if (replay.get()?.clock !== clock) replay.set(Replay(startedAt = read(), clock = clock))
     }
 
     /** Back to the device clock. */

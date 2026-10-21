@@ -7,6 +7,7 @@ import com.owindev.gcs.core.mavlink.MavlinkFrame
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -50,7 +51,7 @@ class TelemetrySessionTest {
         frame.componentId,
         MavlinkDecoder.decode(frame),
         SENDER,
-        origin = DataOrigin.LIVE,
+        session = FIRST_SESSION,
     )
 }
 

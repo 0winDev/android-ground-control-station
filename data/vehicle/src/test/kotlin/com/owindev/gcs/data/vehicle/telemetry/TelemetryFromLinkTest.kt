@@ -12,6 +12,7 @@ import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.liveSession
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import io.mockk.CapturingSlot
@@ -63,6 +64,7 @@ class TelemetryFromLinkTest {
                 live = transport,
                 scope = testScope.backgroundScope,
                 timeSource = testScope.testScheduler.timeSource,
+                pipelineClock = PipelineClock(testScope.testScheduler.timeSource),
                 recorder = ignoringRecorder(),
                 activeVehicle = activeVehicle,
             ),
@@ -154,6 +156,7 @@ class TelemetryFromLinkTest {
                     live = transport,
                     scope = backgroundScope,
                     timeSource = testScheduler.timeSource,
+                    pipelineClock = PipelineClock(testScheduler.timeSource),
                     recorder = ignoringRecorder(),
                     activeVehicle = activeVehicle,
                 ),

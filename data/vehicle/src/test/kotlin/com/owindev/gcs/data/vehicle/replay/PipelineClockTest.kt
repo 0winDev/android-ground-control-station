@@ -33,7 +33,7 @@ class PipelineClockTest {
     @Tag("REQ-037")
     @Test
     fun `GIVEN a replay that has not started playing WHEN time passes THEN ages nothing`() {
-        clock.startReplay()
+        clock.startReplay(clock.newReplayClock())
         val mark = clock.markNow()
         device += PAUSED
 
@@ -45,7 +45,7 @@ class PipelineClockTest {
     @Tag("REQ-037")
     @Test
     fun `GIVEN a replay paused after playing WHEN time passes THEN ages a mark only by the time played`() {
-        val replay = clock.startReplay()
+        val replay = clock.newReplayClock().also(clock::startReplay)
         val mark = clock.markNow()
         replay.play()
         device += PLAYED
@@ -62,7 +62,7 @@ class PipelineClockTest {
     fun `GIVEN a live mark WHEN a replay starts THEN its age goes on from where it was`() {
         val mark = clock.markNow()
         device += LIVE
-        clock.startReplay()
+        clock.startReplay(clock.newReplayClock())
         device += PAUSED
 
         val result = mark.elapsedNow()
@@ -73,7 +73,7 @@ class PipelineClockTest {
     @Tag("REQ-037")
     @Test
     fun `GIVEN a replay mark WHEN the replay ends THEN the live time is never behind it`() {
-        val replay = clock.startReplay()
+        val replay = clock.newReplayClock().also(clock::startReplay)
         replay.play()
         device += PLAYED
         val mark = clock.markNow()
@@ -87,7 +87,7 @@ class PipelineClockTest {
     @Tag("REQ-037")
     @Test
     fun `GIVEN a paused replay that ended WHEN time passes THEN follows the device again`() {
-        val replay = clock.startReplay()
+        val replay = clock.newReplayClock().also(clock::startReplay)
         replay.play()
         device += PLAYED
         replay.pause()

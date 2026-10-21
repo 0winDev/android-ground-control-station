@@ -9,10 +9,12 @@ import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.time.atLeastRecheck
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.link.SessionId
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -78,18 +80,29 @@ internal class DefaultAlertRepository @Inject constructor(
     /** The active system ID is decided from the vehicles' HEARTBEATs, so they are observed with it. */
     private val evaluations: Flow<Evaluation?> = vehicleRepository.vehicles
         .combine(vehicleRepository.activeSystemId) { _, systemId -> systemId }
-        .combine(session.origin) { systemId, origin -> systemId?.let { ActiveIn(origin, it) } }
+        .combine(session.session) { systemId, current -> systemId?.let { ActiveIn(current, it) } }
         .distinctUntilChanged()
-        .flatMapLatest { active -> if (active == null) flowOf(null) else evaluationsOfNewVehicle(active.systemId) }
+        .flatMapLatest { active ->
+            if (active ==
+                null
+            ) {
+                flowOf(null)
+            } else {
+                evaluationsOfNewVehicle(active.systemId, active.session.origin)
+            }
+        }
 
     /**
      * Starts from [Alerts.NotEvaluated], so nothing of the vehicle active before is carried over. Its armed state
      * comes from its HEARTBEAT; a vehicle not heard is taken as armed, so a failing monitor is never played down.
      */
-    private fun evaluationsOfNewVehicle(systemId: SystemId): Flow<Evaluation?> = flow {
+    private fun evaluationsOfNewVehicle(systemId: SystemId, origin: DataOrigin): Flow<Evaluation?> = flow {
         emit(null)
         val evaluatingSince = timeSource.markNow()
-        val armed = vehicleRepository.vehicles.map { it[systemId]?.state?.armed ?: true }.distinctUntilChanged()
+        // A vehicle of the session before, until the watchdog forgets it, counts as not heard.
+        val armed = vehicleRepository.vehicles
+            .map { vehicles -> vehicles[systemId]?.takeIf { it.origin == origin }?.state?.armed ?: true }
+            .distinctUntilChanged()
         emitAll(
             telemetryRepository.activeTelemetry.combine(armed) { telemetry, isArmed ->
                 telemetry?.let { Evaluation(it, isArmed, evaluatingSince) }
@@ -110,7 +123,7 @@ internal class DefaultAlertRepository @Inject constructor(
                         val active = change { previous -> evaluate(previous, evaluation) }.active()
                         val untilNext =
                             rule.untilNextEvaluation(active, evaluation.telemetry, evaluation.evaluatingSince)
-                        delay(untilNext ?: awaitCancellation())
+                        delay(untilNext?.atLeastRecheck() ?: awaitCancellation())
                     }
                 }
             } finally {
@@ -174,8 +187,8 @@ internal class DefaultAlertRepository @Inject constructor(
     /** `BatteryLow (caution)`, `TelemetryStale(kind=GPS) (advisory)`. */
     private fun Alert.describe(): String = "$this (${level.name.lowercase()})"
 
-    /** The active vehicle, [systemId], of the link's [origin]. */
-    private data class ActiveIn(val origin: DataOrigin, val systemId: SystemId)
+    /** The active vehicle, [systemId], of the link's [session]. */
+    private data class ActiveIn(val session: SessionId, val systemId: SystemId)
 
     /** The active vehicle's [telemetry], whether it is [armed], and since when its alerts have been evaluated. */
     private data class Evaluation(val telemetry: Telemetry, val armed: Boolean, val evaluatingSince: TimeMark)

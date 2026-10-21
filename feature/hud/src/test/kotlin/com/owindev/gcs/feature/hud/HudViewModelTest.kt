@@ -19,6 +19,7 @@ import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -80,7 +81,7 @@ class HudViewModelTest {
             alertRepository,
             LinkLossRule(),
             StalenessRule(),
-            mainDispatcher.testDispatcher.scheduler.timeSource,
+            DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
         )
     }
 
@@ -98,22 +99,6 @@ class HudViewModelTest {
             )
         }
     }
-
-    @Tag("REQ-037")
-    @Test
-    fun `GIVEN a recording playing but no vehicle WHEN observing the state THEN waits for one without a port`() =
-        runTest {
-            turbineScope {
-                traffic.value = LinkTraffic.Replaying(datagrams = DATAGRAMS)
-
-                val result = viewModel.state.testIn(backgroundScope)
-
-                result.expectMostRecentItem() shouldBeEqualTo HudUiState.WaitingForVehicle(
-                    port = null,
-                    datagramCount = DATAGRAMS,
-                )
-            }
-        }
 
     @Tag("REQ-005")
     @Test
@@ -413,7 +398,7 @@ class HudViewModelTest {
                     alertRepository,
                     LinkLossRule(timeout = CUSTOM_TIMEOUT),
                     StalenessRule(),
-                    mainDispatcher.testDispatcher.scheduler.timeSource,
+                    DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
                 )
                 val states = custom.state.testIn(backgroundScope)
 

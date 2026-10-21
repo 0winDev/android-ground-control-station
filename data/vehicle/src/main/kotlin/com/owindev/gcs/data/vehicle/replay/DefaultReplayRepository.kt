@@ -9,7 +9,8 @@ import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.LinkStatus
-import com.owindev.gcs.data.vehicle.state.ActiveVehicle
+import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.recording.LastClosedMarker
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -25,10 +26,11 @@ import kotlinx.coroutines.launch
  * Plays the GCS's own recordings, the .tlogs in [recordings], through the [session] (REQ-037).
  *
  * [play] checks, in order, that the file is one of [recordings] (by its real path, so `..` or a link cannot reach
- * another file) and that [rule] allows a replay with the live active vehicle as it is now; either
- * failing leaves the live link untouched. Then the active vehicle starts a replay pin, the [clock] a replay time, and
- * the session closes the live link and plays the file on that time, from [replaySource]. [stop] undoes the three in the
- * opposite order, so the live link never runs on a replay's time.
+ * another file) and that [rule] allows a replay with every live vehicle as it is now; either
+ * failing leaves the live link untouched. Then the [recorder] keeps that file from retention while it plays, since
+ * closing the live recording applies the limit, and the session closes the live link and plays the file from
+ * [replaySource] on a new replay clock, with its own pin of the active vehicle; the session switches the [clock] once
+ * the live link has closed. [stop] gives the link back to a new live session.
  *
  * The end of the recording and a failure to read it come from the session's status, watched in [scope]. Calls come
  * from the UI, one at a time, so a lock is enough to keep them in order.
@@ -38,8 +40,8 @@ import kotlinx.coroutines.launch
 internal class DefaultReplayRepository(
     private val session: LinkSession,
     private val vehicleRepository: VehicleRepository,
-    private val activeVehicle: ActiveVehicle,
     private val clock: PipelineClock,
+    private val recorder: FlightRecorder,
     private val rule: ReplayRule,
     private val recordings: File,
     private val replaySource: (File, ReplayClock) -> DatagramSource,
@@ -61,14 +63,15 @@ internal class DefaultReplayRepository(
     override fun play(recording: File): ReplayState = synchronized(lock) {
         val playing = mutableState.value.origin == DataOrigin.REPLAY
         // The live link is already closed during a replay: playing another one changes nothing for the vehicle.
-        val refusal = if (playing) null else rule.refusalFor(liveActiveVehicle())
+        val refusal = if (playing) null else rule.refusalFor(vehicleRepository.vehicles.value.values)
+        val real = recordingAt(recording)
         val result = when {
-            !isRecording(recording) -> ReplayState.Failed(recording, ReplayFailure.NOT_A_RECORDING)
+            real == null -> ReplayState.Failed(recording, ReplayFailure.NOT_A_RECORDING)
 
             refusal != null -> ReplayState.Refused(refusal)
 
             else -> {
-                start(recording)
+                start(real)
                 ReplayState.Playing(recording)
             }
         }
@@ -96,8 +99,7 @@ internal class DefaultReplayRepository(
     override fun stop() = synchronized(lock) {
         if (mutableState.value.origin == DataOrigin.REPLAY) {
             session.live()
-            clock.endReplay()
-            activeVehicle.endReplay()
+            recorder.replayed = null
             replayClock = null
         }
         mutableState.value = ReplayState.Off
@@ -105,26 +107,29 @@ internal class DefaultReplayRepository(
 
     /** A replay after another starts afresh too: its own pin and time, and the session switches source. */
     private fun start(recording: File) {
-        activeVehicle.startReplay()
-        val started = clock.startReplay()
+        recorder.replayed = recording.name
+        val started = clock.newReplayClock()
         replayClock = started
-        session.replay(replaySource(recording, started))
+        session.replay(replaySource(recording, started), started)
         started.play()
     }
 
-    private fun liveActiveVehicle() = activeVehicle.systemId.value?.let(vehicleRepository.vehicles.value::get)
-
     /**
-     * Whether [file] is a regular file right in [recordings], by real paths: links resolved, which a canonical path does
-     * not do on every platform, so neither `..` nor a link can reach another file. A file that does not exist is not one.
+     * [file] by its real path if it is one of the GCS's recordings: a regular file named as the recorder names its logs
+     * (`.tlog`, never the marker) right in [recordings], by real paths, links resolved, which a canonical path does not
+     * do on every platform, so neither `..` nor a link can reach another file. `null` for anything else, a file that does
+     * not exist included. The replay opens the real path it returns, never the name it was given.
      */
-    private fun isRecording(file: File): Boolean = try {
+    private fun recordingAt(file: File): File? = try {
         val real = file.toPath().toRealPath()
-        real.parent == recordings.toPath().toRealPath() && Files.isRegularFile(real)
+        val isRecording = real.parent == recordings.toPath().toRealPath() &&
+            Files.isRegularFile(real) &&
+            real.fileName.toString().matches(LastClosedMarker.LOG_NAME)
+        real.toFile().takeIf { isRecording }
     } catch (@Suppress("SwallowedException") unresolvable: IOException) {
-        false
+        null
     } catch (@Suppress("SwallowedException") invalid: InvalidPathException) {
-        false
+        null
     }
 
     /** The end of a recording or a failure to read it, as the session reports it while a replay is on. */

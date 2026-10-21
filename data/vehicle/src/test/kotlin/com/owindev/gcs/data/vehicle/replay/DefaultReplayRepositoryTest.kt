@@ -18,11 +18,13 @@ import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.LinkStatus
-import com.owindev.gcs.data.vehicle.state.ActiveVehicle
+import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import io.mockk.CapturingSlot
 import io.mockk.Runs as runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.slot
 import java.io.File
 import java.io.IOException
 import java.nio.file.FileSystemException
@@ -57,7 +59,9 @@ class DefaultReplayRepositoryTest {
     private val status = MutableStateFlow<LinkStatus>(LinkStatus.Running(datagrams = 0))
     private val vehicleRepository: VehicleRepository = mockk()
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
-    private val activeVehicle = ActiveVehicle()
+    private val recorder: FlightRecorder = mockk()
+    private val replayClock: CapturingSlot<ReplayClock> = slot()
+    private val events = mutableListOf<String>()
     private val replayed = mutableListOf<File>()
     private val recordings get() = File(temp, "tlogs").apply { mkdirs() }
     private val recording get() = File(recordings, "2026-10-16_17-09-58.tlog").apply { writeBytes(ByteArray(0)) }
@@ -67,14 +71,15 @@ class DefaultReplayRepositoryTest {
     @BeforeEach
     fun setUp() {
         every { session.status } returns status
-        every { session.replay(any()) } just runs
-        every { session.live() } just runs
+        every { session.replay(any(), capture(replayClock)) } answers { events += "replay" }
+        every { session.live() } answers { events += "live" }
+        every { recorder.replayed = any() } answers { events += "kept ${firstArg<String?>()}" }
         every { vehicleRepository.vehicles } returns vehicles
         repository = DefaultReplayRepository(
             session = session,
             vehicleRepository = vehicleRepository,
-            activeVehicle = activeVehicle,
             clock = clock,
+            recorder = recorder,
             rule = ReplayRule(LinkLossRule()),
             recordings = recordings,
             replaySource = { file, _ ->
@@ -92,9 +97,9 @@ class DefaultReplayRepositoryTest {
         val result = repository.play(file)
 
         result shouldBeEqualTo ReplayState.Playing(file)
-        replayed shouldBeEqualTo listOf(file)
+        replayed shouldBeEqualTo listOf(file.toPath().toRealPath().toFile())
         verifyOnce {
-            session.replay(any())
+            session.replay(any(), any())
         }
     }
 
@@ -119,7 +124,7 @@ class DefaultReplayRepositoryTest {
         result shouldBeEqualTo ReplayState.Refused(ReplayRefusal.VEHICLE_CONNECTED)
         replayed shouldBeEqualTo emptyList()
         verifyNever {
-            session.replay(any())
+            session.replay(any(), any())
         }
     }
 
@@ -133,7 +138,7 @@ class DefaultReplayRepositoryTest {
 
         result shouldBeEqualTo ReplayState.Refused(ReplayRefusal.VEHICLE_ARMED)
         verifyNever {
-            session.replay(any())
+            session.replay(any(), any())
         }
     }
 
@@ -157,7 +162,7 @@ class DefaultReplayRepositoryTest {
         result shouldBeEqualTo ReplayState.Failed(outside, ReplayFailure.NOT_A_RECORDING)
         replayed shouldBeEqualTo emptyList()
         verifyNever {
-            session.replay(any())
+            session.replay(any(), any())
         }
     }
 
@@ -203,26 +208,25 @@ class DefaultReplayRepositoryTest {
     }
 
     @Test
-    fun `GIVEN a replay playing WHEN paused THEN the pipeline's time stands still`() {
+    fun `GIVEN a replay playing WHEN paused THEN its time stands still`() {
         repository.play(recording)
-        val mark = clock.markNow()
+        device += PLAYED
 
         repository.pause()
         device += LONG_SILENT
-        val result = repository.state.value to mark.elapsedNow()
+        val result = repository.state.value to replayClock.captured.position
 
-        result shouldBeEqualTo (ReplayState.Paused(recording) to 0.seconds)
+        result shouldBeEqualTo (ReplayState.Paused(recording) to PLAYED)
     }
 
     @Test
-    fun `GIVEN a paused replay WHEN resumed THEN plays and the pipeline's time goes on`() {
+    fun `GIVEN a paused replay WHEN resumed THEN plays and its time goes on`() {
         repository.play(recording)
         repository.pause()
-        val mark = clock.markNow()
 
         repository.resume()
         device += PLAYED
-        val result = repository.state.value to mark.elapsedNow()
+        val result = repository.state.value to replayClock.captured.position
 
         result shouldBeEqualTo (ReplayState.Playing(recording) to PLAYED)
     }
@@ -256,31 +260,43 @@ class DefaultReplayRepositoryTest {
         }
 
     @Test
-    fun `GIVEN a live and a replay vehicle pinned WHEN the replay stops THEN the live one is active again`() {
-        activeVehicle.pinFirst(SystemId(1), DataOrigin.LIVE)
-        repository.play(recording)
-        activeVehicle.pinFirst(SystemId(2), DataOrigin.REPLAY)
+    fun `GIVEN a recording WHEN playing it THEN retention keeps it before the live recording closes`() {
+        val file = recording
 
-        repository.stop()
-        val result = repository.state.value to activeVehicle.systemId.value
+        repository.play(file)
 
-        result shouldBeEqualTo (ReplayState.Off to SystemId(1))
-        verifyOnce {
-            session.live()
-        }
+        events shouldBeEqualTo listOf("kept ${file.name}", "replay")
     }
 
     @Test
-    fun `GIVEN a replay stopped WHEN time passes THEN the pipeline follows the device again`() {
-        repository.play(recording)
-        repository.pause()
+    fun `GIVEN a replay WHEN stopped THEN the live link is back and retention no longer keeps the file`() {
+        val file = recording
+        repository.play(file)
+
         repository.stop()
-        val mark = clock.markNow()
+        val result = repository.state.value
 
-        device += PLAYED
-        val result = mark.elapsedNow()
+        result shouldBeEqualTo ReplayState.Off
+        events shouldBeEqualTo listOf("kept ${file.name}", "replay", "live", "kept null")
+    }
 
-        result shouldBeEqualTo PLAYED
+    @Test
+    fun `GIVEN the recorder's marker in the recordings folder WHEN playing it THEN fails as not a recording`() {
+        val marker = File(recordings, ".last-closed").apply { writeText(recording.name) }
+
+        val result = repository.play(marker)
+
+        result shouldBeEqualTo ReplayState.Failed(marker, ReplayFailure.NOT_A_RECORDING)
+    }
+
+    @Test
+    fun `GIVEN a path that leaves the folder and comes back WHEN playing it THEN plays the file at its real path`() {
+        val file = recording
+        val roundabout = File(recordings, "../tlogs/${file.name}")
+
+        repository.play(roundabout)
+
+        replayed shouldBeEqualTo listOf(file.toPath().toRealPath().toFile())
     }
 
     @Test
@@ -296,7 +312,6 @@ class DefaultReplayRepositoryTest {
     }
 
     private fun liveVehicle(link: VehicleLink, armed: Boolean) {
-        activeVehicle.pinFirst(SystemId(1), DataOrigin.LIVE)
         vehicles.value = mapOf(
             SystemId(1) to Vehicle(
                 state = VehicleState(SystemId(1), VehicleType.COPTER, FlightMode.Named("Loiter"), armed = armed),

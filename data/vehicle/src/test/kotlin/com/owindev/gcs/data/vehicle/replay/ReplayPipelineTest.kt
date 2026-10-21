@@ -33,9 +33,12 @@ import io.mockk.unmockkStatic
 import java.io.File
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import kotlin.time.AbstractLongTimeSource
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
+import kotlin.time.TimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -93,6 +96,7 @@ class ReplayPipelineTest {
             live = transport,
             scope = testScope.backgroundScope,
             timeSource = clock,
+            pipelineClock = clock,
             recorder = recorder,
             activeVehicle = activeVehicle,
         )
@@ -110,8 +114,8 @@ class ReplayPipelineTest {
         repository = DefaultReplayRepository(
             session = session,
             vehicleRepository = vehicles,
-            activeVehicle = activeVehicle,
             clock = clock,
+            recorder = recorder,
             rule = ReplayRule(LinkLossRule()),
             recordings = recordings,
             replaySource = { file, replayClock ->
@@ -209,6 +213,52 @@ class ReplayPipelineTest {
         }
 
     @Test
+    fun `GIVEN a replay with a position WHEN another replay without one starts THEN nothing of the first remains`() =
+        testScope.runTest {
+            vehicles.vehicles.launchIn(backgroundScope)
+            repository.play(recordingOf(0L to HEARTBEAT, 100L to POSITION, name = "first.tlog"))
+            delay(1.seconds)
+
+            repository.play(recordingOf(0L to SECOND_VEHICLE, name = "second.tlog"))
+            delay(1.seconds)
+            val result = Triple(vehicles.vehicles.value.keys, vehicles.activeSystemId.value, store.telemetry.value.keys)
+
+            result shouldBeEqualTo Triple(setOf(SystemId(2)), SystemId(2), emptySet())
+        }
+
+    @Test
+    fun `GIVEN a replay WHEN stopped and played again at once THEN the second replay starts from nothing`() =
+        testScope.runTest {
+            vehicles.vehicles.launchIn(backgroundScope)
+            repository.play(recordingOf(0L to HEARTBEAT, 100L to POSITION, name = "first.tlog"))
+            delay(1.seconds)
+
+            repository.stop()
+            repository.play(recordingOf(0L to SECOND_VEHICLE, name = "second.tlog"))
+            delay(1.seconds)
+            val result = vehicles.vehicles.value.keys to store.telemetry.value.keys
+
+            result shouldBeEqualTo (setOf(SystemId(2)) to emptySet())
+        }
+
+    @Test
+    fun `GIVEN a replay paused right before the link-loss timeout WHEN paused long THEN the watchdog seldom runs`() =
+        testScope.runTest {
+            val counting = CountingClock(clock)
+            val watched = vehiclesOn(counting)
+            watched.vehicles.launchIn(backgroundScope)
+            repository.play(recordingOf(0L to HEARTBEAT))
+            delay(TIMEOUT_EDGE)
+            repository.pause()
+            val before = counting.reads
+
+            delay(PAUSE)
+            val result = counting.reads - before
+
+            (result < MAX_READS_IN_PAUSE) shouldBeEqualTo true
+        }
+
+    @Test
     fun `GIVEN a replay WHEN it is stopped THEN its vehicle is forgotten and the live one is active again`() =
         testScope.runTest {
             every { transport.datagrams() } returns liveSocketWith(HEARTBEAT)
@@ -257,17 +307,45 @@ class ReplayPipelineTest {
             .toList()
     }
 
-    private fun recordingOf(vararg records: Pair<Long, String>): File = File(recordings, "flight.tlog").apply {
-        writeBytes(
-            records.sortedBy { it.first }.fold(ByteArray(0)) { log, (atMillis, fixture) ->
-                log + TlogWriter.record(START + atMillis * MICROS_PER_MILLI, readFixture(fixture))
-            },
+    private fun recordingOf(vararg records: Pair<Long, String>, name: String = "flight.tlog"): File =
+        File(recordings, name).apply {
+            writeBytes(
+                records.sortedBy { it.first }.fold(ByteArray(0)) { log, (atMillis, fixture) ->
+                    log + TlogWriter.record(START + atMillis * MICROS_PER_MILLI, readFixture(fixture))
+                },
+            )
+        }
+
+    /** A vehicle repository like the app's, timed on [timeSource] instead of the pipeline's clock itself. */
+    private fun vehiclesOn(timeSource: TimeSource.WithComparableMarks): DefaultVehicleRepository {
+        val sender = GcsMessageSender(transport, recorder, session)
+        return DefaultVehicleRepository(
+            session = session,
+            timeSource = timeSource,
+            rule = LinkLossRule(),
+            heartbeatSender = GcsHeartbeatSender(sender),
+            telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
+            telemetryStore = store,
+            activeVehicle = activeVehicle,
+            scope = testScope.backgroundScope,
         )
     }
 
     private fun TestScope.liveSocketWith(fixture: String): Flow<Datagram> = flow {
         emit(Datagram(readFixture(fixture), LIVE_ADDRESS))
         awaitCancellation()
+    }
+}
+
+/** [clock]'s time, counting how often it is read: each read is a wake-up of whatever reads it. */
+private class CountingClock(clock: TimeSource.WithComparableMarks) : AbstractLongTimeSource(DurationUnit.NANOSECONDS) {
+    private val origin = clock.markNow()
+    var reads = 0
+        private set
+
+    override fun read(): Long {
+        reads++
+        return origin.elapsedNow().inWholeNanoseconds
     }
 }
 
@@ -286,4 +364,8 @@ private val VEHICLE = SystemId(1)
 private val PAUSE = 30.seconds
 private val PLAYED_THROUGH = 40.seconds
 private val LIVE_LOST: Duration = 4.seconds
+private val TIMEOUT_EDGE = LinkLossRule.DEFAULT_TIMEOUT - 1.milliseconds
+
+/** 20 checks a second at most over the pause, with room: an unbounded re-check would read the clock every 1 ms. */
+private const val MAX_READS_IN_PAUSE = 2_000
 private val LIVE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)

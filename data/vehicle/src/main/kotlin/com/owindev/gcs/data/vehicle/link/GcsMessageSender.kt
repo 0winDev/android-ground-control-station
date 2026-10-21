@@ -52,7 +52,7 @@ internal class GcsMessageSender @Inject constructor(
         send(to) { sequence -> MavlinkEncoder.encode(sequence, GCS_SYSTEM_ID, GCS_COMPONENT_ID, commandLong) }
 
     private suspend fun send(to: InetSocketAddress, encode: (sequence: Int) -> ByteArray): SendResult = lock.withLock {
-        if (session.origin.value != DataOrigin.LIVE) return@withLock SendResult.NotOpen
+        if (session.session.value.origin != DataOrigin.LIVE) return@withLock SendResult.NotOpen
         val frame = encode(sequence)
         val result = transport.send(frame, to)
         if (result == SendResult.Sent) {

@@ -23,6 +23,8 @@ import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
+import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
 import com.owindev.gcs.data.vehicle.link.sessionOn
 import io.mockk.every
 import io.mockk.mockk
@@ -56,7 +58,7 @@ class DefaultAlertRepositoryTest {
     private val vehicleRepository: VehicleRepository = mockk()
     private val activeSystemId = MutableStateFlow<SystemId?>(VEHICLE)
     private val vehicles = MutableStateFlow(mapOf(VEHICLE to vehicle(VEHICLE, clock.markNow())))
-    private val origin = MutableStateFlow(DataOrigin.LIVE)
+    private val session = MutableStateFlow(FIRST_SESSION)
 
     private lateinit var repository: DefaultAlertRepository
 
@@ -70,7 +72,7 @@ class DefaultAlertRepositoryTest {
         repository = DefaultAlertRepository(
             telemetryRepository,
             vehicleRepository,
-            sessionOn(origin),
+            sessionOn(session),
             AlertRule(timeSource = clock),
             clock,
             testScope.backgroundScope,
@@ -102,7 +104,7 @@ class DefaultAlertRepositoryTest {
             repository.activeAlerts.launchIn(backgroundScope)
             runCurrent()
 
-            origin.value = DataOrigin.REPLAY
+            session.value = REPLAY_SESSION
             activeTelemetry.value = telemetry(remaining = 20).copy(origin = DataOrigin.REPLAY)
             runCurrent()
             val result = repository.activeAlerts.value

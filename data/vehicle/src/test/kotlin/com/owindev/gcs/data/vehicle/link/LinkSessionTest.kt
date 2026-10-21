@@ -10,8 +10,10 @@ import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.every
 import io.mockk.mockk
@@ -61,6 +63,7 @@ class LinkSessionTest {
             live = transport,
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
+            pipelineClock = PipelineClock(testScope.testScheduler.timeSource),
             recorder = recorder,
             activeVehicle = activeVehicle,
         )
@@ -349,6 +352,7 @@ class LinkSessionTest {
                 live = transport,
                 scope = appScope,
                 timeSource = testScheduler.timeSource,
+                pipelineClock = PipelineClock(testScheduler.timeSource),
                 recorder = ignoringRecorder(),
                 activeVehicle = ActiveVehicle(),
             ).messages.launchIn(backgroundScope)
@@ -516,7 +520,7 @@ private fun disarmedStabilizeFromAutopilot() = ReceivedMessage(
         mavlinkVersion = 3,
     ),
     sender = VEHICLE_ADDRESS,
-    origin = DataOrigin.LIVE,
+    session = FIRST_SESSION,
 )
 
 /** [frame] as the codec delimits it on its own. */

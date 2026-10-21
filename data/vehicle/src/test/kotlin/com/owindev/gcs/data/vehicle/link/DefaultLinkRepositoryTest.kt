@@ -5,13 +5,17 @@ import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.Datagram
+import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
+import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import java.io.FileNotFoundException
 import java.net.BindException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -19,6 +23,7 @@ import java.net.SocketException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.take
@@ -36,18 +41,19 @@ class DefaultLinkRepositoryTest {
 
     private val testScope = TestScope()
     private val transport: UdpTransport = mockk()
+    private val session = LinkSession(
+        live = transport,
+        scope = testScope.backgroundScope,
+        timeSource = testScope.testScheduler.timeSource,
+        pipelineClock = PipelineClock(testScope.testScheduler.timeSource),
+        recorder = ignoringRecorder(),
+        activeVehicle = ActiveVehicle(),
+    )
 
     private lateinit var repository: DefaultLinkRepository
 
     @BeforeEach
     fun setUp() {
-        val session = LinkSession(
-            live = transport,
-            scope = testScope.backgroundScope,
-            timeSource = testScope.testScheduler.timeSource,
-            recorder = ignoringRecorder(),
-            activeVehicle = ActiveVehicle(),
-        )
         repository = DefaultLinkRepository(
             session = session,
             transport = transport,
@@ -69,6 +75,23 @@ class DefaultLinkRepositoryTest {
 
         result shouldBeEqualTo listOf(receiving(0), receiving(1), receiving(2), receiving(3))
     }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN a recording that cannot be read WHEN replaying it THEN the traffic says so and the log names no file`() =
+        testScope.runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>()) } returns 0
+            every { transport.port } returns PORT
+            session.replay(unreadable(), ReplayClock(testScheduler.timeSource))
+
+            val result = repository.traffic.first { it !is LinkTraffic.Receiving && it !is LinkTraffic.Replaying }
+
+            result shouldBeEqualTo LinkTraffic.ReplayFailed
+            verifyOnce {
+                Log.w("LinkRepository", "Reading the recording failed: FileNotFoundException")
+            }
+        }
 
     @Test
     fun `GIVEN the port is in use WHEN observing the traffic THEN becomes Unavailable`() = testScope.runTest {
@@ -291,5 +314,10 @@ private const val SEVERAL_ATTEMPTS = 12_500L
 
 /** Longer than both stop timeouts (traffic and session): the next observer starts a new session. */
 private const val SESSION_STOPPED = 15_000L
+
+/** A recording whose file is missing; the message names it, as the file system does. */
+private fun unreadable(): DatagramSource = object : DatagramSource {
+    override fun datagrams(): Flow<Datagram> = flow { throw FileNotFoundException("/data/files/tlogs/a.tlog") }
+}
 
 private fun failingWith(failure: Throwable): Flow<Datagram> = flow { throw failure }

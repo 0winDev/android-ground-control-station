@@ -151,6 +151,13 @@ private fun MainContent(state: HudUiState, modifier: Modifier = Modifier) {
                 textAlign = TextAlign.Center,
             )
 
+            HudUiState.ReplayUnreadable -> Text(
+                text = stringResource(id = R.string.hud_replay_unreadable),
+                style = MaterialTheme.typography.bodyLarge,
+                color = GcsTheme.colors.emergency,
+                textAlign = TextAlign.Center,
+            )
+
             HudUiState.Starting, is HudUiState.LinkLost -> Unit
         }
     }

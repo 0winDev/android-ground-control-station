@@ -9,12 +9,15 @@ import com.owindev.gcs.core.mavlink.RawFrame
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
+import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.HeartbeatMapper
 import java.io.EOFException
 import java.io.IOException
 import java.net.BindException
 import java.net.InetSocketAddress
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.ComparableTimeMark
@@ -98,9 +101,12 @@ internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
  * Instead of the live link it can play a recording ([replay], REQ-037), through the same parser and decoder, until
  * [live] gives the link back. The two never run together: the live session, its socket and its recording are closed
  * before the replay's first datagram. A replay is passive: it has no socket, never retries, never feeds the recorder,
- * and pins the replay's own active vehicle. Every message carries its [origin]; [origin] changes before the source
- * does, so anything that must not reach the vehicle can check it first. A replay that ends or fails stays in [status]
- * until [live] or until nobody observes it; observed again, it plays its source from the start.
+ * and pins the replay's own active vehicle. Each switch starts a new [session], set before the source changes, so
+ * anything that must not reach the vehicle can check it first, and every message carries the session it belongs to.
+ * The pipeline's time switches inside each source, once the one before has finished: the [pipelineClock] follows the
+ * replay's clock from its first datagram and the device again from the live link's, so a live datagram is never marked
+ * on a replay's time. A replay that ends or fails stays in [status] until [live] or until nobody observes it; observed
+ * again, it plays its source from the start.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -108,16 +114,18 @@ internal class LinkSession @Inject constructor(
     private val live: DatagramSource,
     @param:ApplicationScope private val scope: CoroutineScope,
     private val timeSource: TimeSource.WithComparableMarks,
+    private val pipelineClock: PipelineClock,
     private val recorder: FlightRecorder,
     private val activeVehicle: ActiveVehicle,
 ) {
 
     private val mutableStatus = MutableStateFlow<LinkStatus>(LinkStatus.Running(datagrams = 0))
-    private val mutableOrigin = MutableStateFlow(DataOrigin.LIVE)
-    private val source = MutableStateFlow<Source>(Source.Live)
+    private val epochs = AtomicLong(FIRST_SESSION.epoch)
+    private val mutableSession = MutableStateFlow(FIRST_SESSION)
+    private val source = MutableStateFlow<Source>(Source.Live(FIRST_SESSION))
 
-    /** Whether the link is the live one or a replay's; it changes before the messages do. */
-    val origin: StateFlow<DataOrigin> = mutableOrigin.asStateFlow()
+    /** The session the link is in, live or a replay; it changes before the messages do. */
+    val session: StateFlow<SessionId> = mutableSession.asStateFlow()
 
     /**
      * The state of the current session; it only changes while the session is open. The datagram count runs
@@ -130,8 +138,8 @@ internal class LinkSession @Inject constructor(
         // Switching cancels the current source and waits for it to finish before starting the next.
         source.flatMapLatest { current ->
             when (current) {
-                Source.Live -> liveMessages()
-                is Source.Replay -> replayMessages(current.datagrams)
+                is Source.Live -> liveMessages(current.session)
+                is Source.Replay -> replayMessages(current)
             }
         }
             // The last subscriber left and the session was stopped: the next one starts clean, never
@@ -142,24 +150,28 @@ internal class LinkSession @Inject constructor(
             .shareIn(scope = scope, started = SharingStarted.WhileSubscribed())
     }
 
-    /** Plays [datagrams] instead of the live link, closing the live session first. */
-    fun replay(datagrams: DatagramSource) {
-        mutableOrigin.value = DataOrigin.REPLAY
+    /** Plays [datagrams] on [clock] instead of the live link or the replay before, closing it first. */
+    fun replay(datagrams: DatagramSource, clock: ReplayClock) {
+        val next = SessionId(DataOrigin.REPLAY, epochs.incrementAndGet())
+        activeVehicle.startReplay(next)
+        mutableSession.value = next
         mutableStatus.value = LinkStatus.Replaying(datagrams = 0)
-        source.value = Source.Replay(datagrams)
+        source.value = Source.Replay(datagrams, clock, next)
     }
 
-    /** Gives the link back to the live session, ending any replay first. */
+    /** Gives the link back to a new live session, ending any replay first. */
     fun live() {
-        source.value = Source.Live
+        val next = SessionId(DataOrigin.LIVE, epochs.incrementAndGet())
+        source.value = Source.Live(next)
         mutableStatus.value = LinkStatus.Running(datagrams = 0)
-        mutableOrigin.value = DataOrigin.LIVE
+        activeVehicle.endReplay()
+        mutableSession.value = next
     }
 
     /** [flow], collected while keeping the session open, as a subscriber to [messages] does. */
     fun <T> whileOpen(flow: Flow<T>): Flow<T> = merge(messages.transform { }, flow)
 
-    private fun liveMessages(): Flow<ReceivedMessage> = flow {
+    private fun liveMessages(session: SessionId): Flow<ReceivedMessage> = flow {
         var datagrams = 0L
         var retryDelay = LINK_RETRY_FIRST
         var reopening = false
@@ -193,7 +205,7 @@ internal class LinkSession @Inject constructor(
                             LinkStatus.Running(datagrams)
                         }
                         parser.parseRaw(datagram.payload).forEach { raw ->
-                            val message = decoded(raw, datagram.sender, DataOrigin.LIVE)
+                            val message = decoded(raw, datagram.sender, session)
                             recorder.received(raw, message)
                             if (message != null) emit(message)
                         }
@@ -227,23 +239,27 @@ internal class LinkSession @Inject constructor(
             }
         }
     }
-        .onStart { mutableStatus.value = LinkStatus.Running(datagrams = 0) }
+        .onStart {
+            pipelineClock.endReplay()
+            mutableStatus.value = LinkStatus.Running(datagrams = 0)
+        }
         // Stopped by the last subscriber leaving or by a replay: either way the recording closes.
         .onCompletion { recorder.sessionStopped() }
 
-    private fun replayMessages(datagrams: DatagramSource): Flow<ReceivedMessage> = flow {
+    private fun replayMessages(replay: Source.Replay): Flow<ReceivedMessage> = flow {
         // One parser for the whole recording: a replay is never reopened.
         val parser = MavlinkParser(MavlinkMessages)
         var played = 0L
         var failure: IOException? = null
+        pipelineClock.startReplay(replay.clock)
         mutableStatus.value = LinkStatus.Replaying(played)
-        datagrams.datagrams()
+        replay.datagrams.datagrams()
             .catch { e -> failure = e as? IOException ?: throw e }
             .collect { datagram ->
                 played++
                 mutableStatus.value = LinkStatus.Replaying(played)
                 parser.parseRaw(datagram.payload).forEach { raw ->
-                    decoded(raw, datagram.sender, DataOrigin.REPLAY)?.let { emit(it) }
+                    decoded(raw, datagram.sender, replay.session)?.let { emit(it) }
                 }
             }
         mutableStatus.value = failure?.let(LinkStatus::ReplayFailed) ?: LinkStatus.ReplayEnded(played)
@@ -252,7 +268,7 @@ internal class LinkSession @Inject constructor(
     }
 
     private fun startingStatus(current: Source): LinkStatus = when (current) {
-        Source.Live -> LinkStatus.Running(datagrams = 0)
+        is Source.Live -> LinkStatus.Running(datagrams = 0)
         is Source.Replay -> LinkStatus.Replaying(datagrams = 0)
     }
 
@@ -262,25 +278,28 @@ internal class LinkSession @Inject constructor(
         else -> LinkStatus.Failed(cause = this)
     }
 
-    /** [raw] decoded if it is a valid frame; an autopilot HEARTBEAT pins [origin]'s active vehicle first. */
-    private fun decoded(raw: RawFrame, sender: InetSocketAddress, origin: DataOrigin): ReceivedMessage? {
-        val message = (raw as? RawFrame.Valid)?.let { received(it.frame, sender, origin) }
-        message?.let(HeartbeatMapper::vehicleStateOf)?.let { activeVehicle.pinFirst(it.systemId, origin) }
+    /** [raw] decoded if it is a valid frame; an autopilot HEARTBEAT pins [session]'s active vehicle first. */
+    private fun decoded(raw: RawFrame, sender: InetSocketAddress, session: SessionId): ReceivedMessage? {
+        val message = (raw as? RawFrame.Valid)?.let { received(it.frame, sender, session) }
+        message?.let(HeartbeatMapper::vehicleStateOf)?.let { activeVehicle.pinFirst(it.systemId, session) }
         return message
     }
 
-    private fun received(frame: MavlinkFrame, sender: InetSocketAddress, origin: DataOrigin) = ReceivedMessage(
+    private fun received(frame: MavlinkFrame, sender: InetSocketAddress, session: SessionId) = ReceivedMessage(
         systemId = frame.systemId,
         componentId = frame.componentId,
         message = MavlinkDecoder.decode(frame),
         sender = sender,
-        origin = origin,
+        session = session,
     )
 
-    /** Where the datagrams come from. A replay is a plain class: two replays of one file are still two replays. */
+    /** Where the datagrams of a [session] come from. */
     private sealed interface Source {
-        data object Live : Source
+        val session: SessionId
 
-        class Replay(val datagrams: DatagramSource) : Source
+        data class Live(override val session: SessionId) : Source
+
+        data class Replay(val datagrams: DatagramSource, val clock: ReplayClock, override val session: SessionId) :
+            Source
     }
 }

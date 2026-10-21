@@ -53,6 +53,9 @@ sealed interface HudUiState {
     data class PortUnavailableRetrying(val port: Int) : HudUiState
 
     data object LinkError : HudUiState
+
+    /** The recording being replayed could not be read any further (REQ-037): no live link is open meanwhile. */
+    data object ReplayUnreadable : HudUiState
 }
 
 /** What the HUD shows of one vehicle (REQ-018). */

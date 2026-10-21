@@ -15,6 +15,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -510,7 +511,7 @@ class TelemetryMapperTest {
             frame.componentId,
             MavlinkDecoder.decode(frame),
             SENDER,
-            origin = DataOrigin.LIVE,
+            session = FIRST_SESSION,
         )
     }
 }
@@ -591,7 +592,7 @@ private val UNHEALTHY_WITHOUT_READING = Battery(
 )
 
 private fun received(message: MavlinkMessage) =
-    ReceivedMessage(SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, message, SENDER, origin = DataOrigin.LIVE)
+    ReceivedMessage(SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, message, SENDER, session = FIRST_SESSION)
 
 private fun gpsRawInt(fixType: Int = 3, yaw: Int = 0) = MavlinkMessage.GpsRawInt(
     timeUsec = 396_763_000,

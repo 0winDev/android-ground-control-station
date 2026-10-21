@@ -9,6 +9,7 @@ import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.DatagramSource
@@ -84,6 +85,10 @@ abstract class VehicleDataModule {
         @Singleton
         internal fun providePipelineClock(): PipelineClock = PipelineClock(device = ElapsedRealtimeTimeSource)
 
+        /** The device's own time, for what a paused replay must not stop (REQ-037). */
+        @Provides
+        fun provideDeviceClock(): DeviceClock = DeviceClock(ElapsedRealtimeTimeSource)
+
         /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
         @Provides
         fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
@@ -130,15 +135,15 @@ abstract class VehicleDataModule {
             @ApplicationContext context: Context,
             session: LinkSession,
             vehicleRepository: VehicleRepository,
-            activeVehicle: ActiveVehicle,
             clock: PipelineClock,
+            recorder: FlightRecorder,
             linkLossRule: LinkLossRule,
             @ApplicationScope scope: CoroutineScope,
         ): ReplayRepository = DefaultReplayRepository(
             session = session,
             vehicleRepository = vehicleRepository,
-            activeVehicle = activeVehicle,
             clock = clock,
+            recorder = recorder,
             rule = ReplayRule(linkLossRule),
             recordings = File(context.filesDir, RECORDINGS_FOLDER),
             replaySource = { recording, replayClock ->

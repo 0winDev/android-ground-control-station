@@ -6,24 +6,24 @@ import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleLink
 
 /**
- * When a replay must not start (REQ-037): it closes the live link, so this GCS stops sending its HEARTBEAT and the
- * vehicle's GCS failsafe (`FS_GCS_ENABLE`) may act. Refused while the live active vehicle is armed, heard or not, and
- * while it is connected by either the watchdog's verdict or [linkLoss] applied to its age now, so a watchdog late
- * after the device slept never lets a replay through.
+ * When a replay must not start (REQ-037): it closes the live link, so this GCS stops sending its HEARTBEAT and a
+ * vehicle's GCS failsafe (`FS_GCS_ENABLE`) may act. Every live vehicle counts, not only the active one: the HEARTBEAT
+ * is not targeted, so behind a router every vehicle at that address hears it. Refused while any of them is armed,
+ * heard or not, and while any is connected by either the watchdog's verdict or [linkLoss] applied to its age now, so
+ * a watchdog late after the device slept never lets a replay through. Armed is the reason given when both apply.
  */
 class ReplayRule(private val linkLoss: LinkLossRule) {
 
-    /** Why a replay must not start with [activeVehicle] as the active one, or `null` if it may. */
-    fun refusalFor(activeVehicle: Vehicle?): ReplayRefusal? = when {
-        activeVehicle == null || activeVehicle.origin != DataOrigin.LIVE -> null
-
-        activeVehicle.state.armed -> ReplayRefusal.VEHICLE_ARMED
-
-        activeVehicle.link == VehicleLink.CONNECTED -> ReplayRefusal.VEHICLE_CONNECTED
-
-        linkLoss.linkAfter(activeVehicle.lastHeartbeat.elapsedNow()) == VehicleLink.CONNECTED ->
-            ReplayRefusal.VEHICLE_CONNECTED
-
-        else -> null
+    /** Why a replay must not start with these [vehicles] heard, or `null` if it may; replayed ones never count. */
+    fun refusalFor(vehicles: Collection<Vehicle>): ReplayRefusal? {
+        val live = vehicles.filter { it.origin == DataOrigin.LIVE }
+        return when {
+            live.any { it.state.armed } -> ReplayRefusal.VEHICLE_ARMED
+            live.any(::isConnected) -> ReplayRefusal.VEHICLE_CONNECTED
+            else -> null
+        }
     }
+
+    private fun isConnected(vehicle: Vehicle): Boolean = vehicle.link == VehicleLink.CONNECTED ||
+        linkLoss.linkAfter(vehicle.lastHeartbeat.elapsedNow()) == VehicleLink.CONNECTED
 }

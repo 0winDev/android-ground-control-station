@@ -12,6 +12,7 @@ import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.testing.readFixture
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryMapper
 import java.net.InetAddress
@@ -75,7 +76,7 @@ class BootBatteryAlertTest {
                 frame.componentId,
                 MavlinkDecoder.decode(frame),
                 SENDER,
-                origin = DataOrigin.LIVE,
+                session = FIRST_SESSION,
             )
         val now = clock.markNow()
         return checkNotNull(

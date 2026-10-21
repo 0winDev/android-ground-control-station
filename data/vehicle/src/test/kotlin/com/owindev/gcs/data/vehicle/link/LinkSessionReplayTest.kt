@@ -8,7 +8,9 @@ import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.replay.REPLAY_SENDER
+import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.Runs as runs
 import io.mockk.every
@@ -17,8 +19,11 @@ import io.mockk.mockk
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -44,6 +49,8 @@ class LinkSessionReplayTest {
     private val recorder: FlightRecorder = mockk()
     private val activeVehicle = ActiveVehicle()
     private val events = mutableListOf<String>()
+    private val replayClock = ReplayClock(testScope.testScheduler.timeSource)
+    private val pipelineClock = PipelineClock(testScope.testScheduler.timeSource)
 
     private lateinit var session: LinkSession
 
@@ -53,6 +60,7 @@ class LinkSessionReplayTest {
             live = transport,
             scope = testScope.backgroundScope,
             timeSource = testScope.testScheduler.timeSource,
+            pipelineClock = pipelineClock,
             recorder = recorder,
             activeVehicle = activeVehicle,
         )
@@ -67,7 +75,7 @@ class LinkSessionReplayTest {
             session.messages.onEach { events += "${it.origin} message" }.launchIn(backgroundScope)
             runCurrent()
 
-            session.replay(replayOf(REPLAYED_VEHICLE))
+            session.replay(replayOf(REPLAYED_VEHICLE), replayClock)
             runCurrent()
 
             events shouldBeEqualTo listOf(
@@ -84,7 +92,7 @@ class LinkSessionReplayTest {
         testScope.runTest {
             recordEvents()
             every { transport.datagrams() } returns stayingOpen(LIVE_VEHICLE)
-            session.replay(replayOf(REPLAYED_VEHICLE, REPLAYED_VEHICLE))
+            session.replay(replayOf(REPLAYED_VEHICLE, REPLAYED_VEHICLE), replayClock)
 
             session.messages.launchIn(backgroundScope)
             runCurrent()
@@ -100,7 +108,7 @@ class LinkSessionReplayTest {
     fun `GIVEN a replay WHEN it plays THEN every message says it comes from the replay and its sender`() =
         testScope.runTest {
             every { transport.datagrams() } returns stayingOpen(LIVE_VEHICLE)
-            session.replay(replayOf(REPLAYED_VEHICLE))
+            session.replay(replayOf(REPLAYED_VEHICLE), replayClock)
 
             val result = session.messages.first()
 
@@ -109,9 +117,9 @@ class LinkSessionReplayTest {
 
     @Test
     fun `GIVEN a replay starting WHEN reading the origin THEN it is the replay before any message arrives`() {
-        session.replay(replayOf(REPLAYED_VEHICLE))
+        session.replay(replayOf(REPLAYED_VEHICLE), replayClock)
 
-        val result = session.origin.value
+        val result = session.session.value.origin
 
         result shouldBeEqualTo DataOrigin.REPLAY
     }
@@ -123,8 +131,7 @@ class LinkSessionReplayTest {
             every { transport.datagrams() } returns stayingOpen(LIVE_VEHICLE)
             session.messages.launchIn(backgroundScope)
             runCurrent()
-            activeVehicle.startReplay()
-            session.replay(replayOf(SECOND_VEHICLE))
+            session.replay(replayOf(SECOND_VEHICLE), replayClock)
 
             runCurrent()
             val result = activeVehicle.systemId.value to activeVehicle.liveSystemId
@@ -136,7 +143,7 @@ class LinkSessionReplayTest {
     fun `GIVEN a replay played to its end WHEN reading the status THEN it has ended with every datagram counted`() =
         testScope.runTest {
             every { transport.datagrams() } returns stayingOpen(LIVE_VEHICLE)
-            session.replay(replayOf(REPLAYED_VEHICLE, REPLAYED_VEHICLE, REPLAYED_VEHICLE))
+            session.replay(replayOf(REPLAYED_VEHICLE, REPLAYED_VEHICLE, REPLAYED_VEHICLE), replayClock)
             session.messages.launchIn(backgroundScope)
 
             runCurrent()
@@ -149,7 +156,7 @@ class LinkSessionReplayTest {
     fun `GIVEN a recording that cannot be read WHEN replaying it THEN the status says the replay failed`() =
         testScope.runTest {
             val failure = IOException("unreadable")
-            session.replay(failingWith(failure))
+            session.replay(failingWith(failure), replayClock)
             session.messages.launchIn(backgroundScope)
 
             runCurrent()
@@ -163,7 +170,7 @@ class LinkSessionReplayTest {
         testScope.runTest {
             recordEvents()
             every { transport.datagrams() } returns stayingOpen(LIVE_VEHICLE)
-            session.replay(replayOf(REPLAYED_VEHICLE))
+            session.replay(replayOf(REPLAYED_VEHICLE), replayClock)
             session.messages.launchIn(backgroundScope)
             runCurrent()
 
@@ -171,6 +178,50 @@ class LinkSessionReplayTest {
             val result = session.messages.first()
 
             (result.origin to session.status.value) shouldBeEqualTo (DataOrigin.LIVE to LinkStatus.Running(1))
+        }
+
+    @Test
+    fun `GIVEN a replay that ended WHEN one of its HEARTBEATs arrives late THEN the next replay's pin stays free`() {
+        session.replay(replayOf(), replayClock)
+        val ended = session.session.value
+        session.replay(replayOf(), replayClock)
+
+        activeVehicle.pinFirst(SystemId(1), ended)
+        val result = activeVehicle.systemId.value
+
+        result shouldBeEqualTo null
+    }
+
+    @Test
+    fun `GIVEN a replay WHEN its source starts THEN the pipeline runs on the replay's time`() = testScope.runTest {
+        every { transport.datagrams() } returns stayingOpen(LIVE_VEHICLE)
+        session.replay(replayOf(REPLAYED_VEHICLE), replayClock)
+        session.messages.launchIn(backgroundScope)
+        runCurrent()
+        val mark = pipelineClock.markNow()
+
+        delay(PAUSED)
+        val result = mark.elapsedNow()
+
+        result shouldBeEqualTo Duration.ZERO
+    }
+
+    @Test
+    fun `GIVEN a replay WHEN the live source starts again THEN the pipeline runs on the device's time`() =
+        testScope.runTest {
+            recordEvents()
+            every { transport.datagrams() } returns stayingOpen(LIVE_VEHICLE)
+            session.replay(replayOf(REPLAYED_VEHICLE), replayClock)
+            session.messages.launchIn(backgroundScope)
+            runCurrent()
+            session.live()
+            runCurrent()
+            val mark = pipelineClock.markNow()
+
+            delay(PAUSED)
+            val result = mark.elapsedNow()
+
+            result shouldBeEqualTo PAUSED
         }
 
     private fun recordEvents() {
@@ -198,4 +249,5 @@ private fun failingWith(failure: IOException): DatagramSource = object : Datagra
 private const val LIVE_VEHICLE = "heartbeat/disarmed-stabilize.bin"
 private const val REPLAYED_VEHICLE = "heartbeat/disarmed-loiter.bin"
 private const val SECOND_VEHICLE = "derived/heartbeat-sysid-2.bin"
+private val PAUSED = 30.seconds
 private val LIVE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)

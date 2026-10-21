@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -149,7 +150,7 @@ private fun received(message: MavlinkMessage, componentId: Int = MAV_COMP_ID_AUT
         componentId = componentId,
         message = message,
         sender = SENDER,
-        origin = DataOrigin.LIVE,
+        session = FIRST_SESSION,
     )
 
 /** The mapper ignores where a message came from; any address will do. */

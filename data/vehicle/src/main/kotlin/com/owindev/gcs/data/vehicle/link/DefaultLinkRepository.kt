@@ -59,7 +59,7 @@ internal class DefaultLinkRepository @Inject constructor(
         // The traffic of a recording played to its end: what follows is the silence the vehicle repository shows.
         is LinkStatus.ReplayEnded -> LinkTraffic.Replaying(datagrams = datagrams)
 
-        is LinkStatus.ReplayFailed -> LinkTraffic.Failed
+        is LinkStatus.ReplayFailed -> LinkTraffic.ReplayFailed
     }
 
     /**
@@ -74,7 +74,9 @@ internal class DefaultLinkRepository @Inject constructor(
                 failing = true
             }
 
-            status is LinkStatus.ReplayFailed -> Log.w(TAG, "Reading the recording failed", status.cause)
+            // Only the kind of failure: its message names the file, which stays out of the log.
+            status is LinkStatus.ReplayFailed ->
+                Log.w(TAG, "Reading the recording failed: ${status.cause::class.java.simpleName}")
 
             status is LinkStatus.Running && status.datagrams > 0 && failing -> {
                 Log.i(TAG, "Vehicle link reopened")

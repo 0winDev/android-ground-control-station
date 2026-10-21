@@ -10,6 +10,7 @@ import com.owindev.gcs.core.mavlink.RawFrame
 import com.owindev.gcs.core.mavlink.TlogReader
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.testing.verifyOnce
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.HeartbeatMapper
@@ -387,6 +388,23 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(START_NAME, IMPORTED_NAME)
         }
 
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN the oldest log being replayed WHEN the live recording closes over the limit THEN it is kept`() =
+        testScope.runTest {
+            val small = recorder(RecordingRule(maxTotalBytes = LIMIT_BYTES))
+            receive(DISARMED_STABILIZE, small)
+            runCurrent()
+            oldLog(OLDEST_NAME, LIMIT_BYTES, lastModifiedMillis = 1)
+            oldLog(IMPORTED_NAME, LIMIT_BYTES / 2, lastModifiedMillis = 2)
+            small.replayed = OLDEST_NAME
+
+            small.sessionStopped()
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(OLDEST_NAME, START_NAME)
+        }
+
     @Tag("REQ-039")
     @Test
     fun `GIVEN a recording over the limit by itself WHEN it closes THEN every other log goes but never it`() =
@@ -646,7 +664,7 @@ class FlightRecorderTest {
     /** As the receive loop does: the first vehicle's HEARTBEAT pins it, then the frame goes to [into]. */
     private fun receive(path: String, into: FlightRecorder = recorder) {
         val message = message(path)
-        message?.let(HeartbeatMapper::vehicleStateOf)?.let { activeVehicle.pinFirst(it.systemId, DataOrigin.LIVE) }
+        message?.let(HeartbeatMapper::vehicleStateOf)?.let { activeVehicle.pinFirst(it.systemId, FIRST_SESSION) }
         into.received(raw(path), message)
     }
 
@@ -753,7 +771,7 @@ class FlightRecorderTest {
                 componentId = valid.frame.componentId,
                 message = MavlinkDecoder.decode(valid.frame),
                 sender = SENDER,
-                origin = DataOrigin.LIVE,
+                session = FIRST_SESSION,
             )
         }
     }

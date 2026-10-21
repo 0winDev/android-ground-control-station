@@ -55,7 +55,7 @@ class GcsMessageSenderTest {
     @Tag("REQ-037")
     @Test
     fun `GIVEN the link plays a replay WHEN sending THEN nothing leaves and nothing is recorded`() = runTest {
-        val replaying = GcsMessageSender(transport, recorder, sessionOn(MutableStateFlow(DataOrigin.REPLAY)))
+        val replaying = GcsMessageSender(transport, recorder, sessionOn(MutableStateFlow(REPLAY_SESSION)))
 
         val result = replaying.send(HEARTBEAT, PEER)
 

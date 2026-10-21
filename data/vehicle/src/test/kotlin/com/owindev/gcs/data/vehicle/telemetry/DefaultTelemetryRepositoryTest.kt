@@ -9,6 +9,8 @@ import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
+import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.link.sessionOn
 import io.mockk.every
@@ -37,7 +39,7 @@ class DefaultTelemetryRepositoryTest {
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val activeSystemId = MutableStateFlow<SystemId?>(null)
     private val store = TelemetryStore()
-    private val origin = MutableStateFlow(DataOrigin.LIVE)
+    private val session = MutableStateFlow(FIRST_SESSION)
 
     private lateinit var repository: DefaultTelemetryRepository
 
@@ -45,8 +47,24 @@ class DefaultTelemetryRepositoryTest {
     fun setUp() {
         every { vehicleRepository.vehicles } returns vehicles
         every { vehicleRepository.activeSystemId } returns activeSystemId
-        repository = DefaultTelemetryRepository(store, vehicleRepository, sessionOn(origin), testScope.backgroundScope)
+        repository = DefaultTelemetryRepository(store, vehicleRepository, sessionOn(session), testScope.backgroundScope)
     }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN live telemetry WHEN a replay starts before the store moves on THEN none of it is shown`() =
+        testScope.runTest {
+            store.record(received(SYSTEM_1), RECEIVED_AT)
+            activeSystemId.value = SystemId(SYSTEM_1)
+            repository.activeTelemetry.launchIn(backgroundScope)
+            runCurrent()
+
+            session.value = REPLAY_SESSION
+            runCurrent()
+            val result = repository.activeTelemetry.value
+
+            result shouldBeEqualTo Telemetry(origin = DataOrigin.REPLAY)
+        }
 
     @Tag("REQ-020")
     @Test
@@ -226,7 +244,7 @@ private fun received(systemId: Int, roll: Float = 0f) = ReceivedMessage(
         yawspeed = 0f,
     ),
     sender = SENDER,
-    origin = DataOrigin.LIVE,
+    session = FIRST_SESSION,
 )
 
 private fun home(systemId: Int, latitude: Int) = ReceivedMessage(
@@ -249,5 +267,5 @@ private fun home(systemId: Int, latitude: Int) = ReceivedMessage(
         timeUsec = 443_979_837,
     ),
     sender = SENDER,
-    origin = DataOrigin.LIVE,
+    session = FIRST_SESSION,
 )

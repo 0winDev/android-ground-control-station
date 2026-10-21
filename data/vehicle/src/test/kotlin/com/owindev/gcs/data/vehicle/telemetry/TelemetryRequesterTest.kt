@@ -10,6 +10,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.SendResult
+import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
@@ -168,7 +169,7 @@ class TelemetryRequesterTest {
                     targetComponent = targetComponent,
                 ),
                 sender = VEHICLE_ADDRESS,
-                origin = DataOrigin.LIVE,
+                session = FIRST_SESSION,
             )
         }
 
@@ -467,7 +468,7 @@ class TelemetryRequesterTest {
                                 AUTOPILOT_COMPONENT_ID,
                                 message,
                                 VEHICLE_ADDRESS,
-                                origin = DataOrigin.LIVE,
+                                session = FIRST_SESSION,
                             ),
                             testScheduler.timeSource.markNow(),
                         )
@@ -632,7 +633,7 @@ class TelemetryRequesterTest {
                     targetComponent = targetComponent,
                 ),
                 sender = VEHICLE_ADDRESS,
-                origin = DataOrigin.LIVE,
+                session = FIRST_SESSION,
             )
 
         fun setMessageInterval(messageId: Int, intervalMicros: Float) = CommandLong(
