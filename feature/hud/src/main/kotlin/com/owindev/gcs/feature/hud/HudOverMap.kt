@@ -20,6 +20,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.ceil
 
 /**
  * The [map] under the HUD's content: a [header] across the top, then the [start] column on the left and the [side]
@@ -42,8 +43,11 @@ internal fun HudOverMap(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // Each part sits one margin in from the edge or from the part before it.
         val insets = PaddingValues(
-            start = minOf(startWidth.coveredWithMargin(), maxWidth * MAX_COVERED),
-            top = minOf(headerHeight.coveredWithMargin() + sideHeight.coveredWithMargin(), maxHeight * MAX_COVERED),
+            start = minOf(stableInset(startWidth.coveredWithMargin()), maxWidth * MAX_COVERED),
+            top = minOf(
+                stableInset(headerHeight.coveredWithMargin() + sideHeight.coveredWithMargin()),
+                maxHeight * MAX_COVERED,
+            ),
         )
         map(insets)
         Column(
@@ -78,10 +82,19 @@ internal fun HudOverMap(
     }
 }
 
+/**
+ * [covered] rounded up to a whole [INSET_STEP], so a banner that grows or shrinks by a line of text does not move the
+ * map's camera with it each time: only a change of layout past a step does.
+ */
+internal fun stableInset(covered: Dp): Dp = INSET_STEP * ceil(covered / INSET_STEP)
+
 /** A part this size and the margin before it; nothing when the part is empty. */
 private fun Dp.coveredWithMargin(): Dp = if (this > 0.dp) this + OverlayMargin else 0.dp
 
 internal val OverlayMargin = 16.dp
+
+/** The step the covered sides are rounded up to. */
+internal val INSET_STEP = 16.dp
 
 /** The share of the map's width or height that can count as covered. */
 private const val MAX_COVERED = 0.6f
