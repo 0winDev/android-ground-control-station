@@ -4,6 +4,7 @@ import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetSocketAddress
+import java.net.UnknownHostException
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -63,9 +64,11 @@ class UdpTransport(
      * Sends [payload] as one datagram to [to], from the socket [datagrams] is receiving on.
      *
      * Never throws on I/O: [SendResult.NotOpen] when no collection holds the socket (the link is closed),
-     * [SendResult.Failed] when the operating system rejects the datagram.
+     * [SendResult.Failed] when the operating system rejects the datagram or [to] is not a resolved address, which no
+     * datagram can be sent to.
      */
     suspend fun send(payload: ByteArray, to: InetSocketAddress): SendResult = withContext(ioDispatcher) {
+        if (to.isUnresolved) return@withContext SendResult.Failed(UnknownHostException("Unresolved destination"))
         val socket = openSocket.get() ?: return@withContext SendResult.NotOpen
         try {
             socket.send(DatagramPacket(payload, payload.size, to))

@@ -6,6 +6,7 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.UnknownHostException
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -133,6 +134,17 @@ class UdpTransportTest {
             received.data.copyOf(received.length) shouldBeEqualTo FIRST_PAYLOAD
             received.port shouldBeEqualTo socket.localPort
         }
+    }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN an open link WHEN sending to an unresolved address THEN fails without throwing`() = runTest {
+        backgroundScope.launch { transport.datagrams().collect {} }
+        val unresolved = InetSocketAddress.createUnresolved("replay", 0)
+
+        val result = transport.send(FIRST_PAYLOAD, unresolved)
+
+        (result as SendResult.Failed).cause shouldBeInstanceOf UnknownHostException::class
     }
 
     @Tag("REQ-021")
