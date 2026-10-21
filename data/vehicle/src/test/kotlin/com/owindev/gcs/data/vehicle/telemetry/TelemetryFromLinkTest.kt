@@ -52,8 +52,8 @@ class TelemetryFromLinkTest {
     private val transport: UdpTransport = mockk()
     private val telemetryRequester: TelemetryRequester = mockk()
     private val isHeard: CapturingSlot<() -> Boolean> = slot()
-    private val store = TelemetryStore(TrailRule(StalenessRule()))
     private val activeVehicle = ActiveVehicle()
+    private val store = TelemetryStore(TrailRule(StalenessRule()), activeVehicle)
 
     private lateinit var repository: DefaultVehicleRepository
 

@@ -83,7 +83,7 @@ class DefaultVehicleRepositoryTest {
     private val transport: UdpTransport = mockk()
     private val telemetryRequester: TelemetryRequester = mockk()
     private val telemetryTargets: CapturingSlot<Flow<TelemetryTarget?>> = slot()
-    private val telemetryStore = TelemetryStore(TrailRule(StalenessRule()))
+    private val telemetryStore = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
 
     private lateinit var repository: DefaultVehicleRepository
 

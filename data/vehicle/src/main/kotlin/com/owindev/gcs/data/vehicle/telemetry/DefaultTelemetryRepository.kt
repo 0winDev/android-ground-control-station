@@ -50,11 +50,12 @@ internal class DefaultTelemetryRepository @Inject constructor(
     override val activeTrail: StateFlow<Trail?> = combine(
         vehicleRepository.vehicles,
         vehicleRepository.activeSystemId,
-        store.trails,
+        store.trail,
         session.session,
-    ) { _, activeSystemId, trails, current ->
-        val kept = trails.takeIf { store.session == current }.orEmpty()
-        activeSystemId?.let { kept[it] ?: Trail.EMPTY }
+    ) { _, activeSystemId, followed, current ->
+        activeSystemId?.let { active ->
+            followed.progress.trail.takeIf { followed.session == current && followed.systemId == active } ?: Trail.EMPTY
+        }
     }
         .stateIn(scope = scope, started = WHILE_OBSERVED, initialValue = null)
 

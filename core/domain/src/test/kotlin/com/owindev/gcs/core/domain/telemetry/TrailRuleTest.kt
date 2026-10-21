@@ -27,14 +27,14 @@ class TrailRuleTest {
     fun `GIVEN no trail WHEN a verified position arrives THEN starts the first segment with it`() {
         val telemetry = verified(EAST_0)
 
-        val result = rule.after(Trail.EMPTY, previousPosition = null, telemetry)
+        val result = rule.after(TrailProgress.EMPTY, previousPosition = null, telemetry)
 
-        result shouldBeEqualTo Trail(listOf(listOf(EAST_0.point)), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
     }
 
     @Test
     fun `GIVEN an open segment WHEN a position arrives without a 3D fix, fresh GPS or a real place THEN closes it`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
         val previous = Timed(EAST_0, clock.markNow())
         val unverified = listOf(
             Telemetry(position = Timed(EAST_1, clock.markNow()), origin = DataOrigin.LIVE),
@@ -45,12 +45,14 @@ class TrailRuleTest {
 
         val result = unverified.map { rule.after(trail, previous, it) }
 
-        result shouldBeEqualTo List(unverified.size) { Trail(listOf(listOf(EAST_0.point)), open = false) }
+        result shouldBeEqualTo List(unverified.size) {
+            TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = false)
+        }
     }
 
     @Test
     fun `GIVEN an open segment WHEN the same frozen position arrives again THEN the trail is unchanged`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
         val previous = Timed(EAST_0, clock.markNow())
 
         val result = rule.after(trail, previous, verified(EAST_0))
@@ -60,7 +62,7 @@ class TrailRuleTest {
 
     @Test
     fun `GIVEN an open segment WHEN a position 1·9 m away arrives THEN the trail is unchanged`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
         val previous = Timed(EAST_0, clock.markNow())
 
         val result = rule.after(trail, previous, verified(SOUTH_1_9_M))
@@ -70,82 +72,91 @@ class TrailRuleTest {
 
     @Test
     fun `GIVEN an open segment WHEN a position 2·1 m away arrives THEN extends it`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
         val previous = Timed(EAST_0, clock.markNow())
 
         val result = rule.after(trail, previous, verified(EAST_1))
 
-        result shouldBeEqualTo Trail(listOf(listOf(EAST_0.point, EAST_1.point)), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(listOf(EAST_0.point, EAST_1.point))), open = true)
     }
 
     @Test
     fun `GIVEN a segment closed by an unverified position WHEN a verified one arrives THEN starts a second segment`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = false)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = false)
         val previous = Timed(EAST_1, clock.markNow())
 
         val result = rule.after(trail, previous, verified(EAST_2))
 
-        result shouldBeEqualTo Trail(listOf(listOf(EAST_0.point), listOf(EAST_2.point)), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(listOf(EAST_0.point), listOf(EAST_2.point))), open = true)
+    }
+
+    @Test
+    fun `GIVEN an open segment WHEN closing it THEN keeps its points and closes it`() {
+        val progress = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
+
+        val result = rule.closed(progress)
+
+        result shouldBeEqualTo TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = false)
     }
 
     @Test
     fun `GIVEN no position for longer than its staleness threshold WHEN one arrives THEN starts a second segment`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
         val previous = Timed(EAST_0, clock.markNow())
         clock += POSITION_STALE_AFTER + HALF_SECOND
 
         val result = rule.after(trail, previous, verified(EAST_1))
 
-        result shouldBeEqualTo Trail(listOf(listOf(EAST_0.point), listOf(EAST_1.point)), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(listOf(EAST_0.point), listOf(EAST_1.point))), open = true)
     }
 
     @Test
     fun `GIVEN the last position half a second ago WHEN the next arrives THEN extends the segment`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
         val previous = Timed(EAST_0, clock.markNow())
         clock += HALF_SECOND
 
         val result = rule.after(trail, previous, verified(EAST_1))
 
-        result shouldBeEqualTo Trail(listOf(listOf(EAST_0.point, EAST_1.point)), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(listOf(EAST_0.point, EAST_1.point))), open = true)
     }
 
     @Test
     fun `GIVEN a full trail WHEN a point is added THEN the oldest point of the first segment is dropped`() {
         val first = eastward(from = 0, count = 4_000)
         val second = eastward(from = 4_000, count = 1_000)
-        val trail = Trail(listOf(first, second), open = true)
+        val trail = TrailProgress(Trail(listOf(first, second)), open = true)
         val next = eastPosition(5_000)
 
         val result = rule.after(trail, Timed(eastPosition(4_999), clock.markNow()), verified(next))
 
-        result shouldBeEqualTo Trail(listOf(first.drop(1), second + next.point), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(first.drop(1), second + next.point)), open = true)
     }
 
     @Test
     fun `GIVEN a full trail whose first segment has one point WHEN a point is added THEN that segment disappears`() {
         val second = eastward(from = 1, count = 4_999)
-        val trail = Trail(listOf(listOf(EAST_0.point), second), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point), second)), open = true)
         val next = eastPosition(5_000)
 
         val result = rule.after(trail, Timed(eastPosition(4_999), clock.markNow()), verified(next))
 
-        result shouldBeEqualTo Trail(listOf(second + next.point), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(second + next.point)), open = true)
     }
 
     @Test
     fun `GIVEN an open segment on one side of 180 degrees WHEN a position 2·2 m across arrives THEN extends it`() {
-        val trail = Trail(listOf(listOf(WEST_OF_180.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(WEST_OF_180.point))), open = true)
         val previous = Timed(WEST_OF_180, clock.markNow())
 
         val result = rule.after(trail, previous, verified(EAST_OF_180))
 
-        result shouldBeEqualTo Trail(listOf(listOf(WEST_OF_180.point, EAST_OF_180.point)), open = true)
+        result shouldBeEqualTo TrailProgress(Trail(listOf(listOf(WEST_OF_180.point, EAST_OF_180.point))), open = true)
     }
 
     @Test
     fun `GIVEN GPS but no position yet WHEN judging the trail THEN the trail is unchanged`() {
-        val trail = Trail(listOf(listOf(EAST_0.point)), open = true)
+        val trail = TrailProgress(Trail(listOf(listOf(EAST_0.point))), open = true)
         val telemetry = Telemetry(gps = Timed(gps(GpsFixType.Fix3d), clock.markNow()), origin = DataOrigin.LIVE)
 
         val result = rule.after(trail, previousPosition = null, telemetry)

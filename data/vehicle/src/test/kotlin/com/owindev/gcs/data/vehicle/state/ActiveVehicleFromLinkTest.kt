@@ -59,7 +59,7 @@ class ActiveVehicleFromLinkTest {
             rule = LinkLossRule(),
             heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session)),
             telemetryRequester = telemetryRequester,
-            telemetryStore = TelemetryStore(TrailRule(StalenessRule())),
+            telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
         )

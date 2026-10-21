@@ -12,6 +12,7 @@ import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
 import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.link.sessionOn
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.every
 import io.mockk.mockk
 import kotlin.time.TestTimeSource
@@ -37,7 +38,8 @@ class DefaultTelemetryRepositoryTrailTest {
     private val vehicleRepository: VehicleRepository = mockk()
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val activeSystemId = MutableStateFlow<SystemId?>(null)
-    private val store = TelemetryStore(TrailRule(StalenessRule()))
+    private val activeVehicle = ActiveVehicle()
+    private val store = TelemetryStore(TrailRule(StalenessRule()), activeVehicle)
     private val session = MutableStateFlow(FIRST_SESSION)
 
     private lateinit var repository: DefaultTelemetryRepository
@@ -54,7 +56,7 @@ class DefaultTelemetryRepositoryTrailTest {
     @Test
     fun `GIVEN trails of two systems WHEN observing the active trail THEN is only the active vehicle's`() =
         testScope.runTest {
-            activeSystemId.value = SystemId(SYSTEM_1)
+            activate(SYSTEM_1)
             flyTo(SYSTEM_1, step = 0)
             flyTo(SYSTEM_2, step = 5)
             repository.activeTrail.launchIn(backgroundScope)
@@ -62,7 +64,7 @@ class DefaultTelemetryRepositoryTrailTest {
             runCurrent()
             val result = repository.activeTrail.value
 
-            result shouldBeEqualTo Trail(listOf(listOf(trailPoint(0))), open = true)
+            result shouldBeEqualTo Trail(listOf(listOf(trailPoint(0))))
         }
 
     @Tag("REQ-020")
@@ -80,7 +82,7 @@ class DefaultTelemetryRepositoryTrailTest {
     @Test
     fun `GIVEN an active vehicle with no verified position yet WHEN observing its trail THEN is empty`() =
         testScope.runTest {
-            activeSystemId.value = SystemId(SYSTEM_1)
+            activate(SYSTEM_1)
             repository.activeTrail.launchIn(backgroundScope)
 
             runCurrent()
@@ -91,7 +93,7 @@ class DefaultTelemetryRepositoryTrailTest {
 
     @Test
     fun `GIVEN the active trail observed WHEN the vehicle moves on THEN follows it`() = testScope.runTest {
-        activeSystemId.value = SystemId(SYSTEM_1)
+        activate(SYSTEM_1)
         flyTo(SYSTEM_1, step = 0)
         repository.activeTrail.launchIn(backgroundScope)
         runCurrent()
@@ -100,14 +102,14 @@ class DefaultTelemetryRepositoryTrailTest {
         runCurrent()
         val result = repository.activeTrail.value
 
-        result shouldBeEqualTo Trail(listOf(listOf(trailPoint(0), trailPoint(1))), open = true)
+        result shouldBeEqualTo Trail(listOf(listOf(trailPoint(0), trailPoint(1))))
     }
 
     @Tag("REQ-037")
     @Test
     fun `GIVEN a live trail WHEN a replay starts before the store moves on THEN none of it is shown`() =
         testScope.runTest {
-            activeSystemId.value = SystemId(SYSTEM_1)
+            activate(SYSTEM_1)
             flyTo(SYSTEM_1, step = 0)
             repository.activeTrail.launchIn(backgroundScope)
             runCurrent()
@@ -125,7 +127,7 @@ class DefaultTelemetryRepositoryTrailTest {
         testScope.runTest {
             store.startSession(REPLAY_SESSION)
             session.value = REPLAY_SESSION
-            activeSystemId.value = SystemId(SYSTEM_1)
+            activate(SYSTEM_1, REPLAY_SESSION)
             flyTo(SYSTEM_1, step = 0, REPLAY_SESSION)
             repository.activeTrail.launchIn(backgroundScope)
             runCurrent()
@@ -137,9 +139,42 @@ class DefaultTelemetryRepositoryTrailTest {
             result shouldBeEqualTo Trail.EMPTY
         }
 
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN the store already on a replay WHEN its trail grows before the link session moves on THEN is empty`() =
+        testScope.runTest {
+            activate(SYSTEM_1)
+            flyTo(SYSTEM_1, step = 0)
+            repository.activeTrail.launchIn(backgroundScope)
+            runCurrent()
+            store.startSession(REPLAY_SESSION)
+            activate(SYSTEM_1, REPLAY_SESSION)
+
+            flyTo(SYSTEM_1, step = 7, REPLAY_SESSION)
+            runCurrent()
+            val result = repository.activeTrail.value
+
+            result shouldBeEqualTo Trail.EMPTY
+        }
+
+    @Tag("REQ-020")
+    @Test
+    fun `GIVEN the trail of one vehicle WHEN another is the active one THEN its trail is empty`() = testScope.runTest {
+        activate(SYSTEM_1)
+        flyTo(SYSTEM_1, step = 0)
+        repository.activeTrail.launchIn(backgroundScope)
+        runCurrent()
+
+        activeSystemId.value = SystemId(SYSTEM_2)
+        runCurrent()
+        val result = repository.activeTrail.value
+
+        result shouldBeEqualTo Trail.EMPTY
+    }
+
     @Test
     fun `GIVEN the active trail no longer observed WHEN reading it THEN its last value is gone`() = testScope.runTest {
-        activeSystemId.value = SystemId(SYSTEM_1)
+        activate(SYSTEM_1)
         flyTo(SYSTEM_1, step = 0)
         val observer = repository.activeTrail.launchIn(backgroundScope)
         runCurrent()
@@ -161,6 +196,13 @@ class DefaultTelemetryRepositoryTrailTest {
 
             result shouldBeEqualTo 1
         }
+
+    /** [systemId] active in [session], as the store and the vehicles see it. */
+    private fun activate(systemId: Int, session: SessionId = FIRST_SESSION) {
+        if (session != FIRST_SESSION) activeVehicle.startReplay(session)
+        activeVehicle.pinFirst(SystemId(systemId), session)
+        activeSystemId.value = SystemId(systemId)
+    }
 
     /** A fresh 3D fix, then a position at [step]. */
     private fun flyTo(systemId: Int, step: Int, session: SessionId = FIRST_SESSION) {

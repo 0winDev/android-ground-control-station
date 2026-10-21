@@ -7,13 +7,20 @@ data class TrailPoint(val latitude: Double, val longitude: Double)
 
 /**
  * Where the vehicle has been (REQ-035): its verified positions, oldest first, in [segments] the GCS saw without a
- * break, so a stretch it did not see is never drawn as a straight line. [open] says whether the next verified
- * position continues the last segment.
+ * break, so a stretch it did not see is never drawn as a straight line. A segment can hold a single point.
  */
-data class Trail(val segments: List<List<TrailPoint>>, val open: Boolean) {
+data class Trail(val segments: List<List<TrailPoint>>) {
 
     companion object {
-        val EMPTY = Trail(segments = emptyList(), open = false)
+        val EMPTY = Trail(segments = emptyList())
+    }
+}
+
+/** A [trail] being followed: [open] says whether the next verified position continues its last segment. */
+data class TrailProgress(val trail: Trail, val open: Boolean) {
+
+    companion object {
+        val EMPTY = TrailProgress(Trail.EMPTY, open = false)
     }
 }
 
@@ -35,36 +42,40 @@ class TrailRule(
     }
 
     /**
-     * [trail] after [telemetry]'s position, which has just arrived and followed [previousPosition], the one before it
-     * from the same vehicle, `null` if none. The same [trail] when nothing changes.
+     * [progress] after [telemetry]'s position, which has just arrived and followed [previousPosition], the one before
+     * it from the same vehicle, `null` if none. The same [progress] when nothing changes.
      */
-    fun after(trail: Trail, previousPosition: Timed<GlobalPosition>?, telemetry: Telemetry): Trail {
+    fun after(progress: TrailProgress, previousPosition: Timed<GlobalPosition>?, telemetry: Telemetry): TrailProgress {
         val position = telemetry.position?.value
         return when {
-            position == null -> trail
+            position == null -> progress
 
-            !telemetry.isPositionVerified(staleness) -> if (trail.open) trail.copy(open = false) else trail
+            !telemetry.isPositionVerified(staleness) -> closed(progress)
 
             else -> extended(
-                trail,
+                progress,
                 TrailPoint(position.latitude, position.longitude),
-                continues(trail, previousPosition),
+                continues(progress, previousPosition),
             )
         }
     }
 
-    private fun continues(trail: Trail, previousPosition: Timed<GlobalPosition>?): Boolean = trail.open &&
+    /** [progress] with its last segment closed, as after a reboot: the next verified position starts a new one. */
+    fun closed(progress: TrailProgress): TrailProgress = if (progress.open) progress.copy(open = false) else progress
+
+    private fun continues(progress: TrailProgress, previousPosition: Timed<GlobalPosition>?): Boolean = progress.open &&
         previousPosition != null &&
         !staleness.isStale(TelemetryKind.POSITION, previousPosition.receivedAt.elapsedNow())
 
-    private fun extended(trail: Trail, point: TrailPoint, continues: Boolean): Trail {
-        val last = trail.segments.lastOrNull()
-        val segments = when {
-            !continues || last == null -> trail.segments + listOf(listOf(point))
-            isSpaced(last.last(), point) -> trail.segments.dropLast(1) + listOf(last + point)
+    private fun extended(progress: TrailProgress, point: TrailPoint, continues: Boolean): TrailProgress {
+        val segments = progress.trail.segments
+        val last = segments.lastOrNull()
+        val next = when {
+            !continues || last == null -> segments + listOf(listOf(point))
+            isSpaced(last.last(), point) -> segments.dropLast(1) + listOf(last + point)
             else -> null
         }
-        return segments?.let { Trail(it.trimmedTo(maxPoints), open = true) } ?: trail
+        return next?.let { TrailProgress(Trail(it.trimmedTo(maxPoints)), open = true) } ?: progress
     }
 
     private fun isSpaced(from: TrailPoint, to: TrailPoint): Boolean =

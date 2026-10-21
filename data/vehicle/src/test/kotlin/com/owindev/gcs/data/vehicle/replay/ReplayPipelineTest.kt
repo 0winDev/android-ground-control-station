@@ -81,7 +81,7 @@ class ReplayPipelineTest {
     private val transport: UdpTransport = mockk()
     private val recorder: FlightRecorder = ignoringRecorder()
     private val activeVehicle = ActiveVehicle()
-    private val store = TelemetryStore(TrailRule(StalenessRule()))
+    private val store = TelemetryStore(TrailRule(StalenessRule()), activeVehicle)
     private val recordings get() = File(temp, "tlogs").apply { mkdirs() }
 
     private lateinit var session: LinkSession
