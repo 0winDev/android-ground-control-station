@@ -66,6 +66,7 @@ enum class GcsPalette {
     DAY,
 }
 
+private val LocalGcsPalette = staticCompositionLocalOf { GcsPalette.NIGHT }
 private val LocalGcsColors = staticCompositionLocalOf { NightGcsColors }
 private val LocalTelemetryTypography = staticCompositionLocalOf { GcsTelemetryTypography }
 private val LocalGcsSizes = staticCompositionLocalOf { DefaultGcsSizes }
@@ -78,6 +79,7 @@ private val LocalGcsSpacing = staticCompositionLocalOf { DefaultGcsSpacing }
 @Composable
 fun GcsTheme(palette: GcsPalette = GcsPalette.NIGHT, content: @Composable () -> Unit) {
     CompositionLocalProvider(
+        LocalGcsPalette provides palette,
         LocalGcsColors provides if (palette == GcsPalette.DAY) DayGcsColors else NightGcsColors,
         LocalTelemetryTypography provides GcsTelemetryTypography,
         LocalGcsSizes provides DefaultGcsSizes,
@@ -115,6 +117,15 @@ fun GcsCompact(enabled: Boolean, content: @Composable () -> Unit) {
 
 /** GCS-specific tokens on top of [MaterialTheme]. */
 object GcsTheme {
+    /**
+     * The palette the theme is drawn in: whatever else follows the palette (the theme switch's words, the map's style)
+     * reads it here, so it can never disagree with the colours on screen.
+     */
+    val palette: GcsPalette
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalGcsPalette.current
+
     val colors: GcsColors
         @Composable
         @ReadOnlyComposable

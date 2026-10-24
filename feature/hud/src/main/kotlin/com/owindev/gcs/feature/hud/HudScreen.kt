@@ -30,17 +30,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.owindev.gcs.core.designsystem.layout.CompactHeight
 import com.owindev.gcs.core.designsystem.layout.CompactWidth
 import com.owindev.gcs.core.designsystem.theme.GcsCompact
-import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 
 /**
- * The HUD in the [palette] in use, with the operator's switch between night and day ([onToggleTheme], REQ-030), laid
+ * The HUD in the theme's palette, with the operator's switch between night and day ([onToggleTheme], REQ-030), laid
  * over the [map], which it tells the part of it its content covers. During a replay its banner is above everything
  * (REQ-037). [onOpenRecordings] opens the recordings, `null` while the operator must stay here (ADR 0007).
  */
 @Composable
 fun HudScreen(
-    palette: GcsPalette,
     onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenRecordings: (() -> Unit)? = null,
@@ -54,7 +52,6 @@ fun HudScreen(
         state = state,
         onAcknowledgeAlert = viewModel::onAlertAcknowledged,
         modifier = modifier,
-        palette = palette,
         onToggleTheme = onToggleTheme,
         replay = replay,
         replayControls = ReplayControls(
@@ -72,7 +69,6 @@ internal fun HudContent(
     state: HudUiState,
     onAcknowledgeAlert: (occurrence: Long) -> Unit,
     modifier: Modifier = Modifier,
-    palette: GcsPalette = GcsPalette.NIGHT,
     onToggleTheme: () -> Unit = {},
     replay: ReplayBanner? = null,
     replayControls: ReplayControls = ReplayControls(onPause = {}, onResume = {}, onStop = {}),
@@ -97,7 +93,6 @@ internal fun HudContent(
                     ) {
                         StatusBar(
                             state = state,
-                            palette = palette,
                             onToggleTheme = onToggleTheme,
                             onOpenLicences = { licencesOpen = true },
                             onOpenRecordings = onOpenRecordings,

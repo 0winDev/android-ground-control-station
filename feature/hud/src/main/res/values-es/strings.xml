@@ -13,6 +13,7 @@
     <string name="hud_label_link">Enlace</string>
     <string name="hud_link_connected">Conectado</string>
     <string name="hud_link_waiting">Esperando</string>
+    <string name="hud_link_replay">Reproducción</string>
     <string name="hud_label_mode">Modo</string>
     <string name="hud_mode_unknown">Modo %1$d</string>
     <string name="hud_label_state">Estado</string>

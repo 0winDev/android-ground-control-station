@@ -87,23 +87,16 @@ internal fun FlowRowScope.StatusChipItems(state: HudUiState, compact: Boolean = 
     )
 }
 
-/** The link chip agrees with the body below it: never WAITING while the link itself has failed. */
+/** The link chip, as [linkChipStateOf] decides it; a replay in the replay banner's colour. */
 @Composable
 private fun LinkChip(state: HudUiState, compact: Boolean) {
-    val (value, color) = when (state) {
-        is HudUiState.Connected -> stringResource(id = R.string.hud_link_connected) to GcsTheme.colors.nominal
-
-        is HudUiState.WaitingForVehicle -> stringResource(id = R.string.hud_link_waiting) to GcsTheme.colors.advisory
-
-        is HudUiState.PortUnavailable,
-        is HudUiState.PortUnavailableRetrying,
-        HudUiState.LinkError,
-        HudUiState.ReplayUnreadable,
-        -> stringResource(id = R.string.hud_link_failed) to GcsTheme.colors.emergency
-
-        is HudUiState.LinkLost -> stringResource(id = R.string.hud_link_lost_chip) to GcsTheme.colors.emergency
-
-        HudUiState.Starting -> stringResource(id = R.string.hud_no_value) to MaterialTheme.colorScheme.onSurface
+    val (value, color) = when (linkChipStateOf(state)) {
+        LinkChipState.CONNECTED -> stringResource(id = R.string.hud_link_connected) to GcsTheme.colors.nominal
+        LinkChipState.REPLAY -> stringResource(id = R.string.hud_link_replay) to GcsTheme.colors.advisory
+        LinkChipState.WAITING -> stringResource(id = R.string.hud_link_waiting) to GcsTheme.colors.advisory
+        LinkChipState.FAILED -> stringResource(id = R.string.hud_link_failed) to GcsTheme.colors.emergency
+        LinkChipState.LOST -> stringResource(id = R.string.hud_link_lost_chip) to GcsTheme.colors.emergency
+        LinkChipState.NONE -> stringResource(id = R.string.hud_no_value) to MaterialTheme.colorScheme.onSurface
     }
     StatusChip(
         label = stringResource(id = R.string.hud_label_link),

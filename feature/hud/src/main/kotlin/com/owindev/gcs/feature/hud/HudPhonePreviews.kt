@@ -78,7 +78,6 @@ private fun LinkLostPreview(palette: GcsPalette) {
                     recorded = true,
                 ),
                 onAcknowledgeAlert = {},
-                palette = palette,
                 replay = ReplayBanner(recording = "2026-10-24_09-47-44.tlog", status = ReplayStatus.ENDED),
             )
         }

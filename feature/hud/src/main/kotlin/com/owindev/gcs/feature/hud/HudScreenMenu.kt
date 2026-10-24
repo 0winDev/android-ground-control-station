@@ -15,6 +15,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.owindev.gcs.core.designsystem.R as DesignSystemR
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
+import com.owindev.gcs.core.designsystem.theme.GcsTheme
 
 /**
  * On a phone the status bar has no room for the theme switch and the screen buttons beside the chips: they go in a
@@ -23,7 +24,6 @@ import com.owindev.gcs.core.designsystem.theme.GcsPalette
 @Composable
 internal fun ScreenMenu(
     state: HudUiState,
-    palette: GcsPalette,
     onToggleTheme: () -> Unit,
     onOpenLicences: () -> Unit,
     onOpenRecordings: (() -> Unit)?,
@@ -37,7 +37,7 @@ internal fun ScreenMenu(
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val toDay = palette == GcsPalette.NIGHT
+            val toDay = GcsTheme.palette == GcsPalette.NIGHT
             DropdownMenuItem(
                 text = {
                     Text(

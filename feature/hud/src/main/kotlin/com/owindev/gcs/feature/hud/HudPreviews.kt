@@ -52,7 +52,6 @@ internal fun ConnectedPreview(palette: GcsPalette) {
                     ),
                 ),
                 onAcknowledgeAlert = {},
-                palette = palette,
             )
         }
     }

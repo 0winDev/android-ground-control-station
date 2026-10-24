@@ -40,7 +40,6 @@ import com.owindev.gcs.core.domain.vehicle.FlightMode
 @Composable
 internal fun StatusBar(
     state: HudUiState,
-    palette: GcsPalette,
     onToggleTheme: () -> Unit,
     onOpenLicences: () -> Unit = {},
     onOpenRecordings: (() -> Unit)? = null,
@@ -55,7 +54,6 @@ internal fun StatusBar(
             ) {
                 ScreenMenu(
                     state = state,
-                    palette = palette,
                     onToggleTheme = onToggleTheme,
                     onOpenLicences = onOpenLicences,
                     onOpenRecordings = onOpenRecordings,
@@ -67,7 +65,7 @@ internal fun StatusBar(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
             ) {
-                ThemeToggle(palette = palette, onToggle = onToggleTheme)
+                ThemeToggle(onToggle = onToggleTheme)
                 ScreenButtons(state = state, onOpenLicences = onOpenLicences, onOpenRecordings = onOpenRecordings)
                 StatusChips(state = state, alignment = Alignment.End, modifier = Modifier.weight(1f))
             }
@@ -80,8 +78,8 @@ internal fun StatusBar(
  * state. One tap switches at once: changing palette is harmless and needs no confirmation.
  */
 @Composable
-private fun ThemeToggle(palette: GcsPalette, onToggle: () -> Unit) {
-    val toDay = palette == GcsPalette.NIGHT
+private fun ThemeToggle(onToggle: () -> Unit) {
+    val toDay = GcsTheme.palette == GcsPalette.NIGHT
     val description =
         stringResource(id = if (toDay) R.string.hud_theme_switch_to_day else R.string.hud_theme_switch_to_night)
     Surface(

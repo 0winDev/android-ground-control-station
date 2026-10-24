@@ -37,7 +37,7 @@ Compose:
     active: true
   CompositionLocalAllowlist:
     active: true
-    allowedCompositionLocals: LocalGcsColors,LocalTelemetryTypography,LocalGcsSizes,LocalGcsSpacing
+    allowedCompositionLocals: LocalGcsPalette,LocalGcsColors,LocalTelemetryTypography,LocalGcsSizes,LocalGcsSpacing
   CompositionLocalNaming:
     active: true
   ContentEmitterReturningValues:

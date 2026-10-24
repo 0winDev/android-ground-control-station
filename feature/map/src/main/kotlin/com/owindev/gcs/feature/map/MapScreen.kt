@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.owindev.gcs.core.designsystem.theme.GcsPalette
+import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
@@ -55,14 +55,13 @@ import org.maplibre.spatialk.geojson.MultiPoint
 import org.maplibre.spatialk.geojson.Position
 
 /**
- * The map of the active vehicle (REQ-034) in the [palette] in use. [viewportInsets] is the part of the map other
+ * The map of the active vehicle (REQ-034) in the theme's palette. [viewportInsets] is the part of the map other
  * content covers: the camera centres the vehicle in what is left, and the map's controls stay out of it.
  */
 // Without @UiComposable the compiler infers MapLibre's own applier from the map content, and callers cannot use it.
 @Composable
 @UiComposable
 fun MapScreen(
-    palette: GcsPalette,
     modifier: Modifier = Modifier,
     viewportInsets: PaddingValues = PaddingValues(0.dp),
     viewModel: MapViewModel = hiltViewModel(),
@@ -70,7 +69,6 @@ fun MapScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     MapContent(
         state = state,
-        palette = palette,
         viewportInsets = viewportInsets,
         onMapPan = viewModel::onMapPanned,
         onRecenter = viewModel::onRecenter,
@@ -82,7 +80,6 @@ fun MapScreen(
 @UiComposable
 internal fun MapContent(
     state: MapUiState,
-    palette: GcsPalette,
     viewportInsets: PaddingValues,
     onMapPan: () -> Unit,
     onRecenter: () -> Unit,
@@ -99,6 +96,8 @@ internal fun MapContent(
     // as soon as it is up.
     var presented by remember { mutableStateOf(false) }
     var failedStyle by remember { mutableStateOf<BaseStyle?>(null) }
+    // The theme's palette, never a copy of it: a copy kept by a screen went on drawing the old style.
+    val palette = GcsTheme.palette
     val remoteStyle = nightStyle?.let { remoteStyleOf(palette, it) }
     val useRemote = presented && remoteStyle != null && failedStyle != remoteStyle
     val trailColor = MaterialTheme.colorScheme.onSurface.copy(alpha = TRAIL_ALPHA)

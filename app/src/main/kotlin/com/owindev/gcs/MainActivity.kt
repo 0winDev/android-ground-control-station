@@ -42,7 +42,6 @@ class MainActivity : ComponentActivity() {
             GcsTheme(palette = palette) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     GcsNavigation(
-                        palette = palette,
                         onToggleTheme = themeViewModel::onThemeToggled,
                         guard = flightGuard,
                         onShare = ::shareRecording,
