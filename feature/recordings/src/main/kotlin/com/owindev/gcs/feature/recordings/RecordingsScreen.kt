@@ -118,7 +118,6 @@ fun RecordingsScreen(
     )
 }
 
-/** What the operator can do on the screen, and on each [recording] by its name. */
 internal class RecordingsActions(
     val onBack: () -> Unit,
     val onImport: () -> Unit,

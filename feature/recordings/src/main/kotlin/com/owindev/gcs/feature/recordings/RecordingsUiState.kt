@@ -18,7 +18,6 @@ data class RecordingsUiState(
     val message: RecordingsMessage? = null,
 )
 
-/** Whether the recording [name] is being recorded, as last listed. */
 internal fun RecordingsUiState.isInProgress(name: String): Boolean =
     recordings.orEmpty().any { it.name == name && it.inProgress }
 
@@ -40,7 +39,6 @@ sealed interface RecordingsMessage {
     /** How saving a copy of [name] to the device went, a closed picker included. */
     data class Save(val name: String, val result: SaveResult) : RecordingsMessage
 
-    /** The recording [name] is no longer there. */
     data class Missing(val name: String) : RecordingsMessage
 }
 

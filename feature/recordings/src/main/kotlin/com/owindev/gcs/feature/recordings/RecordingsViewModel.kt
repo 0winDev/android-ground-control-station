@@ -25,9 +25,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * The recordings list (REQ-038): replays one (REQ-037), shares, deletes after confirmation, and imports. What each
- * action decides belongs to the repositories; this only shows the outcome. A replay that starts sends the operator to
- * the flight screen; one refused or failed stays here with its reason.
+ * What each action decides belongs to the repositories; this only shows the outcome. A replay that starts sends the
+ * operator to the flight screen; one refused or failed stays here with its reason.
  */
 @HiltViewModel
 class RecordingsViewModel @Inject constructor(
