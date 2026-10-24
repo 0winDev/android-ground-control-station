@@ -11,6 +11,5 @@ internal fun ignoringRecorder(): FlightRecorder {
     every { recorder.received(any(), any()) } just runs
     every { recorder.sent(any()) } just runs
     every { recorder.sessionStopped() } just runs
-    every { recorder.replayed = any() } just runs
     return recorder
 }

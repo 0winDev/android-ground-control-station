@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.replay
 
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayFailure
 import com.owindev.gcs.core.domain.replay.ReplayRefusal
 import com.owindev.gcs.core.domain.replay.ReplayRule
@@ -18,7 +19,7 @@ import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.LinkStatus
-import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import io.mockk.CapturingSlot
 import io.mockk.Runs as runs
 import io.mockk.every
@@ -59,29 +60,27 @@ class DefaultReplayRepositoryTest {
     private val status = MutableStateFlow<LinkStatus>(LinkStatus.Running(datagrams = 0))
     private val vehicleRepository: VehicleRepository = mockk()
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
-    private val recorder: FlightRecorder = mockk()
     private val replayClock: CapturingSlot<ReplayClock> = slot()
     private val events = mutableListOf<String>()
     private val replayed = mutableListOf<File>()
     private val recordings get() = File(temp, "tlogs").apply { mkdirs() }
     private val recording get() = File(recordings, "2026-10-16_17-09-58.tlog").apply { writeBytes(ByteArray(0)) }
+    private val folder by lazy { RecordingsFolder(recordings, RecordingRule()) }
 
     private lateinit var repository: DefaultReplayRepository
 
     @BeforeEach
     fun setUp() {
         every { session.status } returns status
-        every { session.replay(any(), capture(replayClock)) } answers { events += "replay" }
-        every { session.live() } answers { events += "live" }
-        every { recorder.replayed = any() } answers { events += "kept ${firstArg<String?>()}" }
+        every { session.replay(any(), capture(replayClock)) } answers { events += "replay keeping ${folder.replayed}" }
+        every { session.live() } answers { events += "live keeping ${folder.replayed}" }
         every { vehicleRepository.vehicles } returns vehicles
         repository = DefaultReplayRepository(
             session = session,
             vehicleRepository = vehicleRepository,
             clock = clock,
-            recorder = recorder,
+            folder = folder,
             rule = ReplayRule(LinkLossRule()),
-            recordings = recordings,
             replaySource = { file, _ ->
                 replayed += file
                 emptySource()
@@ -265,7 +264,7 @@ class DefaultReplayRepositoryTest {
 
         repository.play(file)
 
-        events shouldBeEqualTo listOf("kept ${file.name}", "replay")
+        events shouldBeEqualTo listOf("replay keeping ${file.name}")
     }
 
     @Test
@@ -276,8 +275,8 @@ class DefaultReplayRepositoryTest {
         repository.stop()
         val result = repository.state.value
 
-        result shouldBeEqualTo ReplayState.Off
-        events shouldBeEqualTo listOf("kept ${file.name}", "replay", "live", "kept null")
+        (result to folder.replayed) shouldBeEqualTo (ReplayState.Off to null)
+        events shouldBeEqualTo listOf("replay keeping ${file.name}", "live keeping ${file.name}")
     }
 
     @Test

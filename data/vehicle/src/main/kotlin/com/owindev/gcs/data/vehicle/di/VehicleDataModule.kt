@@ -20,6 +20,7 @@ import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
+import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import com.owindev.gcs.data.vehicle.replay.DefaultReplayRepository
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.replay.TlogDatagramSource
@@ -113,19 +114,27 @@ abstract class VehicleDataModule {
         @Provides
         fun provideRecordingRule(): RecordingRule = RecordingRule()
 
+        /** Flight logs in the app's private files (S-5), one folder for the recorder, the replay and the list. */
+        @Provides
+        @Singleton
+        internal fun provideRecordingsFolder(
+            @ApplicationContext context: Context,
+            rule: RecordingRule,
+        ): RecordingsFolder = RecordingsFolder(directory = File(context.filesDir, RECORDINGS_FOLDER), rule = rule)
+
         /**
-         * Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. Only
-         * the live link is recorded, so its link loss is timed on the device clock, never a replay's.
+         * Flight logs written on `Dispatchers.IO`, stamped with the wall clock. Only the live link is recorded, so its
+         * link loss is timed on the device clock, never a replay's.
          */
         @Provides
         @Singleton
         internal fun provideFlightRecorder(
-            @ApplicationContext context: Context,
+            folder: RecordingsFolder,
             rule: RecordingRule,
             activeVehicle: ActiveVehicle,
             @ApplicationScope scope: CoroutineScope,
         ): FlightRecorder = FlightRecorder(
-            directory = File(context.filesDir, RECORDINGS_FOLDER),
+            folder = folder,
             rule = rule,
             activeVehicle = activeVehicle,
             timeSource = ElapsedRealtimeTimeSource,
@@ -139,20 +148,18 @@ abstract class VehicleDataModule {
         @Provides
         @Singleton
         internal fun provideReplayRepository(
-            @ApplicationContext context: Context,
             session: LinkSession,
             vehicleRepository: VehicleRepository,
             clock: PipelineClock,
-            recorder: FlightRecorder,
+            folder: RecordingsFolder,
             linkLossRule: LinkLossRule,
             @ApplicationScope scope: CoroutineScope,
         ): ReplayRepository = DefaultReplayRepository(
             session = session,
             vehicleRepository = vehicleRepository,
             clock = clock,
-            recorder = recorder,
+            folder = folder,
             rule = ReplayRule(linkLossRule),
-            recordings = File(context.filesDir, RECORDINGS_FOLDER),
             replaySource = { recording, replayClock ->
                 TlogDatagramSource(recording, replayClock, ioDispatcher = Dispatchers.IO)
             },

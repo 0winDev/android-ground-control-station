@@ -2,6 +2,7 @@ package com.owindev.gcs.data.vehicle.replay
 
 import android.util.Log
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayRule
 import com.owindev.gcs.core.domain.replay.ReplayState
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
@@ -21,6 +22,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
@@ -116,9 +118,8 @@ class ReplayPipelineTest {
             session = session,
             vehicleRepository = vehicles,
             clock = clock,
-            recorder = recorder,
+            folder = RecordingsFolder(recordings, RecordingRule()),
             rule = ReplayRule(LinkLossRule()),
-            recordings = recordings,
             replaySource = { file, replayClock ->
                 TlogDatagramSource(file, replayClock, StandardTestDispatcher(testScope.testScheduler))
             },

@@ -392,12 +392,14 @@ class FlightRecorderTest {
     @Test
     fun `GIVEN the oldest log being replayed WHEN the live recording closes over the limit THEN it is kept`() =
         testScope.runTest {
-            val small = recorder(RecordingRule(maxTotalBytes = LIMIT_BYTES))
+            val rule = RecordingRule(maxTotalBytes = LIMIT_BYTES)
+            val folder = RecordingsFolder(directory, rule)
+            val small = recorder(rule, folder)
             receive(DISARMED_STABILIZE, small)
             runCurrent()
             oldLog(OLDEST_NAME, LIMIT_BYTES, lastModifiedMillis = 1)
             oldLog(IMPORTED_NAME, LIMIT_BYTES / 2, lastModifiedMillis = 2)
-            small.replayed = OLDEST_NAME
+            folder.replayed = OLDEST_NAME
 
             small.sessionStopped()
             runCurrent()
@@ -645,11 +647,12 @@ class FlightRecorderTest {
 
     private fun recorder(
         rule: RecordingRule = RecordingRule(),
+        folder: RecordingsFolder = RecordingsFolder(directory, rule),
         openOutput: (File) -> OutputStream = ::opened,
         syncOutput: (OutputStream) -> Unit = {},
         timeSource: TimeSource.WithComparableMarks = testScope.testScheduler.timeSource,
     ) = FlightRecorder(
-        directory = directory,
+        folder = folder,
         rule = rule,
         activeVehicle = activeVehicle,
         timeSource = timeSource,
