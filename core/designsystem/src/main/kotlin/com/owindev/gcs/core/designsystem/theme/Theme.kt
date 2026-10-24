@@ -69,6 +69,7 @@ enum class GcsPalette {
 private val LocalGcsColors = staticCompositionLocalOf { NightGcsColors }
 private val LocalTelemetryTypography = staticCompositionLocalOf { GcsTelemetryTypography }
 private val LocalGcsSizes = staticCompositionLocalOf { DefaultGcsSizes }
+private val LocalGcsSpacing = staticCompositionLocalOf { DefaultGcsSpacing }
 
 /**
  * GCS theme: the night or the high-contrast day [palette] (REQ-030), Barlow / Barlow Condensed / IBM Plex Mono and
@@ -80,10 +81,33 @@ fun GcsTheme(palette: GcsPalette = GcsPalette.NIGHT, content: @Composable () -> 
         LocalGcsColors provides if (palette == GcsPalette.DAY) DayGcsColors else NightGcsColors,
         LocalTelemetryTypography provides GcsTelemetryTypography,
         LocalGcsSizes provides DefaultGcsSizes,
+        LocalGcsSpacing provides DefaultGcsSpacing,
     ) {
         MaterialTheme(
             colorScheme = if (palette == GcsPalette.DAY) DayColorScheme else NightColorScheme,
             typography = GcsTypography,
+            content = content,
+        )
+    }
+}
+
+/**
+ * The theme in use with the phone boards' smaller type and tighter spacing while [enabled], for a compact window:
+ * colours and touch targets stay as they are (REQ-007).
+ */
+@Composable
+fun GcsCompact(enabled: Boolean, content: @Composable () -> Unit) {
+    if (!enabled) {
+        content()
+        return
+    }
+    CompositionLocalProvider(
+        LocalTelemetryTypography provides CompactTelemetryTypography,
+        LocalGcsSpacing provides CompactGcsSpacing,
+    ) {
+        MaterialTheme(
+            colorScheme = MaterialTheme.colorScheme,
+            typography = CompactGcsTypography,
             content = content,
         )
     }
@@ -105,4 +129,9 @@ object GcsTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalGcsSizes.current
+
+    val spacing: GcsSpacing
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalGcsSpacing.current
 }
