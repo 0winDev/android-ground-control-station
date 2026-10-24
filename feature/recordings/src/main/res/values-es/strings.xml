@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recordings_title">Grabaciones</string>
+    <plurals name="recordings_count">
+        <item quantity="one">%1$d archivo .tlog</item>
+        <item quantity="other">%1$d archivos .tlog</item>
+    </plurals>
+    <string name="recordings_back">‹ Vuelo</string>
+    <string name="recordings_back_description">Volver a la pantalla de vuelo</string>
+    <string name="recordings_import">Importar</string>
+    <string name="recordings_importing">Importando…</string>
+    <string name="recordings_loading">Leyendo las grabaciones…</string>
+    <string name="recordings_empty">Aún no hay grabaciones. Un vuelo se graba desde el primer HEARTBEAT del vehículo.</string>
+    <string name="recordings_column_start">Inicio</string>
+    <string name="recordings_column_duration">Duración</string>
+    <string name="recordings_column_size">Tamaño</string>
+    <string name="recordings_no_frames">Sin tramas válidas</string>
+    <string name="recordings_in_progress">Grabando</string>
+    <string name="recordings_replaying">En reproducción</string>
+    <string name="recordings_play">Reproducir</string>
+    <string name="recordings_share">Exportar</string>
+    <string name="recordings_delete">Borrar</string>
+    <string name="recordings_delete_title">¿Borrar esta grabación?</string>
+    <string name="recordings_delete_body">%1$s se borrará de este dispositivo. No se puede deshacer.</string>
+    <string name="recordings_delete_confirm">Borrar</string>
+    <string name="recordings_delete_cancel">Conservar</string>
+    <string name="recordings_dismiss">Entendido</string>
+    <string name="recordings_imported">Importada como %1$s.</string>
+    <string name="recordings_imported_deleted">Para no pasar del límite de grabaciones se borraron estas grabaciones antiguas: %1$s.</string>
+    <string name="recordings_import_too_large">El archivo ocupa más de %1$s, el límite de grabaciones. No se importó nada.</string>
+    <string name="recordings_import_too_large_sized">El archivo ocupa %1$s, más de %2$s, el límite de grabaciones. No se importó nada.</string>
+    <string name="recordings_import_not_tlog">El archivo no contiene un registro de telemetría MAVLink 2. No se importó nada.</string>
+    <string name="recordings_import_no_room">No hay sitio: la grabación en curso, la última cerrada y la que se reproduce llenan el límite de grabaciones. No se importó nada.</string>
+    <string name="recordings_import_failed">No se pudo leer o copiar el archivo. No se importó nada.</string>
+    <string name="recordings_delete_in_progress">Esta grabación está en curso y no se puede borrar.</string>
+    <string name="recordings_delete_replaying">Esta grabación se está reproduciendo. Detén la reproducción para borrarla.</string>
+    <string name="recordings_delete_failed">No se pudo borrar la grabación.</string>
+    <string name="recordings_delete_not_found">Esta grabación ya no está en este dispositivo.</string>
+    <string name="recordings_missing">%1$s ya no está en este dispositivo.</string>
+    <string name="recordings_replay_connected">Hay un vehículo conectado. Reproducir cerraría el enlace en vivo: desconecta antes el vehículo.</string>
+    <string name="recordings_replay_armed">El vehículo estaba armado la última vez que se oyó. Reproducir cerraría el enlace en vivo: hace falta un vehículo desarmado.</string>
+    <string name="recordings_replay_not_a_recording">Este archivo no es una grabación de esta estación.</string>
+    <string name="recordings_replay_unreadable">No se pudo leer la grabación.</string>
+</resources>
