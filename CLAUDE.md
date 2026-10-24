@@ -108,7 +108,7 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Commands: `/start-issue`, `/create-issue`, `/smart-commit`.
 - Project skills: `new-phase`, `adr`, `sitl-verify`, `android-feature`, `android-modularization`,
   `android-hilt`, `android-mvi`, `android-tests`, `android-typed-errors`, `compose-ui`,
-  `android-cli`, `navigation-3` (decision pending). Generic third-party skills are not part of the
+  `android-cli`, `navigation-3` (ADR 0007). Generic third-party skills are not part of the
   repository.
 
 ## Kotlin and Android standards
@@ -201,132 +201,84 @@ What surprised us and what to do differently, by topic. After each issue, add a 
 the issue number to an existing one.
 
 **Protocol and XML**
-- Messages hide in includes: HEARTBEAT is in `minimal.xml`, GLOBAL_POSITION_INT in `standard.xml`; search every
-  include before saying a message is missing (#8, #37).
+- Messages hide in includes (HEARTBEAT in `minimal.xml`, GLOBAL_POSITION_INT in `standard.xml`): search all (#8, #37).
 - Extension fields keep XML order on the wire; only base fields are sorted by size (#35).
-- Zero-fill cannot produce a field's "invalid" value (COMMAND_ACK `progress` unknown is 255), and a field can have
-  two (GPS_RAW_INT `yaw`: 0 and UINT16_MAX): read each `invalid` attribute and never take a restored 0 as real
-  (#35, #38).
-- Truncation cuts bytes, not fields (throttle 65 = `41 00` gives LEN 19), HEARTBEAT never truncates, and truncation
-  only makes sense through the parser: CRC over the wire bytes, then zero-fill (#5, #10, #37).
-- A uint64 extension below 2⁵⁶ always truncates (a boot-time `time_usec` cuts HOME_POSITION to LEN 56): a
-  full-length fixture needs its top byte non-zero (#66).
-- The XML is not the whole story; read ArduPilot's code. It sends `voltage_battery` 0 without a monitor, keeps the
-  voltage coming after its battery failsafe clears the health bit, and sends GLOBAL_POSITION_INT 0°, 0° before a
-  position and frozen after losing it: a fresh message is not a fresh value (#39, #41, #42).
-- ArduPilot keeps message rates per channel, streams only to a TCP channel it hears from and forgets the rates on
-  reboot: measure on the app's own channel and request the streams again (#36, #41).
-- An ArduPilot reboot is shorter than the link timeout (1.2 s without HEARTBEAT in SITL), so it never goes LOST,
-  and the channel then gets no streams until asked again: detect it from `time_boot_ms` going back (#69).
-- ArduPilot sends HOME_POSITION once, unrequested, when it sets or moves home, and nothing before: its silence is
-  normal, never a reason to request it again (#69).
-- Rejecting a value must never erase state: drop the invalid frame instead of turning it into a `null` part. Compare
-  ±π ranges as float32 and integer ranges with `in`, not `abs()` (`abs(Int.MIN_VALUE)` overflows) (#49).
+- Zero-fill cannot give a field's "invalid" value, and a field may have two: read each `invalid` (#35, #38).
+- Truncation cuts bytes, not fields, and never HEARTBEAT: CRC over the wire bytes, then zero-fill (#5, #10, #37).
+- A uint64 extension below 2⁵⁶ always truncates: a full-length fixture needs its top byte non-zero (#66).
+- Read ArduPilot's code, not only the XML: a fresh message is not a fresh value (#39, #41, #42).
+- ArduPilot keeps rates per channel, streams only to a TCP channel it hears and forgets them on reboot (#36, #41).
+- An ArduPilot reboot never goes LOST: detect it from `time_boot_ms` going back, then request the streams (#69).
+- ArduPilot sends HOME_POSITION only when it sets or moves home: its silence is never a reason to ask (#69).
+- Rejecting a value never erases state: drop the frame; compare ±π as float32 and integers with `in` (#49).
 
 **Test data and references**
-- Edge-case frames (signed, odd flags, out of range) and expected LENs come from pymavlink and a regeneration script;
-  MGRS letters from the reference converters' output. By hand, two of #40's reasons were wrong (#9, #37, #40).
-- Decode every fixture you reuse with pymavlink first, and list existing captures before planning a new one: a
-  fixture is not always what its folder suggests (#35, #38).
-- A false start marker with a plausible header keeps the parser waiting for a full frame: noise tests must keep the
-  stream going (#9).
-- Adding a message to the table breaks tests that borrowed it as "unknown": pick one the roadmap will never decode
-  (#37).
+- Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
+- Decode every reused fixture with pymavlink and list the existing captures before planning a new one (#35, #38).
+- A false start marker with a plausible header holds the parser: noise tests must keep the stream going (#9).
+- Adding a message breaks tests that borrowed it as "unknown": borrow one the roadmap will never decode (#37).
 - Kluent compares maps in iteration order: sort both sides (#10).
-- pymavlink and the C library drop every byte a corrupted LEN claims after a bad checksum, while our parser drops
-  only the start marker: pymavlink proves a corrupted frame is invalid, not which frames come after it (#67).
-- A reader that does not check checksums cannot anchor a plausibility window on one record: a false record taken
-  from garbage would anchor a timestamp no real record is near. Anchor on two consecutive records (#68).
-- A test of a tolerant reader can pass for the wrong reason (another recovery path masked the rule): check it with a
-  mutation of the rule it guards (#68, #71).
-- On a 1 m boundary a nanometre decides the MGRS digit, so reference points stay at least 1 cm off one; GEOTRANS
-  2.4.2 is not sub-mm accurate and disagrees with GeoConvert at exactly 84°N (#40).
+- pymavlink drops all a corrupted LEN claims, our parser only the marker: it proves a frame invalid, no more (#67).
+- A reader without checksums anchors its plausibility window on two consecutive records, never one (#68).
+- A tolerant reader's test can pass for the wrong reason: check it with a mutation of the rule it guards (#68, #71).
+- MGRS reference points stay 1 cm off a 1 m boundary; GEOTRANS and GeoConvert disagree at exactly 84°N (#40).
 
 **Flow and time**
-- A `SharedFlow` with replay hands an old message to a late subscriber as new: messages go without replay, what late
-  subscribers need goes in a `StateFlow` (#11).
-- `stateIn` keeps its last value after it stops and `WhileSubscribed` with no consumer evaluates nothing: time-based
-  state must not depend on observers, screens let their state expire (`replayExpiration = ZERO`), and a SITL check
-  before the UI exists needs a temporary, uncommitted observer (#11, #13, #41).
-- A `StateFlow` conflates a status set and replaced in the same instant: the single writer sends transitions through
-  a `Channel`, and tests check statuses by type or time, never by `take(n)` (#31, #36).
-- In virtual time a timeout and an answer due at the same instant race: keep test timings off each other's edges
-  (#36).
-- A `try/catch` around `collect` also catches what `emit` throws downstream: catch the upstream with `.catch`.
-  `shareIn` does not hand upstream crashes to subscribers, so such a test needs its own scope with a handler (#25).
-- One event can show on several messages: a reboot seen on ATTITUDE and again on GLOBAL_POSITION_INT restarted the
-  request round halfway, so detect it once per system (#69).
-- Anything that waits for an answer subscribes to `messages` and reopens a closed socket: gate background sends on
-  "the link is listened to", not only on CONNECTED (#39).
-- Two sessions of the same kind look alike in a conflated `StateFlow`: tell them apart by an epoch, not only by
-  kind (#71).
-- A consumer started lazily must start from the producer's first state, never its current one, or it misses the
-  change it started after (#71).
-- A clock followed after it started running is anchored on its position, or the time jumps ahead and later freezes
-  (#71).
-- A value passed into a Navigation 3 entry stays the one the entry was built with: read the theme's palette and
-  other changing state inside the screen, never as a captured parameter (#61).
-- A value read inside `combine` from outside its inputs can belong to a newer emission than the inputs: publish what
-  must match (a trail and its session) as one value (#72).
-- A camera move restarted for every position (5 Hz) is cancelled before the camera moves: follow with one conflated
-  loop, and check your own timing before blaming the library's gesture reason (#73).
+- A `SharedFlow` with replay hands old messages over as new: messages go without replay, state in a `StateFlow` (#11).
+- `stateIn` keeps its last value and evaluates nothing unobserved: time rules never depend on observers (#11, #13, #41).
+- A `StateFlow` conflates a status set and replaced at once: use a `Channel`, and never test with `take(n)` (#31, #36).
+- In virtual time a timeout and an answer due together race: keep test timings off each other's edges (#36).
+- `try/catch` around `collect` catches what `emit` throws downstream: catch the upstream with `.catch` (#25).
+- `shareIn` does not hand upstream crashes to subscribers: such a test needs its own scope with a handler (#25).
+- One event can show on several messages: detect a reboot once per system (#69).
+- Anything waiting for an answer reopens a closed socket: gate background sends on "the link is listened to" (#39).
+- Two sessions of one kind look alike in a conflated `StateFlow`: tell them apart by an epoch (#71).
+- A consumer started lazily starts from the producer's first state, never its current one (#71).
+- A clock followed after it started running is anchored on its position, or time jumps ahead then freezes (#71).
+- A value passed into a Navigation 3 entry never changes: read the palette and changing state inside the screen (#61).
+- A value read in `combine` from outside its inputs can be newer than them: publish what must match as one value (#72).
+- A camera move restarted at 5 Hz never moves the camera: follow with one conflated loop (#73).
 - Ages shown side by side need one clock and one rounding, or the banner says 116 s and the panel 117 s (#73).
 - An activity-scoped `Eagerly` collector keeps the link alive in the background: use `repeatOnLifecycle` (#74).
 - A blocking read ignores cancellation: close its stream on cancel, or a stalled provider holds the lock (#74).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
-- Whatever is kept per system ID grows with every made-up ID on the link: keep history (the trail) for the
-  active vehicle only (#72).
-- An occurrence id fixes a race in the repository, not on screen: a banner that swaps alerts under a finger needs a
-  guard, and an acknowledged caution keeps its level beside a newer advisory (#56).
+- Whatever is kept per system ID grows with made-up IDs: keep history (the trail) for the active vehicle only (#72).
+- An occurrence id fixes the repository's race, not the screen's: a banner swapping under a finger needs a guard (#56).
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
 
 **SITL and QGroundControl**
-- Mission Planner's simulator on Windows is enough (no WSL/Docker). Its mirror binds the port it sends to and only one
-  works at a time, so QGroundControl connects to SITL directly on TCP 5762 (#5).
-- The simulator updates itself: query AUTOPILOT_VERSION every session and record it with every capture (#5, #39,
-  #41).
-- SITL tools send their own HEARTBEAT and request their streams; pymavlink's TCP `autoreconnect` gives up after 3
-  tries, so pass `retries` when the autopilot reboots (#41, #42).
+- Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).
+- The simulator updates itself: query AUTOPILOT_VERSION every session and record it with every capture (#5, #39, #41).
+- SITL tools send their own HEARTBEAT and stream requests; pass pymavlink `retries` across a reboot (#41, #42).
 - Changing `BATT_CAPACITY` does not recharge the battery: relaunch the simulator (#56).
-- Check QGroundControl's UI in the docs for the installed version, and compare values against its MAVLink Inspector
-  (#42).
-- Measure timings in SITL before documenting them: on the API 36 emulator Android blocks a background app's network
-  after about 5 s (`sendto` → `EPERM`) (#14).
-- In airplane mode the emulator's bound UDP socket never fails, so a transport failure cannot be reproduced there
-  (#25).
-- A SITL TCP port can stay silent for a whole session (5762 sent nothing while 5763 worked): count raw bytes on it
-  first (#70).
-- In flight the map must be checked moving, not only hovering: a camera bug showed only at 10 m/s (#73).
-- Other GCSs' HEARTBEATs (sysid 255) keep the GCS failsafe off: check the app's own HEARTBEAT stop instead (#74).
+- Check QGroundControl's UI in the installed version's docs and compare values with its MAVLink Inspector (#42).
+- Measure timings in SITL before documenting them: API 36 blocks a background app's network after about 5 s (#14).
+- In airplane mode the emulator's bound UDP socket never fails: a transport failure cannot be reproduced there (#25).
+- A SITL TCP port can stay silent for a whole session: count raw bytes on it first (#70).
+- Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
+- Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
 
 **Emulator, Windows and tooling**
-- `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first and
-  remove old redirects (#13, #14).
-- QGroundControl's UDP AutoConnect holds host port 14550: redirect a free port (`adb emu redir add udp:14560:14550`)
-  and check who holds a port with `netstat -ano` (#6).
+- `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first (#13, #14).
+- QGroundControl's UDP AutoConnect holds host port 14550: redirect a free port; find holders with `netstat -ano` (#6).
 - The emulator's clock can run seconds behind the host: match logcat to the relay log by events (#39).
-- On Windows `NUL` claims to be a terminal (scripts in the background need an explicit flag instead of `isatty()`),
-  and Python writes CRLF unless `newline="\n"`, which ktlint rejects (#14, #56).
+- On Windows `NUL` claims to be a terminal and Python writes CRLF unless `newline="\n"` (#14, #56).
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
-- Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those instead of retrying (#8).
-- On Windows `@TempDir` cannot delete a file a test leaves open: close what the SUT opened in `@AfterEach` (#70).
-- CI never runs `check`: its Coverage step calls each module's `koverVerify` by name, so a module with a new
-  minimum must be added there too, or the minimum only fails locally (#63).
+- Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
+- On Windows `@TempDir` cannot delete a file left open: close what the SUT opened in `@AfterEach` (#70).
+- CI calls each module's `koverVerify` by name, never `check`: a module with a new minimum is added there (#63).
 - On Windows `File.canonicalFile` does not resolve symbolic links: check a path's folder with `toRealPath()` (#71).
-- Never reflow KDoc by script: it merges lists and rewraps untouched paragraphs; wrap long lines by hand (#71).
-- MapLibre's engine ignores the system proxy and draws no overlay before a style is presented: test a dead network
-  with a build that points the style at an unreachable host, and start the map on an offline style (#73).
-- A night map is the day style recoloured, not another style (`fiord` lost labels); OpenFreeMap answers 403 to a
-  script without an identifying User-Agent (#73).
-- A screen holding MapLibre content needs `@UiComposable`, or the compiler infers MapLibre's applier for callers (#73).
-- Never `--no-verify` a split commit: run the hooks on it, they check the files as staged (#73).
+- Never reflow KDoc by script: it merges lists and rewraps untouched paragraphs (#71).
+- MapLibre ignores the system proxy: test no network with a build pointing the style at an unreachable host (#73).
+- MapLibre draws no overlay before a style is presented: start the map on an offline style (#73).
+- A night map is the day style recoloured; OpenFreeMap answers 403 to a script without a User-Agent (#73).
+- A screen holding MapLibre content needs `@UiComposable`, or callers get MapLibre's applier (#73).
+- Never `--no-verify` a split commit: the hooks check the files as staged (#73).
 - `git checkout -- <file>` to undo a mutation also drops the uncommitted fix: copy the file aside first (#74).
-- A fixed-width child in a `Row` leaves its weighted sibling 0 dp and the text wraps one letter per line: check every
-  new row of buttons at 360 dp on the phone emulator, not the tablet's `wm size` (#61).
-- Check a phone at 360 × 640 dp with every banner on (replay, LINK LOST): at 360 × 780 the HUD fitted, at 640 the
-  telemetry got 0 dp (#61).
+- A fixed-width child in a `Row` leaves its weighted sibling 0 dp: check new button rows at 360 dp on a phone (#61).
+- Check a phone at 360 × 640 dp with every banner on (replay, LINK LOST), not only at 360 × 780 (#61).

@@ -1,6 +1,6 @@
 # 0007. Use Navigation 3, with the back stack owned by `:app`
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-22
 - Issue: #74
 
@@ -40,7 +40,7 @@ stack is a snapshot-state list of them that `:app` saves by name with `rememberS
 plugin is added. `NavDisplay` shows the top of the stack, with the saveable-state and ViewModel-store entry
 decorators so each screen keeps its own ViewModel.
 
-Features expose screen composables and take lambdas (`onOpenRecordings`, `onReplayStarted`); they never see the
+Features expose screen composables and take lambdas (`onOpenRecordings`, `onReplayStart`); they never see the
 back stack. The return to the flight screen is a pure function from the flight state (a live vehicle armed, an
 emergency raised) to "leave Recordings", tested on its own and applied by `:app` to the stack. LINK LOST and the
 alerts stay part of the flight screen's state, never a destination.

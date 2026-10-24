@@ -1,36 +1,53 @@
 ---
 name: navigation-3
-description: Navigation in GCS (Ground Control Station) — decision pending. GCS has no navigation yet (v0.0); this skill records the open decision and points to the official Navigation 3 documentation for when the first multi-screen flow lands. Trigger on: "navigation", "NavHost", "NavDisplay", "add a screen/route", "back stack", "tabs", "navigate between screens".
+description: Navigation in GCS (Ground Control Station) — decided in ADR 0007: Navigation 3 1.2.0 in `:app` only, destinations as an enum, a back stack saved by name, an automatic return to the flight screen. Use when adding a screen or destination, changing the back stack, or deciding when the operator may leave the flight screen. Trigger on: "navigation", "NavHost", "NavDisplay", "add a screen/route", "back stack", "tabs", "navigate between screens".
 ---
 
-# Navigation — GCS (decision pending)
+# Navigation — GCS (decided, ADR 0007)
 
 ## Status
 
-GCS has no navigation code yet: `:app` shows a single screen. The UI prototype has top-level tabs
-(Flight, Mission, Pre-flight, Logs, Settings) plus modal flows (takeoff confirmation, mission upload,
-link lost).
+Navigation 3 `1.2.0` (`androidx.navigation3:navigation3-runtime`, `navigation3-ui`) since #74, in `:app` only.
+Destinations today: the flight screen (HUD over the map) and the recordings list. Read
+[ADR 0007](../../../docs/adr/0007-navigation-3.md) before changing anything here.
 
-## The decision to make
+## How it is built
 
-When the first issue needs more than one screen, decide the navigation library **in that issue** and
-record it with the `adr` skill. Inputs for the decision:
+- `app/.../navigation/Destination.kt`: the destinations are an `enum`. The flight screen is always at the bottom of
+  the back stack. `BackStackSaver` saves the stack by name, so no serialization plugin is needed.
+- `app/.../navigation/GcsNavigation.kt`: `NavDisplay` shows the top of a `mutableStateListOf` held by
+  `rememberSaveable(saver = BackStackSaver)`, with `rememberSaveableStateHolderNavEntryDecorator()` and
+  `rememberViewModelStoreNavEntryDecorator()`, so each screen keeps its own ViewModel.
+- Features never see the back stack: they expose screen composables and take lambdas (`onOpenRecordings`,
+  `onBack`, `onReplayStart`). Features never depend on each other.
+- LINK LOST and the alerts are state on the flight screen, never a destination.
 
-- Jetpack Navigation 3 (`NavDisplay`, back stack as state) vs Navigation Compose 2.x.
-- Check the current stable version on the official release notes at that moment — don't assume one.
-- The "link lost" state is **not** a destination: it's an overlay driven by state that must appear
-  above any screen.
-- Navigation lives in `:app` (composition root); features expose screen composables and take
-  navigation callbacks as lambda parameters, so features never depend on each other.
+## Leaving the flight screen (safety)
 
-Until then, don't add a navigation dependency.
+- Another screen opens only while no live vehicle is armed, lost or not. A `null` callback hides its button, and
+  `openRecordings(mayLeaveFlight)` checks the rule again when it runs, because a tap drawn a frame earlier can arrive
+  after the vehicle armed.
+- The app goes back to the flight screen by itself when a live vehicle arms or a new live emergency is raised.
+  `FlightAttentionRule` (`:core:domain`) decides it, and `FlightGuardViewModel` applies it. A replay's vehicles and
+  alerts never count.
+- The guard is collected only while the app is started (`repeatOnLifecycle(STARTED)`), never with an
+  activity-scoped `Eagerly`, which would keep the link alive in the background.
+
+## Adding a destination
+
+1. Add an entry to `Destination` and a branch in `GcsNavigation`'s `entryProvider`.
+2. Pass navigation to the feature as lambdas. Gate every way out of the flight screen on `mayLeaveFlight`.
+3. Test the rule without a UI: `FlightAttentionRuleTest`, `FlightGuardViewModelTest`, `DestinationTest`.
+4. A destination with arguments (a mission, a recording) moves the stack to `@Serializable` `NavKey`s with
+   `rememberNavBackStack`: record it in a new ADR that supersedes this part of 0007.
+
+Planned next: Settings, with the licences moved there (#90, v1.0).
 
 ## Reference material
 
-Official documentation (check it at decision time; nothing is vendored in the repo):
+Official documentation (check the version against Google Maven before upgrading):
 
 - [Navigation 3 guide](https://developer.android.com/guide/navigation/navigation-3)
-- [Navigation 2 → 3 migration guide](https://developer.android.com/guide/navigation/navigation-3/migration-guide)
-- [Type safety in Navigation Compose](https://developer.android.com/guide/navigation/design/type-safety)
+- [Save state](https://developer.android.com/guide/navigation/navigation-3/save-state)
 - [Navigation 3 recipes](https://github.com/android/nav3-recipes) (dialogs, bottom sheets, list-detail,
   multiple back stacks, modular navigation with Hilt, results, deep links)
