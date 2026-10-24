@@ -1,6 +1,6 @@
 # 0006. Record every MAVLink 2 frame as received; validate the log when it is read
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-19
 - Issue: #67
 
