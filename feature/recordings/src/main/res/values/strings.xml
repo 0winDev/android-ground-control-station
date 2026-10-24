@@ -23,7 +23,8 @@
     <string name="recordings_in_progress">Recording</string>
     <string name="recordings_replaying">Replaying</string>
     <string name="recordings_play">Play</string>
-    <string name="recordings_share">Export</string>
+    <string name="recordings_share">Share</string>
+    <string name="recordings_save">Save</string>
     <string name="recordings_delete">Delete</string>
     <string name="recordings_delete_title">Delete this recording?</string>
     <string name="recordings_delete_body">%1$s will be deleted from this device. This cannot be undone.</string>
@@ -41,6 +42,10 @@
     <string name="recordings_delete_replaying">This recording is being replayed. Stop the replay to delete it.</string>
     <string name="recordings_delete_failed">The recording could not be deleted.</string>
     <string name="recordings_delete_not_found">This recording is no longer on this device.</string>
+    <string name="recordings_export_in_progress">This recording is in progress. Share or save it once it closes.</string>
+    <string name="recordings_saved">A copy of %1$s was saved on the device.</string>
+    <string name="recordings_save_cancelled">No place was picked. Nothing was saved.</string>
+    <string name="recordings_save_failed">The copy could not be saved.</string>
     <string name="recordings_missing">%1$s is no longer on this device.</string>
     <string name="recordings_replay_connected">A vehicle is connected. A replay would close the live link: disconnect the vehicle first.</string>
     <string name="recordings_replay_armed">The vehicle was armed when last heard. A replay would close the live link: it needs a disarmed vehicle.</string>

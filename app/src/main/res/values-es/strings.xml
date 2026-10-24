@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Estación de control terrestre</string>
+    <string name="app_share_recording">Exportar la grabación</string>
 </resources>

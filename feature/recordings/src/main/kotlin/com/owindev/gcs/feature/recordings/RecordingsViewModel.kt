@@ -3,8 +3,10 @@ package com.owindev.gcs.feature.recordings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.owindev.gcs.core.domain.recording.DeleteResult
+import com.owindev.gcs.core.domain.recording.ExportTarget
 import com.owindev.gcs.core.domain.recording.ImportSource
 import com.owindev.gcs.core.domain.recording.RecordingRepository
+import com.owindev.gcs.core.domain.recording.SaveResult
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -53,6 +55,19 @@ class RecordingsViewModel @Inject constructor(
     fun onShare(name: String) {
         val file = repository.fileOf(name) ?: return show(RecordingsMessage.Missing(name))
         effects.trySend(RecordingsEffect.Share(file))
+    }
+
+    /** Asks the screen for a place to save [name] to. */
+    fun onSaveRequested(name: String) {
+        effects.trySend(RecordingsEffect.PickSaveTarget(name))
+    }
+
+    /** The place picked to save [name] to, `null` when the operator closed the picker. */
+    fun onSaveTargetPicked(name: String, target: ExportTarget?) {
+        if (target == null) return show(RecordingsMessage.Save(name, SaveResult.Cancelled))
+        viewModelScope.launch {
+            show(RecordingsMessage.Save(name, repository.saveCopy(name, target)))
+        }
     }
 
     fun onDeleteRequested(name: String) = local.update { it.copy(pendingDelete = name) }

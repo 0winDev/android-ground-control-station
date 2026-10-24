@@ -4,10 +4,12 @@ import app.cash.turbine.test
 import app.cash.turbine.testIn
 import app.cash.turbine.turbineScope
 import com.owindev.gcs.core.domain.recording.DeleteResult
+import com.owindev.gcs.core.domain.recording.ExportTarget
 import com.owindev.gcs.core.domain.recording.ImportResult
 import com.owindev.gcs.core.domain.recording.ImportSource
 import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingSummary
+import com.owindev.gcs.core.domain.recording.SaveResult
 import com.owindev.gcs.core.domain.replay.ReplayFailure
 import com.owindev.gcs.core.domain.replay.ReplayRefusal
 import com.owindev.gcs.core.domain.replay.ReplayRepository
@@ -21,6 +23,7 @@ import io.mockk.every
 import io.mockk.mockk
 import java.io.File
 import java.io.InputStream
+import java.io.OutputStream
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,6 +140,55 @@ class RecordingsViewModelTest {
     }
 
     @Test
+    fun `GIVEN a closed recording WHEN saving it THEN the screen picks a place suggested under its name`() = runTest {
+        viewModel.effect.test {
+            viewModel.onSaveRequested(NAME)
+
+            val result = awaitItem()
+
+            result shouldBeEqualTo RecordingsEffect.PickSaveTarget(NAME)
+        }
+    }
+
+    @Test
+    fun `GIVEN a place picked WHEN the copy is saved THEN it is said with the recording's name`() = runTest {
+        turbineScope {
+            coEvery { repository.saveCopy(NAME, TARGET) } returns SaveResult.Saved
+            val state = viewModel.state.testIn(backgroundScope)
+
+            viewModel.onSaveTargetPicked(NAME, TARGET)
+
+            state.expectMostRecentItem().message shouldBeEqualTo RecordingsMessage.Save(NAME, SaveResult.Saved)
+        }
+    }
+
+    @Test
+    fun `GIVEN a place picked WHEN the copy fails THEN the failure is shown`() = runTest {
+        turbineScope {
+            coEvery { repository.saveCopy(NAME, TARGET) } returns SaveResult.Failed
+            val state = viewModel.state.testIn(backgroundScope)
+
+            viewModel.onSaveTargetPicked(NAME, TARGET)
+
+            state.expectMostRecentItem().message shouldBeEqualTo RecordingsMessage.Save(NAME, SaveResult.Failed)
+        }
+    }
+
+    @Test
+    fun `GIVEN the picker closed WHEN saving THEN cancelled is shown and nothing is copied`() = runTest {
+        turbineScope {
+            val state = viewModel.state.testIn(backgroundScope)
+
+            viewModel.onSaveTargetPicked(NAME, target = null)
+
+            state.expectMostRecentItem().message shouldBeEqualTo RecordingsMessage.Save(NAME, SaveResult.Cancelled)
+            coVerifyNever {
+                repository.saveCopy(any(), any())
+            }
+        }
+    }
+
+    @Test
     fun `GIVEN a recording WHEN deleting it THEN asks for confirmation first`() = runTest {
         turbineScope {
             val state = viewModel.state.testIn(backgroundScope)
@@ -245,7 +297,12 @@ class RecordingsViewModelTest {
         override fun open(): InputStream = ByteArray(0).inputStream()
     }
 
+    private object DiscardTarget : ExportTarget {
+        override fun open(): OutputStream = OutputStream.nullOutputStream()
+    }
+
     private companion object {
+        val TARGET: ExportTarget = DiscardTarget
         const val NAME = "2026-10-20_14-30-05.tlog"
         const val IMPORTED_NAME = "qgroundcontrol.tlog"
         val FILE = File(NAME)

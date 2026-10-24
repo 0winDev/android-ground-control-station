@@ -18,14 +18,16 @@ import androidx.compose.ui.res.stringResource
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.domain.recording.DeleteResult
 import com.owindev.gcs.core.domain.recording.ImportResult
+import com.owindev.gcs.core.domain.recording.SaveResult
 import com.owindev.gcs.core.domain.replay.ReplayFailure
 import com.owindev.gcs.core.domain.replay.ReplayRefusal
 import com.owindev.gcs.core.domain.replay.ReplayState
 
-/** The outcome of the last action, until dismissed: green for an import done, amber for anything refused. */
+/** The outcome of the last action, until dismissed: green for an import or a copy done, amber for anything else. */
 @Composable
 internal fun MessageCard(message: RecordingsMessage, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    val done = message is RecordingsMessage.Import && message.result is ImportResult.Imported
+    val done = (message is RecordingsMessage.Import && message.result is ImportResult.Imported) ||
+        (message is RecordingsMessage.Save && message.result == SaveResult.Saved)
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RowShape,
@@ -76,6 +78,7 @@ private fun messageText(message: RecordingsMessage): String = when (message) {
     is RecordingsMessage.Import -> importText(message.result)
     is RecordingsMessage.Delete -> stringResource(deleteText(message.result))
     is RecordingsMessage.Replay -> stringResource(replayText(message.state))
+    is RecordingsMessage.Save -> saveText(message)
     is RecordingsMessage.Missing -> stringResource(R.string.recordings_missing, message.name)
 }
 
@@ -105,6 +108,14 @@ private fun importText(result: ImportResult): String = when (result) {
     ImportResult.NoRoom -> stringResource(R.string.recordings_import_no_room)
 
     ImportResult.Failed -> stringResource(R.string.recordings_import_failed)
+}
+
+@Composable
+private fun saveText(message: RecordingsMessage.Save): String = when (message.result) {
+    SaveResult.Saved -> stringResource(R.string.recordings_saved, message.name)
+    SaveResult.Cancelled -> stringResource(R.string.recordings_save_cancelled)
+    SaveResult.InProgress -> stringResource(R.string.recordings_export_in_progress)
+    SaveResult.Failed -> stringResource(R.string.recordings_save_failed)
 }
 
 @StringRes

@@ -3,6 +3,7 @@ package com.owindev.gcs.core.domain.recording
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.Flow
 
@@ -25,6 +26,30 @@ interface RecordingRepository {
 
     /** Copies [source] into the recordings under a name of its own (see [ImportRule]). */
     suspend fun import(source: ImportSource): ImportResult
+
+    /** Writes a copy of the recording [name] to [target], outside the app; never the recording in progress. */
+    suspend fun saveCopy(name: String, target: ExportTarget): SaveResult
+}
+
+/** A place outside the app the operator picked to save a recording to. */
+interface ExportTarget {
+
+    @Throws(IOException::class)
+    fun open(): OutputStream
+}
+
+sealed interface SaveResult {
+
+    data object Saved : SaveResult
+
+    /** The operator closed the picker without choosing a place. */
+    data object Cancelled : SaveResult
+
+    /** It is being recorded now. */
+    data object InProgress : SaveResult
+
+    /** The recording is no longer there, or reading it or writing the copy failed. */
+    data object Failed : SaveResult
 }
 
 /**

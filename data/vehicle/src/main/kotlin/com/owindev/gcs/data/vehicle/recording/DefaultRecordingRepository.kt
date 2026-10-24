@@ -2,11 +2,13 @@ package com.owindev.gcs.data.vehicle.recording
 
 import android.util.Log
 import com.owindev.gcs.core.domain.recording.DeleteResult
+import com.owindev.gcs.core.domain.recording.ExportTarget
 import com.owindev.gcs.core.domain.recording.ImportResult
 import com.owindev.gcs.core.domain.recording.ImportRule
 import com.owindev.gcs.core.domain.recording.ImportSource
 import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingSummary
+import com.owindev.gcs.core.domain.recording.SaveResult
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import java.io.File
 import java.io.IOException
@@ -65,6 +67,15 @@ internal class DefaultRecordingRepository(
             } finally {
                 temporary.delete()
             }
+        }
+    }
+
+    override suspend fun saveCopy(name: String, target: ExportTarget): SaveResult = withContext(ioDispatcher) {
+        val file = folder.recordingAt(File(folder.directory, name))
+        when {
+            file == null -> SaveResult.Failed
+            file.name == folder.recording -> SaveResult.InProgress
+            else -> file.copyTo(target)
         }
     }
 

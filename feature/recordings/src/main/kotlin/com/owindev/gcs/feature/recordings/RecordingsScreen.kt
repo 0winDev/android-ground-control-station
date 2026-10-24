@@ -27,7 +27,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -52,9 +55,9 @@ import java.text.DateFormat
 import java.util.Date
 
 /**
- * The recordings list (REQ-038): play one on the flight screen (REQ-037), export it through the share sheet, delete
- * it after confirmation, or import a .tlog with the system file picker. `:app` opens it only while no live vehicle is
- * armed and leaves it on its own when one arms or an emergency is raised (ADR 0007).
+ * The recordings list (REQ-038): play one on the flight screen (REQ-037), share it through the share sheet, save a
+ * copy on the device or import a .tlog with the system file picker, delete it after confirmation. `:app` opens it
+ * only while no live vehicle is armed and leaves it on its own when one arms or an emergency is raised (ADR 0007).
  */
 @Composable
 fun RecordingsScreen(
@@ -67,28 +70,43 @@ fun RecordingsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val currentOnReplayStart by rememberUpdatedState(onReplayStart)
     val currentOnShare by rememberUpdatedState(onShare)
-    LaunchedEffect(viewModel) {
-        viewModel.effect.collect { effect ->
-            when (effect) {
-                RecordingsEffect.ReplayStarted -> currentOnReplayStart()
-                is RecordingsEffect.Share -> currentOnShare(effect.recording)
-            }
-        }
-    }
     val resolver = LocalContext.current.contentResolver
     // A .tlog has no registered MIME type, so the picker shows every file; the import checks what it gets.
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { viewModel.onImport(ContentImportSource(resolver, it)) }
+    }
+    // Saved across process death, as the picker can outlive the app.
+    var saving by rememberSaveable { mutableStateOf<String?>(null) }
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(TLOG_TYPE)) { uri ->
+        saving?.let { name -> viewModel.onSaveTargetPicked(name, uri?.let { ContentExportTarget(resolver, it) }) }
+        saving = null
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.effect.collect { effect ->
+            when (effect) {
+                RecordingsEffect.ReplayStarted -> currentOnReplayStart()
+
+                is RecordingsEffect.Share -> currentOnShare(effect.recording)
+
+                is RecordingsEffect.PickSaveTarget -> {
+                    saving = effect.name
+                    saver.launch(effect.name)
+                }
+            }
+        }
     }
     RecordingsContent(
         state = state,
         actions = RecordingsActions(
             onBack = onBack,
             onImport = { picker.launch(arrayOf(ANY_TYPE)) },
-            onPlay = viewModel::onPlay,
-            onShare = viewModel::onShare,
-            onDeleteRequest = viewModel::onDeleteRequested,
             onMessageDismiss = viewModel::onMessageDismissed,
+            recording = RecordingActions(
+                onPlay = viewModel::onPlay,
+                onShare = viewModel::onShare,
+                onSave = viewModel::onSaveRequested,
+                onDeleteRequest = viewModel::onDeleteRequested,
+            ),
         ),
         onDeleteConfirm = viewModel::onDeleteConfirmed,
         onDeleteCancel = viewModel::onDeleteCancelled,
@@ -96,14 +114,19 @@ fun RecordingsScreen(
     )
 }
 
-/** What the operator can do on the screen. */
+/** What the operator can do on the screen, and on each [recording] by its name. */
 internal class RecordingsActions(
     val onBack: () -> Unit,
     val onImport: () -> Unit,
+    val onMessageDismiss: () -> Unit,
+    val recording: RecordingActions,
+)
+
+internal class RecordingActions(
     val onPlay: (String) -> Unit,
     val onShare: (String) -> Unit,
+    val onSave: (String) -> Unit,
     val onDeleteRequest: (String) -> Unit,
-    val onMessageDismiss: () -> Unit,
 )
 
 @Composable
@@ -131,7 +154,7 @@ internal fun RecordingsContent(
                     verticalArrangement = Arrangement.spacedBy(ContentSpacing),
                     contentPadding = PaddingValues(bottom = ScreenPadding),
                 ) {
-                    items(recordings, key = RecordingSummary::name) { RecordingRow(it, actions) }
+                    items(recordings, key = RecordingSummary::name) { RecordingRow(it, actions.recording) }
                 }
             }
         }
@@ -187,6 +210,9 @@ private fun Note(text: String) {
 }
 
 private const val ANY_TYPE = "*/*"
+
+/** A .tlog has no registered MIME type. */
+private const val TLOG_TYPE = "application/octet-stream"
 private val ScreenPadding = 24.dp
 internal val ContentSpacing = 12.dp
 internal val RowShape = RoundedCornerShape(8.dp)

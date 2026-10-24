@@ -7,6 +7,6 @@ android {
 }
 
 dependencies {
-    // The system file picker (SAF) for imports.
+    // The system file picker (SAF) for imports and saved copies.
     implementation(libs.androidx.activity.compose)
 }

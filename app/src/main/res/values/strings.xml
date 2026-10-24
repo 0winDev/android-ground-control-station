@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Ground Control Station</string>
+    <string name="app_share_recording">Export the recording</string>
 </resources>

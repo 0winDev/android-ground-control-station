@@ -3,6 +3,7 @@ package com.owindev.gcs.feature.recordings
 import com.owindev.gcs.core.domain.recording.DeleteResult
 import com.owindev.gcs.core.domain.recording.ImportResult
 import com.owindev.gcs.core.domain.recording.RecordingSummary
+import com.owindev.gcs.core.domain.recording.SaveResult
 import com.owindev.gcs.core.domain.replay.ReplayState
 import java.io.File
 
@@ -29,14 +30,20 @@ sealed interface RecordingsMessage {
     /** A replay that did not start: [ReplayState.Refused] or [ReplayState.Failed]. */
     data class Replay(val state: ReplayState) : RecordingsMessage
 
+    /** How saving a copy of [name] to the device went, a closed picker included. */
+    data class Save(val name: String, val result: SaveResult) : RecordingsMessage
+
     /** The recording [name] is no longer there. */
     data class Missing(val name: String) : RecordingsMessage
 }
 
-/** One-off actions the screen hands to `:app`: leaving for the flight screen, sharing a file. */
+/** One-off actions for the screen: leaving for the flight screen, sharing a file (`:app`), picking where to save. */
 sealed interface RecordingsEffect {
 
     data object ReplayStarted : RecordingsEffect
 
     data class Share(val recording: File) : RecordingsEffect
+
+    /** Open the system picker to create a document for a copy of [name], suggested under that name. */
+    data class PickSaveTarget(val name: String) : RecordingsEffect
 }

@@ -28,7 +28,7 @@ import java.util.Date
 
 /** One recording: when it started, its file name, how long it runs and its size, then what can be done with it. */
 @Composable
-internal fun RecordingRow(recording: RecordingSummary, actions: RecordingsActions, modifier: Modifier = Modifier) {
+internal fun RecordingRow(recording: RecordingSummary, actions: RecordingActions, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RowShape,
@@ -61,11 +61,12 @@ internal fun RecordingRow(recording: RecordingSummary, actions: RecordingsAction
 }
 
 /**
- * The recording in progress offers nothing; the one being replayed can be played again or exported, never deleted.
+ * The recording in progress offers nothing; the one being replayed can be played again, shared or saved, never
+ * deleted.
  * Delete is outlined in the emergency colour and always last, apart from Play.
  */
 @Composable
-private fun RowActions(recording: RecordingSummary, actions: RecordingsActions) {
+private fun RowActions(recording: RecordingSummary, actions: RecordingActions) {
     Row(horizontalArrangement = Arrangement.spacedBy(ContentSpacing), verticalAlignment = Alignment.CenterVertically) {
         when {
             recording.inProgress -> StatusChip(stringResource(R.string.recordings_in_progress))
@@ -83,6 +84,12 @@ private fun RowActions(recording: RecordingSummary, actions: RecordingsActions) 
                     modifier = Modifier.heightIn(min = GcsTheme.sizes.button),
                 ) {
                     Text(text = stringResource(R.string.recordings_share).uppercase())
+                }
+                OutlinedButton(
+                    onClick = { actions.onSave(recording.name) },
+                    modifier = Modifier.heightIn(min = GcsTheme.sizes.button),
+                ) {
+                    Text(text = stringResource(R.string.recordings_save).uppercase())
                 }
                 if (!recording.replaying) {
                     OutlinedButton(

@@ -3,11 +3,13 @@ package com.owindev.gcs.data.vehicle.recording
 import android.util.Log
 import app.cash.turbine.test
 import com.owindev.gcs.core.domain.recording.DeleteResult
+import com.owindev.gcs.core.domain.recording.ExportTarget
 import com.owindev.gcs.core.domain.recording.ImportResult
 import com.owindev.gcs.core.domain.recording.ImportRule
 import com.owindev.gcs.core.domain.recording.ImportSource
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.recording.RecordingSummary
+import com.owindev.gcs.core.domain.recording.SaveResult
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayState
 import com.owindev.gcs.core.mavlink.TlogReader
@@ -16,9 +18,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineStart
@@ -307,6 +311,57 @@ class DefaultRecordingRepositoryTest {
     }
 
     @Test
+    fun `GIVEN a closed recording WHEN saving a copy THEN the target gets every byte`() = testScope.runTest {
+        log(OLDEST, qgroundcontrolLog)
+        val target = BytesTarget()
+
+        val deferred = async(start = CoroutineStart.UNDISPATCHED) { repository.saveCopy(OLDEST, target) }
+        val result = deferred.await()
+
+        (result to target.bytes.toList()) shouldBeEqualTo (SaveResult.Saved to qgroundcontrolLog.toList())
+    }
+
+    @Test
+    fun `GIVEN the recording in progress WHEN saving a copy THEN refused without opening the target`() =
+        testScope.runTest {
+            log(OLDEST, qgroundcontrolLog)
+            folder.recording = OLDEST
+            val target = BytesTarget()
+
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) { repository.saveCopy(OLDEST, target) }
+            val result = deferred.await()
+
+            (result to target.opened) shouldBeEqualTo (SaveResult.InProgress to false)
+        }
+
+    @Test
+    fun `GIVEN no such recording or one outside the folder WHEN saving a copy THEN fails`() = testScope.runTest {
+        File(temp, OLDEST).writeBytes(qgroundcontrolLog)
+        val target = BytesTarget()
+
+        val deferred = async(start = CoroutineStart.UNDISPATCHED) {
+            listOf(repository.saveCopy(OLDEST, target), repository.saveCopy("../$OLDEST", target))
+        }
+        val result = deferred.await()
+
+        (result to target.opened) shouldBeEqualTo (listOf(SaveResult.Failed, SaveResult.Failed) to false)
+    }
+
+    @Test
+    fun `GIVEN a target failing with an IO, security or state exception WHEN saving a copy THEN fails`() =
+        testScope.runTest {
+            log(OLDEST, qgroundcontrolLog)
+            val failures = listOf(IOException("full"), SecurityException("revoked"), IllegalStateException("dead"))
+
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) {
+                failures.map { repository.saveCopy(OLDEST, FailingTarget(it)) }
+            }
+            val result = deferred.await()
+
+            result shouldBeEqualTo List(failures.size) { SaveResult.Failed }
+        }
+
+    @Test
     fun `GIVEN a name leaving the folder WHEN asking for its file THEN none`() {
         File(temp, OLDEST).writeBytes(qgroundcontrolLog)
 
@@ -371,6 +426,22 @@ class DefaultRecordingRepositoryTest {
                 }
             }
         }
+    }
+
+    /** Another app's document, kept in memory. */
+    private class BytesTarget : ExportTarget {
+        private val output = ByteArrayOutputStream()
+        var opened = false
+        val bytes: ByteArray get() = output.toByteArray()
+
+        override fun open(): OutputStream {
+            opened = true
+            return output
+        }
+    }
+
+    private class FailingTarget(private val failure: Exception) : ExportTarget {
+        override fun open(): OutputStream = throw failure
     }
 
     private class FailingSource(private val failure: Exception) : ImportSource {

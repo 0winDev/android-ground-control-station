@@ -18,7 +18,8 @@
     <string name="recordings_in_progress">Grabando</string>
     <string name="recordings_replaying">En reproducción</string>
     <string name="recordings_play">Reproducir</string>
-    <string name="recordings_share">Exportar</string>
+    <string name="recordings_share">Compartir</string>
+    <string name="recordings_save">Guardar</string>
     <string name="recordings_delete">Borrar</string>
     <string name="recordings_delete_title">¿Borrar esta grabación?</string>
     <string name="recordings_delete_body">%1$s se borrará de este dispositivo. No se puede deshacer.</string>
@@ -36,6 +37,10 @@
     <string name="recordings_delete_replaying">Esta grabación se está reproduciendo. Detén la reproducción para borrarla.</string>
     <string name="recordings_delete_failed">No se pudo borrar la grabación.</string>
     <string name="recordings_delete_not_found">Esta grabación ya no está en este dispositivo.</string>
+    <string name="recordings_export_in_progress">Esta grabación está en curso. Compártela o guárdala cuando se cierre.</string>
+    <string name="recordings_saved">Se guardó una copia de %1$s en el dispositivo.</string>
+    <string name="recordings_save_cancelled">No se eligió ningún sitio. No se guardó nada.</string>
+    <string name="recordings_save_failed">No se pudo guardar la copia.</string>
     <string name="recordings_missing">%1$s ya no está en este dispositivo.</string>
     <string name="recordings_replay_connected">Hay un vehículo conectado. Reproducir cerraría el enlace en vivo: desconecta antes el vehículo.</string>
     <string name="recordings_replay_armed">El vehículo estaba armado la última vez que se oyó. Reproducir cerraría el enlace en vivo: hace falta un vehículo desarmado.</string>
