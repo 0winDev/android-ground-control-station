@@ -124,7 +124,6 @@ internal fun HudContent(
     }
 }
 
-/** The telemetry panel: live while the vehicle is heard, greyed as its last data once the link is lost (REQ-017). */
 @Composable
 private fun StartColumn(state: HudUiState) {
     when (state) {
@@ -163,7 +162,6 @@ private fun SideColumn(state: HudUiState, onAcknowledgeAlert: (occurrence: Long)
     }
 }
 
-/** Waiting for a vehicle, or a fault of the link, in words. */
 @Composable
 private fun MessageCard(state: HudUiState) {
     Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -171,7 +169,6 @@ private fun MessageCard(state: HudUiState) {
     }
 }
 
-/** The link's traffic in one line under the panel, once a vehicle is heard. */
 @Composable
 private fun DatagramLine(port: Int?, datagramCount: Long) {
     val source = if (port == null) {
