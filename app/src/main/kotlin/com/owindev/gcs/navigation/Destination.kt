@@ -22,7 +22,6 @@ internal fun MutableList<Destination>.openRecordings(mayLeaveFlight: Boolean) {
     if (mayLeaveFlight && lastOrNull() != Destination.RECORDINGS) add(Destination.RECORDINGS)
 }
 
-/** Back to the flight screen, whatever is on top of it. */
 internal fun MutableList<Destination>.backToFlight() {
     retainAll { it == Destination.FLIGHT }
     if (isEmpty()) add(Destination.FLIGHT)
