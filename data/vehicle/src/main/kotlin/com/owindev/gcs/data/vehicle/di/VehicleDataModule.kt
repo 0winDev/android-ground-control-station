@@ -4,6 +4,8 @@ import android.content.Context
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.link.LinkRepository
+import com.owindev.gcs.core.domain.recording.ImportRule
+import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayRule
@@ -18,6 +20,7 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.recording.DefaultRecordingRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
 import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
@@ -140,6 +143,27 @@ abstract class VehicleDataModule {
             timeSource = ElapsedRealtimeTimeSource,
             clock = Clock.systemDefaultZone(),
             scope = scope + Dispatchers.IO,
+        )
+
+        /** Imports are held to the recordings limit (REQ-038, REQ-039), whatever their source declares. */
+        @Provides
+        fun provideImportRule(recordingRule: RecordingRule): ImportRule =
+            ImportRule(maxBytes = recordingRule.maxTotalBytes)
+
+        /** The recordings list, its deletes and imports, read on `Dispatchers.IO`. */
+        @Provides
+        @Singleton
+        internal fun provideRecordingRepository(
+            folder: RecordingsFolder,
+            recorder: FlightRecorder,
+            replay: ReplayRepository,
+            rule: ImportRule,
+        ): RecordingRepository = DefaultRecordingRepository(
+            folder = folder,
+            recorder = recorder,
+            replay = replay,
+            rule = rule,
+            ioDispatcher = Dispatchers.IO,
         )
 
         /** Replays only the GCS's own recordings (REQ-037), read on `Dispatchers.IO`. */

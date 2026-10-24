@@ -210,11 +210,16 @@ internal class FlightRecorder(
         fun openIfIdle(atMillis: Long) {
             if (open != null || blocked) return
             guarded {
-                if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
-                val file = newFile(atMillis)
-                folder.deleteOldest(kept = lastClosed ?: marker.read())
-                val output = openOutput(file)
-                open = OpenRecording(file, output, BufferedOutputStream(output))
+                // Under the folder's lock, so an import never takes the new log's name nor deletes it as it opens.
+                val file = folder.locked {
+                    if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
+                    val file = newFile(atMillis)
+                    folder.deleteOldest(kept = lastClosed ?: marker.read())
+                    val output = openOutput(file)
+                    open = OpenRecording(file, output, BufferedOutputStream(output))
+                    folder.recording = file.name
+                    file
+                }
                 status = RecorderStatus.RECORDING
                 Log.i(TAG, "Recording the flight to ${file.name}")
             }
@@ -240,8 +245,15 @@ internal class FlightRecorder(
                 open = null
                 status = RecorderStatus.IDLE
                 Log.i(TAG, "Recording ${recording.file.name} closed; left out so far: $stats")
-                closed(recording.file.name)
-                folder.deleteOldest(kept = recording.file.name)
+                // Protected as the one recorded until the marker names it, so an import in between never deletes it.
+                folder.locked {
+                    try {
+                        closed(recording.file.name)
+                    } finally {
+                        folder.recording = null
+                    }
+                    folder.deleteOldest(kept = recording.file.name)
+                }
             }
         }
 
@@ -266,9 +278,12 @@ internal class FlightRecorder(
             val recording = open ?: return
             open = null
             runCatchingIo { recording.stream.close() }
-            if (recording.file.isFile) {
-                lastClosed = recording.file.name
-                runCatchingIo { marker.write(recording.file.name) }
+            folder.locked {
+                if (recording.file.isFile) {
+                    lastClosed = recording.file.name
+                    runCatchingIo { marker.write(recording.file.name) }
+                }
+                folder.recording = null
             }
         }
     }

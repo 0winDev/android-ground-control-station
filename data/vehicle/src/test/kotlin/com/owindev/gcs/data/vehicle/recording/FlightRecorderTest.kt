@@ -645,6 +645,47 @@ class FlightRecorderTest {
             }
         }
 
+    @Tag("REQ-038")
+    @Test
+    fun `GIVEN the active vehicle heard WHEN its recording opens THEN the folder protects it as the one recorded`() =
+        testScope.runTest {
+            val folder = RecordingsFolder(directory, RecordingRule())
+            val opening = recorder(folder = folder)
+
+            receive(DISARMED_STABILIZE, opening)
+            runCurrent()
+
+            folder.recording shouldBeEqualTo START_NAME
+        }
+
+    @Tag("REQ-038")
+    @Test
+    fun `GIVEN a recording WHEN it closes THEN the folder no longer protects it as the one recorded`() =
+        testScope.runTest {
+            val folder = RecordingsFolder(directory, RecordingRule())
+            val closing = recorder(folder = folder)
+            receive(DISARMED_STABILIZE, closing)
+            runCurrent()
+
+            closing.sessionStopped()
+            runCurrent()
+
+            (folder.recording to folder.marker.read()) shouldBeEqualTo (null to START_NAME)
+        }
+
+    @Tag("REQ-038")
+    @Test
+    fun `GIVEN a full disk WHEN the recording fails THEN the folder no longer protects it as the one recorded`() =
+        testScope.runTest {
+            val folder = RecordingsFolder(directory, RecordingRule())
+            val failing = recorder(folder = folder, openOutput = { FailingStream() })
+
+            receive(DISARMED_STABILIZE, failing)
+            runCurrent()
+
+            folder.recording shouldBeEqualTo null
+        }
+
     private fun recorder(
         rule: RecordingRule = RecordingRule(),
         folder: RecordingsFolder = RecordingsFolder(directory, rule),
