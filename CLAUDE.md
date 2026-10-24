@@ -264,6 +264,8 @@ the issue number to an existing one.
   change it started after (#71).
 - A clock followed after it started running is anchored on its position, or the time jumps ahead and later freezes
   (#71).
+- A value passed into a Navigation 3 entry stays the one the entry was built with: read the theme's palette and
+  other changing state inside the screen, never as a captured parameter (#61).
 - A value read inside `combine` from outside its inputs can belong to a newer emission than the inputs: publish what
   must match (a trail and its session) as one value (#72).
 - A camera move restarted for every position (5 Hz) is cancelled before the camera moves: follow with one conflated
@@ -324,3 +326,7 @@ the issue number to an existing one.
 - A screen holding MapLibre content needs `@UiComposable`, or the compiler infers MapLibre's applier for callers (#73).
 - Never `--no-verify` a split commit: run the hooks on it, they check the files as staged (#73).
 - `git checkout -- <file>` to undo a mutation also drops the uncommitted fix: copy the file aside first (#74).
+- A fixed-width child in a `Row` leaves its weighted sibling 0 dp and the text wraps one letter per line: check every
+  new row of buttons at 360 dp on the phone emulator, not the tablet's `wm size` (#61).
+- Check a phone at 360 × 640 dp with every banner on (replay, LINK LOST): at 360 × 780 the HUD fitted, at 640 the
+  telemetry got 0 dp (#61).
