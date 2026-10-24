@@ -33,7 +33,7 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 | v0.0 Setup | Repository, modules, Hilt, quality gates, CI, docs, SITL flying | CI passes and the phone counts UDP packets arriving from the simulator | ✅ |
 | v0.1 Connection | MAVLink v2 codec (framing, CRC, CRC_EXTRA), HEARTBEAT, link-loss watchdog, state per system ID | The app shows connected/disconnected, mode and armed state, and warns when the simulator stops; codec tested with real and corrupted packets | ✅ |
 | v0.2 Telemetry | Position, attitude, battery, speeds in a HUD with data age, MGRS, prioritized alerts, night and day themes | Values match QGroundControl, MGRS matches a reference converter, low battery triggers the right alert | ✅ |
-| v0.3 Map and recording | Vehicle, heading, trail and home on MapLibre; flight recording (.tlog) and replay | The drone moves on the map during a simulated flight and the flight can be replayed without the simulator | ⏳ |
+| v0.3 Map and recording | Vehicle, heading, trail and home on MapLibre; flight recording (.tlog) and replay | The drone moves on the map during a simulated flight and the flight can be replayed without the simulator | ✅ |
 | v0.4 Commands and pre-flight | Arm, takeoff, RTL, land with ACK, timeout, retries and confirmation; pre-flight check that blocks arming | An unanswered command is retried and ends in a clear error; arming is impossible with a red check | ⏳ |
 | v0.5 Automatic routes | Waypoint editor, Room, validation, mission upload protocol | A route is created, uploaded and flown; a route outside the geofence is rejected before sending | ⏳ |
 | v0.6 Link security | MAVLink 2 message signing, key in Android Keystore, MASVS checklist | An unsigned or replayed packet is discarded and logged | ⏳ |
@@ -50,6 +50,8 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
   foreground service that keeps the link open is planned before any real hardware (#28, v0.4).
 - **The app does not yet warn when only its uplink fails.** If its HEARTBEATs stop reaching the vehicle
   while telemetry still arrives, the HUD stays connected; this is planned for v0.4 (#29).
+- **A flight just ended cannot be replayed yet.** Its recording closes 10 min after the link is lost, or
+  when another replay starts; closing it after landing is planned for v0.4 (#89).
 - **A recording can grow past the 256 MiB limit while it is open.** Old flight logs are deleted only when a
   recording opens or closes, so one very long session keeps growing (about 1.1 kB/s from ArduCopter SITL, so
   256 MiB in some 65 hours).
