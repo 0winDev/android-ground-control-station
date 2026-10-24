@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -13,10 +14,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,12 +41,13 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.compose.map.MapState
-import org.maplibre.compose.overlay.LocalViewportInsets
 import org.maplibre.compose.overlay.MapOverlayScope
 import org.maplibre.compose.overlay.ScaleBar
 import org.maplibre.compose.overlay.attributions
@@ -52,21 +56,38 @@ import org.maplibre.compose.overlay.attributions
  * The map's own controls, inside the part of the map nothing covers and on the theme's opaque surfaces, so their
  * contrast holds over any tiles: north up, zoom, recenter, the scale and the tiles' attribution, always visible and
  * plain text, never a link a stray tap would follow out of the app.
- * They cover the map too, so a vehicle under them counts as off the visible map.
+ * They cover the map too, so a vehicle under them counts as off the visible map, and [onBottomCoverChange] has the strip
+ * they cover at the bottom, so the camera can centre the vehicle above it. [insets] is the part other content covers.
  */
 @Composable
-internal fun MapOverlayScope.MapControls(mapState: MapState, vehicle: MapVehicle?, onRecenter: () -> Unit) {
+internal fun MapOverlayScope.MapControls(
+    mapState: MapState,
+    vehicle: MapVehicle?,
+    insets: PaddingValues,
+    onRecenter: () -> Unit,
+    onBottomCoverChange: (Dp) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val bearing = mapState.cameraPosition.bearing
-    var controlsHeight by remember { mutableStateOf(0.dp) }
-    var attributionHeight by remember { mutableStateOf(0.dp) }
-    val bottomCovered = CONTROLS_MARGIN + maxOf(controlsHeight, attributionHeight)
+    var width by remember { mutableStateOf(0.dp) }
+    var controls by remember { mutableStateOf(DpSize.Zero) }
+    var attribution by remember { mutableStateOf(DpSize.Zero) }
+    // On a narrow map the buttons and the scale go above the attribution instead of over it.
+    val stacked = controlsAboveAttribution(width, controls.width, attribution.width, CONTROLS_SPACING)
+    val bottomCovered = CONTROLS_MARGIN + if (stacked) {
+        controls.height + CONTROLS_SPACING + attribution.height
+    } else {
+        maxOf(controls.height, attribution.height)
+    }
+    val currentOnBottomCoverChange by rememberUpdatedState(onBottomCoverChange)
+    LaunchedEffect(bottomCovered) { currentOnBottomCoverChange(bottomCovered) }
     Box(
         modifier = Modifier
             .matchParentSize()
-            .padding(LocalViewportInsets.current)
-            .padding(CONTROLS_MARGIN),
+            .padding(insets)
+            .padding(CONTROLS_MARGIN)
+            .onSizeChanged { width = with(density) { it.width.toDp() } },
     ) {
         if (bearing != 0.0) {
             CompassButton(
@@ -78,13 +99,14 @@ internal fun MapOverlayScope.MapControls(mapState: MapState, vehicle: MapVehicle
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
+                .padding(bottom = if (stacked) attribution.height + CONTROLS_SPACING else 0.dp)
+                .onSizeChanged { controls = with(density) { it.toSize().toDpSize() } },
             verticalArrangement = Arrangement.spacedBy(CONTROLS_SPACING),
             horizontalAlignment = Alignment.End,
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(CONTROLS_SPACING)) {
                 RecenterButton(
-                    towardsVehicle = offScreenDirectionOf(mapState, vehicle, bottomCovered),
+                    towardsVehicle = offScreenDirectionOf(mapState, vehicle, insets, bottomCovered),
                     enabled = vehicle != null,
                     onClick = onRecenter,
                 )
@@ -109,7 +131,7 @@ internal fun MapOverlayScope.MapControls(mapState: MapState, vehicle: MapVehicle
             OnSurface(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .onSizeChanged { attributionHeight = with(density) { it.height.toDp() } },
+                    .onSizeChanged { attribution = with(density) { it.toSize().toDpSize() } },
             ) {
                 Text(
                     text = plainAttribution(attributions),
@@ -128,8 +150,12 @@ internal fun MapOverlayScope.MapControls(mapState: MapState, vehicle: MapVehicle
  * the [bottomCovered] strip.
  */
 @Composable
-private fun offScreenDirectionOf(mapState: MapState, vehicle: MapVehicle?, bottomCovered: Dp): Float? {
-    val insets = LocalViewportInsets.current
+private fun offScreenDirectionOf(
+    mapState: MapState,
+    vehicle: MapVehicle?,
+    insets: PaddingValues,
+    bottomCovered: Dp,
+): Float? {
     val layoutDirection = LocalLayoutDirection.current
     val viewport = mapState.viewport
     val location = vehicle?.let { mapState.screenLocationFromPosition(it.position.toPosition()) }
