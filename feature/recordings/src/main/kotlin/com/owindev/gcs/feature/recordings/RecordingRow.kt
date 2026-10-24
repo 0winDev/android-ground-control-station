@@ -3,7 +3,9 @@ package com.owindev.gcs.feature.recordings
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -20,13 +22,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.owindev.gcs.core.designsystem.layout.CompactWidth
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.designsystem.time.elapsedText
 import com.owindev.gcs.core.domain.recording.RecordingSummary
 import java.text.DateFormat
 import java.util.Date
 
-/** One recording: when it started, its file name, how long it runs and its size, then what can be done with it. */
+/**
+ * One recording: when it started, its file name, how long it runs and its size, then what can be done with it, beside
+ * it or, at a phone's width, under it.
+ */
 @Composable
 internal fun RecordingRow(recording: RecordingSummary, actions: RecordingActions, modifier: Modifier = Modifier) {
     Surface(
@@ -35,27 +41,40 @@ internal fun RecordingRow(recording: RecordingSummary, actions: RecordingActions
         color = MaterialTheme.colorScheme.surfaceContainer,
         border = BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Row(
-            modifier = Modifier.padding(all = ContentSpacing),
-            horizontalArrangement = Arrangement.spacedBy(ContentSpacing),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(text = startText(recording), style = GcsTheme.telemetryTypography.value)
-                Text(
-                    text = recording.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(ContentSpacing)) {
-                    Field(
-                        R.string.recordings_column_duration,
-                        recording.duration?.let { elapsedText(it) } ?: stringResource(R.string.recordings_no_value),
-                    )
-                    Field(R.string.recordings_column_size, sizeText(recording.sizeBytes))
+        BoxWithConstraints(modifier = Modifier.padding(all = GcsTheme.spacing.content)) {
+            if (maxWidth < CompactWidth) {
+                Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content)) {
+                    RecordingFacts(recording)
+                    RowActions(recording, actions)
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RecordingFacts(recording, modifier = Modifier.weight(1f))
+                    RowActions(recording, actions)
                 }
             }
-            RowActions(recording, actions)
+        }
+    }
+}
+
+@Composable
+private fun RecordingFacts(recording: RecordingSummary, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = startText(recording), style = GcsTheme.telemetryTypography.value)
+        Text(
+            text = recording.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content)) {
+            Field(
+                R.string.recordings_column_duration,
+                recording.duration?.let { elapsedText(it) } ?: stringResource(R.string.recordings_no_value),
+            )
+            Field(R.string.recordings_column_size, sizeText(recording.sizeBytes))
         }
     }
 }
@@ -63,11 +82,16 @@ internal fun RecordingRow(recording: RecordingSummary, actions: RecordingActions
 /**
  * The recording in progress offers nothing; the one being replayed can be played again, shared or saved, never
  * deleted.
- * Delete is outlined in the emergency colour and always last, apart from Play.
+ * Delete is outlined in the emergency colour and always last, apart from Play. They wrap onto another line rather than
+ * squeeze the recording's facts.
  */
 @Composable
 private fun RowActions(recording: RecordingSummary, actions: RecordingActions) {
-    Row(horizontalArrangement = Arrangement.spacedBy(ContentSpacing), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
+        verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
         when {
             recording.inProgress -> StatusChip(stringResource(R.string.recordings_in_progress))
 
@@ -125,7 +149,7 @@ private fun StatusChip(text: String) {
     Surface(shape = RowShape, color = GcsTheme.colors.advisoryContainer) {
         Text(
             text = text.uppercase(),
-            modifier = Modifier.padding(horizontal = ContentSpacing, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = GcsTheme.spacing.content, vertical = 6.dp),
             style = MaterialTheme.typography.titleSmall,
             color = GcsTheme.colors.advisory,
         )

@@ -10,6 +10,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -20,12 +24,17 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.designsystem.time.elapsedText
 import kotlin.math.roundToInt
@@ -39,7 +48,7 @@ import org.maplibre.compose.overlay.MapOverlayScope
  * (`ContrastTest`).
  */
 @Composable
-internal fun MapOverlayScope.VehicleMarker(vehicle: MapVehicle, mapBearing: Double) {
+internal fun MapOverlayScope.VehicleMarker(vehicle: MapVehicle, mapBearing: Double, home: DpOffset? = null) {
     val position = vehicle.position.toPosition()
     val live = vehicle.shown == PositionShown.Live
     val color = if (live) MaterialTheme.colorScheme.primary else GcsTheme.colors.stale
@@ -71,12 +80,18 @@ internal fun MapOverlayScope.VehicleMarker(vehicle: MapVehicle, mapBearing: Doub
             drawArrow(rotation = (heading - mapBearing).toFloat(), color = color, outline = outline, filled = live)
         }
     }
+    // Home is often right beside a landed vehicle: the label goes on the other side rather than over it.
+    val density = LocalDensity.current
+    var labelSize by remember { mutableStateOf(DpSize.Zero) }
+    val labelStart = MARKER_SIZE / 2 + LABEL_GAP
+    val onLeft = labelCoversHome(home, labelStart, labelSize, HOME_SIZE / 2)
     MarkerLabel(
         text = label,
         color = if (live) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
-            .placedAt(position, alignment = Alignment.CenterStart)
-            .padding(start = MARKER_SIZE / 2 + LABEL_GAP),
+            .placedAt(position, alignment = if (onLeft) Alignment.CenterEnd else Alignment.CenterStart)
+            .padding(start = if (onLeft) 0.dp else labelStart, end = if (onLeft) labelStart else 0.dp)
+            .onSizeChanged { labelSize = with(density) { it.toSize().toDpSize() } },
     )
 }
 

@@ -13,7 +13,7 @@ import com.owindev.gcs.core.domain.vehicle.FlightMode
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-// The whole HUD, connected, in both palettes (REQ-030), at a tablet's and a phone's width.
+// The whole HUD in both palettes (REQ-030) at a tablet's size; a phone's are in HudPhonePreviews.
 
 @Preview(widthDp = 1280, heightDp = 800)
 @Composable
@@ -27,21 +27,8 @@ private fun HudConnectedDayPreview() {
     ConnectedPreview(palette = GcsPalette.DAY)
 }
 
-/** A phone's width: the theme switch must not cover or push away the alert banner or the battery chip. */
-@Preview(widthDp = 360, heightDp = 800)
 @Composable
-private fun HudConnectedPhoneNightPreview() {
-    ConnectedPreview(palette = GcsPalette.NIGHT)
-}
-
-@Preview(widthDp = 360, heightDp = 800)
-@Composable
-private fun HudConnectedPhoneDayPreview() {
-    ConnectedPreview(palette = GcsPalette.DAY)
-}
-
-@Composable
-private fun ConnectedPreview(palette: GcsPalette) {
+internal fun ConnectedPreview(palette: GcsPalette) {
     GcsTheme(palette = palette) {
         Surface(color = MaterialTheme.colorScheme.background) {
             HudContent(
@@ -65,7 +52,6 @@ private fun ConnectedPreview(palette: GcsPalette) {
                     ),
                 ),
                 onAcknowledgeAlert = {},
-                palette = palette,
             )
         }
     }
@@ -73,7 +59,7 @@ private fun ConnectedPreview(palette: GcsPalette) {
 
 private val PreviewBattery = Battery(voltage = 11.1, current = 12.4, remaining = 18, monitored = true, healthy = true)
 
-private val PreviewArmed = VehicleStatus(systemId = 1, flightMode = FlightMode.Named("Guided"), armed = true)
+internal val PreviewArmed = VehicleStatus(systemId = 1, flightMode = FlightMode.Named("Guided"), armed = true)
 
 @Preview(widthDp = 1280, heightDp = 800)
 @Composable

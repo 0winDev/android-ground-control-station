@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,6 +43,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.owindev.gcs.core.designsystem.layout.CompactHeight
+import com.owindev.gcs.core.designsystem.layout.CompactWidth
+import com.owindev.gcs.core.designsystem.theme.GcsCompact
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.designsystem.time.elapsedText
 import com.owindev.gcs.core.domain.recording.DeleteResult
@@ -137,70 +141,101 @@ internal fun RecordingsContent(
     onDeleteCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier.padding(all = ScreenPadding),
-            verticalArrangement = Arrangement.spacedBy(ContentSpacing),
-        ) {
-            Header(state, actions)
-            state.message?.let { MessageCard(it, onDismiss = actions.onMessageDismiss) }
-            val recordings = state.recordings
-            when {
-                recordings == null -> Note(stringResource(R.string.recordings_loading))
-
-                recordings.isEmpty() -> Note(stringResource(R.string.recordings_empty))
-
-                else -> LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(ContentSpacing),
-                    contentPadding = PaddingValues(bottom = ScreenPadding),
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        GcsCompact(enabled = maxWidth < CompactWidth || maxHeight < CompactHeight) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Column(
+                    modifier = Modifier.padding(all = GcsTheme.spacing.screen),
+                    verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
                 ) {
-                    items(recordings, key = RecordingSummary::name) { RecordingRow(it, actions.recording) }
+                    Header(state, actions)
+                    state.message?.let { MessageCard(it, onDismiss = actions.onMessageDismiss) }
+                    val recordings = state.recordings
+                    when {
+                        recordings == null -> Note(stringResource(R.string.recordings_loading))
+
+                        recordings.isEmpty() -> Note(stringResource(R.string.recordings_empty))
+
+                        else -> LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
+                            contentPadding = PaddingValues(bottom = GcsTheme.spacing.screen),
+                        ) {
+                            items(recordings, key = RecordingSummary::name) { RecordingRow(it, actions.recording) }
+                        }
+                    }
+                }
+                state.pendingDelete?.let { name ->
+                    DeleteDialog(name, onConfirm = onDeleteConfirm, onCancel = onDeleteCancel)
                 }
             }
         }
-        state.pendingDelete?.let { name ->
-            DeleteDialog(name, onConfirm = onDeleteConfirm, onCancel = onDeleteCancel)
+    }
+}
+
+/** Back, the title and Import in one row; at a phone's width the title goes under the buttons, never broken. */
+@Composable
+private fun Header(state: RecordingsUiState, actions: RecordingsActions) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        if (maxWidth < CompactWidth) {
+            Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    BackButton(onBack = actions.onBack)
+                    ImportButton(importing = state.importing, onImport = actions.onImport)
+                }
+                Title(state)
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BackButton(onBack = actions.onBack)
+                Title(state, modifier = Modifier.weight(1f))
+                ImportButton(importing = state.importing, onImport = actions.onImport)
+            }
         }
     }
 }
 
 @Composable
-private fun Header(state: RecordingsUiState, actions: RecordingsActions) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(ContentSpacing),
-        verticalAlignment = Alignment.CenterVertically,
+private fun BackButton(onBack: () -> Unit) {
+    val backDescription = stringResource(R.string.recordings_back_description)
+    OutlinedButton(
+        onClick = onBack,
+        modifier = Modifier
+            .heightIn(min = GcsTheme.sizes.button)
+            .semantics { contentDescription = backDescription },
     ) {
-        val backDescription = stringResource(R.string.recordings_back_description)
-        OutlinedButton(
-            onClick = actions.onBack,
-            modifier = Modifier
-                .heightIn(min = GcsTheme.sizes.button)
-                .semantics { contentDescription = backDescription },
-        ) {
-            Text(text = stringResource(R.string.recordings_back).uppercase())
-        }
-        Column(modifier = Modifier.weight(1f)) {
+        Text(text = stringResource(R.string.recordings_back).uppercase())
+    }
+}
+
+@Composable
+private fun Title(state: RecordingsUiState, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.recordings_title).uppercase(),
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        state.recordings?.let { recordings ->
             Text(
-                text = stringResource(R.string.recordings_title).uppercase(),
-                style = MaterialTheme.typography.headlineMedium,
+                text = pluralStringResource(R.plurals.recordings_count, recordings.size, recordings.size),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            state.recordings?.let { recordings ->
-                Text(
-                    text = pluralStringResource(R.plurals.recordings_count, recordings.size, recordings.size),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
-        Button(
-            onClick = actions.onImport,
-            enabled = !state.importing,
-            modifier = Modifier.heightIn(min = GcsTheme.sizes.button),
-        ) {
-            val label = if (state.importing) R.string.recordings_importing else R.string.recordings_import
-            Text(text = stringResource(label).uppercase())
-        }
+    }
+}
+
+@Composable
+private fun ImportButton(importing: Boolean, onImport: () -> Unit) {
+    Button(
+        onClick = onImport,
+        enabled = !importing,
+        modifier = Modifier.heightIn(min = GcsTheme.sizes.button),
+    ) {
+        val label = if (importing) R.string.recordings_importing else R.string.recordings_import
+        Text(text = stringResource(label).uppercase())
     }
 }
 
@@ -213,6 +248,4 @@ private const val ANY_TYPE = "*/*"
 
 /** A .tlog has no registered MIME type. */
 private const val TLOG_TYPE = "application/octet-stream"
-private val ScreenPadding = 24.dp
-internal val ContentSpacing = 12.dp
 internal val RowShape = RoundedCornerShape(8.dp)

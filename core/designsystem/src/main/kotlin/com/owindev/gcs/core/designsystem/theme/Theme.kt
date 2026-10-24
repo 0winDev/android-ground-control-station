@@ -66,9 +66,11 @@ enum class GcsPalette {
     DAY,
 }
 
+private val LocalGcsPalette = staticCompositionLocalOf { GcsPalette.NIGHT }
 private val LocalGcsColors = staticCompositionLocalOf { NightGcsColors }
 private val LocalTelemetryTypography = staticCompositionLocalOf { GcsTelemetryTypography }
 private val LocalGcsSizes = staticCompositionLocalOf { DefaultGcsSizes }
+private val LocalGcsSpacing = staticCompositionLocalOf { DefaultGcsSpacing }
 
 /**
  * GCS theme: the night or the high-contrast day [palette] (REQ-030), Barlow / Barlow Condensed / IBM Plex Mono and
@@ -77,9 +79,11 @@ private val LocalGcsSizes = staticCompositionLocalOf { DefaultGcsSizes }
 @Composable
 fun GcsTheme(palette: GcsPalette = GcsPalette.NIGHT, content: @Composable () -> Unit) {
     CompositionLocalProvider(
+        LocalGcsPalette provides palette,
         LocalGcsColors provides if (palette == GcsPalette.DAY) DayGcsColors else NightGcsColors,
         LocalTelemetryTypography provides GcsTelemetryTypography,
         LocalGcsSizes provides DefaultGcsSizes,
+        LocalGcsSpacing provides DefaultGcsSpacing,
     ) {
         MaterialTheme(
             colorScheme = if (palette == GcsPalette.DAY) DayColorScheme else NightColorScheme,
@@ -89,8 +93,39 @@ fun GcsTheme(palette: GcsPalette = GcsPalette.NIGHT, content: @Composable () -> 
     }
 }
 
+/**
+ * The theme in use with the phone boards' smaller type and tighter spacing while [enabled], for a compact window:
+ * colours and touch targets stay as they are (REQ-007).
+ */
+@Composable
+fun GcsCompact(enabled: Boolean, content: @Composable () -> Unit) {
+    if (!enabled) {
+        content()
+        return
+    }
+    CompositionLocalProvider(
+        LocalTelemetryTypography provides CompactTelemetryTypography,
+        LocalGcsSpacing provides CompactGcsSpacing,
+    ) {
+        MaterialTheme(
+            colorScheme = MaterialTheme.colorScheme,
+            typography = CompactGcsTypography,
+            content = content,
+        )
+    }
+}
+
 /** GCS-specific tokens on top of [MaterialTheme]. */
 object GcsTheme {
+    /**
+     * The palette the theme is drawn in: whatever else follows the palette (the theme switch's words, the map's style)
+     * reads it here, so it can never disagree with the colours on screen.
+     */
+    val palette: GcsPalette
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalGcsPalette.current
+
     val colors: GcsColors
         @Composable
         @ReadOnlyComposable
@@ -105,4 +140,9 @@ object GcsTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalGcsSizes.current
+
+    val spacing: GcsSpacing
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalGcsSpacing.current
 }

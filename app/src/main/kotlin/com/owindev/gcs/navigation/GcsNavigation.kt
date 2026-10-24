@@ -14,7 +14,6 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.feature.hud.HudScreen
 import com.owindev.gcs.feature.map.MapScreen
 import com.owindev.gcs.feature.recordings.RecordingsScreen
@@ -27,7 +26,6 @@ import java.io.File
  */
 @Composable
 internal fun GcsNavigation(
-    palette: GcsPalette,
     onToggleTheme: () -> Unit,
     guard: FlightGuardViewModel,
     onShare: (File) -> Unit,
@@ -54,14 +52,13 @@ internal fun GcsNavigation(
             NavEntry(destination) {
                 when (destination) {
                     Destination.FLIGHT -> HudScreen(
-                        palette = palette,
                         onToggleTheme = onToggleTheme,
                         onOpenRecordings = if (mayLeaveFlight) {
                             { backStack.openRecordings(guard.mayLeaveFlight.value) }
                         } else {
                             null
                         },
-                        map = { insets -> MapScreen(palette = palette, viewportInsets = insets) },
+                        map = { insets -> MapScreen(viewportInsets = insets) },
                     )
 
                     Destination.RECORDINGS -> RecordingsScreen(

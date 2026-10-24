@@ -13,6 +13,7 @@
     <string name="hud_label_link">Link</string>
     <string name="hud_link_connected">Connected</string>
     <string name="hud_link_waiting">Waiting</string>
+    <string name="hud_link_replay">Replay</string>
     <string name="hud_label_mode">Mode</string>
     <string name="hud_mode_unknown">Mode %1$d</string>
     <string name="hud_label_state">State</string>
@@ -62,6 +63,9 @@
     <string name="hud_fix_dgps" translatable="false">DGPS</string>
     <string name="hud_fix_rtk_float">RTK float</string>
     <string name="hud_fix_rtk_fixed">RTK fixed</string>
+    <string name="hud_fix_rtk_float_short">RTK flt</string>
+    <string name="hud_fix_rtk_fixed_short" translatable="false">RTK</string>
+    <string name="hud_gps_status_short" translatable="false">%1$s %2$s</string>
     <string name="hud_fix_static">Static</string>
     <string name="hud_fix_ppp" translatable="false">PPP</string>
     <string name="hud_fix_unknown">Fix %1$d</string>
@@ -137,4 +141,5 @@
     <string name="hud_recorded">Recorded</string>
     <string name="hud_recordings">Recordings</string>
     <string name="hud_recordings_open">Open the recordings</string>
+    <string name="hud_menu_open">Open the menu</string>
 </resources>

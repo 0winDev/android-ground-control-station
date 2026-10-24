@@ -34,8 +34,8 @@ internal fun MessageCard(message: RecordingsMessage, onDismiss: () -> Unit, modi
         color = if (done) GcsTheme.colors.nominalContainer else GcsTheme.colors.cautionContainer,
     ) {
         Row(
-            modifier = Modifier.padding(all = ContentSpacing),
-            horizontalArrangement = Arrangement.spacedBy(ContentSpacing),
+            modifier = Modifier.padding(all = GcsTheme.spacing.content),
+            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(

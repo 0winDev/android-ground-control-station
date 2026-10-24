@@ -62,3 +62,30 @@ internal val GcsTelemetryTypography = TelemetryTypography(
     value = TextStyle(fontFamily = IbmPlexMono, fontWeight = FontWeight.Medium, fontSize = 18.sp),
     coordinate = TextStyle(fontFamily = IbmPlexMono, fontWeight = FontWeight.Normal, fontSize = 14.sp),
 )
+
+/**
+ * The phone boards' type, a step below the tablet's: values 22 px, labels 12 px, the link-lost title 24 px. Never
+ * below 11 sp, so it stays readable outdoors.
+ */
+internal val CompactGcsTypography = GcsTypography.copy(
+    displayMedium = TextStyle(
+        fontFamily = BarlowCondensed,
+        fontWeight = FontWeight.Bold,
+        fontSize = 26.sp,
+        letterSpacing = LabelLetterSpacing,
+    ),
+    headlineMedium = GcsTypography.headlineMedium.copy(fontSize = 22.sp),
+    titleLarge = GcsTypography.titleLarge.copy(fontSize = 18.sp),
+    titleMedium = GcsTypography.titleMedium.copy(fontSize = 15.sp),
+    bodyLarge = GcsTypography.bodyLarge.copy(fontSize = 15.sp),
+    bodyMedium = GcsTypography.bodyMedium.copy(fontSize = 14.sp),
+    bodySmall = GcsTypography.bodySmall.copy(fontSize = 12.sp),
+    labelLarge = GcsTypography.labelLarge.copy(fontSize = 14.sp),
+    labelMedium = GcsTypography.labelMedium.copy(fontSize = 11.sp),
+)
+
+internal val CompactTelemetryTypography = TelemetryTypography(
+    valueLarge = GcsTelemetryTypography.valueLarge.copy(fontSize = 22.sp),
+    value = GcsTelemetryTypography.value.copy(fontSize = 15.sp),
+    coordinate = GcsTelemetryTypography.coordinate.copy(fontSize = 13.sp),
+)
