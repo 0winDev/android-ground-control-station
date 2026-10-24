@@ -2,6 +2,7 @@ package com.owindev.gcs.feature.hud
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.owindev.gcs.core.designsystem.layout.CompactHeight
+import com.owindev.gcs.core.designsystem.layout.CompactWidth
+import com.owindev.gcs.core.designsystem.theme.GcsCompact
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 
@@ -79,32 +83,47 @@ internal fun HudContent(
     // Arming closes them: nothing may stand between the operator and an armed vehicle.
     if (licencesOpen && state.licencesAvailable) LicencesDialog(onDismiss = { licencesOpen = false })
     LaunchedEffect(state.licencesAvailable) { if (!state.licencesAvailable) licencesOpen = false }
-    Column(modifier = modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surface) {
-            Box(modifier = Modifier.padding(horizontal = ScreenPadding, vertical = ContentSpacing)) {
-                StatusBar(
-                    state = state,
-                    palette = palette,
-                    onToggleTheme = onToggleTheme,
-                    onOpenLicences = { licencesOpen = true },
-                    onOpenRecordings = onOpenRecordings,
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        // A phone, upright or on its side: smaller type and spacing, and a status bar as short as it can be.
+        val compact = maxWidth < CompactWidth || maxHeight < CompactHeight
+        GcsCompact(enabled = compact) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Surface(color = MaterialTheme.colorScheme.surface) {
+                    Box(
+                        modifier = Modifier.padding(
+                            horizontal = GcsTheme.spacing.screen,
+                            vertical = GcsTheme.spacing.content,
+                        ),
+                    ) {
+                        StatusBar(
+                            state = state,
+                            palette = palette,
+                            onToggleTheme = onToggleTheme,
+                            onOpenLicences = { licencesOpen = true },
+                            onOpenRecordings = onOpenRecordings,
+                            compact = compact,
+                        )
+                    }
+                }
+                // Above the alert banner and the link-lost emergency: a replay must never look like a live flight.
+                replay?.let { ReplayBannerContent(banner = it, controls = replayControls) }
+                // One map whatever the state, so the camera never jumps when the link is lost or comes back.
+                HudOverMap(
+                    map = map,
+                    modifier = Modifier.weight(1f),
+                    // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
+                    header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
+                    start = { StartColumn(state = state) },
+                    side = { SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert) },
                 )
-            }
-        }
-        // Above the alert banner and the link-lost emergency: a replay must never look like a live flight.
-        replay?.let { ReplayBannerContent(banner = it, controls = replayControls) }
-        // One map whatever the state, so the camera never jumps when the link is lost or comes back.
-        HudOverMap(
-            map = map,
-            modifier = Modifier.weight(1f),
-            // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
-            header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
-            start = { StartColumn(state = state) },
-            side = { SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert) },
-        )
-        Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
-            Box(modifier = Modifier.padding(vertical = ChipSpacing), contentAlignment = Alignment.Center) {
-                Disclaimer()
+                Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
+                    Box(
+                        modifier = Modifier.padding(vertical = GcsTheme.spacing.chip),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Disclaimer()
+                    }
+                }
             }
         }
     }
@@ -153,7 +172,7 @@ private fun SideColumn(state: HudUiState, onAcknowledgeAlert: (occurrence: Long)
 @Composable
 private fun MessageCard(state: HudUiState) {
     Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-        MainContent(state = state, modifier = Modifier.padding(all = ScreenPadding))
+        MainContent(state = state, modifier = Modifier.padding(all = GcsTheme.spacing.screen))
     }
 }
 
@@ -168,7 +187,7 @@ private fun DatagramLine(port: Int?, datagramCount: Long) {
     Surface(shape = ChipShape, color = MaterialTheme.colorScheme.surfaceContainer) {
         Text(
             text = stringResource(id = R.string.hud_datagram_line, datagramCount, source),
-            modifier = Modifier.padding(horizontal = ChipPadding, vertical = ChipSpacing),
+            modifier = Modifier.padding(horizontal = GcsTheme.spacing.chipPadding, vertical = GcsTheme.spacing.chip),
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -178,7 +197,10 @@ private fun DatagramLine(port: Int?, datagramCount: Long) {
 private fun MainContent(state: HudUiState, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(space = ContentSpacing, alignment = Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(
+            space = GcsTheme.spacing.content,
+            alignment = Alignment.CenterVertically,
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         when (state) {
@@ -252,8 +274,4 @@ internal fun Disclaimer() {
     )
 }
 
-internal val ScreenPadding = 24.dp
-internal val ContentSpacing = 12.dp
-internal val ChipSpacing = 8.dp
-internal val ChipPadding = 12.dp
 internal val ChipShape = RoundedCornerShape(8.dp)

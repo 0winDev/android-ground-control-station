@@ -56,6 +56,7 @@
     <string name="hud_fix_none">Sin fix</string>
     <string name="hud_fix_rtk_float">RTK flotante</string>
     <string name="hud_fix_rtk_fixed">RTK fijo</string>
+    <string name="hud_fix_rtk_float_short">RTK flot</string>
     <string name="hud_fix_static">Estático</string>
     <string name="hud_fix_unknown">Fix %1$d</string>
     <string name="hud_position_no_fix">Sin fix 3D de GPS: posición no verificada</string>
@@ -131,4 +132,5 @@
     <string name="hud_recorded">De la grabación</string>
     <string name="hud_recordings">Grabaciones</string>
     <string name="hud_recordings_open">Abrir las grabaciones</string>
+    <string name="hud_menu_open">Abrir el menú</string>
 </resources>

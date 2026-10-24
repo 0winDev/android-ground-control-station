@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -42,17 +41,17 @@ import kotlin.time.Duration.Companion.seconds
 internal fun TelemetryPanelContent(panel: TelemetryPanel, modifier: Modifier = Modifier, lostFor: Duration? = null) {
     val lost = lostFor != null
     Surface(
-        modifier = modifier.width(PanelWidth),
+        modifier = modifier.fillMaxWidth(),
         shape = ChipShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(
-            modifier = Modifier.padding(all = ContentSpacing),
-            verticalArrangement = Arrangement.spacedBy(ContentSpacing),
+            modifier = Modifier.padding(all = GcsTheme.spacing.content),
+            verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
         ) {
             lostFor?.let { LastDataHeader(age = it) }
             AttitudeLine(reading = panel.attitude, lost = lost)
-            Row(horizontalArrangement = Arrangement.spacedBy(ContentSpacing)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content)) {
                 ValueCell(
                     label = stringResource(id = R.string.hud_label_altitude),
                     value = panel.position?.value?.position?.let { metres(it.altitudeAboveHome) },
@@ -68,7 +67,7 @@ internal fun TelemetryPanelContent(panel: TelemetryPanel, modifier: Modifier = M
                     lost = lost,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(ContentSpacing)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content)) {
                 ValueCell(
                     label = stringResource(id = R.string.hud_label_heading),
                     value = panel.position?.value?.position?.heading?.let { degrees(it) },
@@ -195,7 +194,6 @@ private fun AgeText(reading: Reading<*>?) {
     }
 }
 
-private val PanelWidth = 320.dp
 private val ValueSpacing = 2.dp
 
 private val PreviewPosition = GlobalPosition(
@@ -227,13 +225,13 @@ internal val PreviewPanel = TelemetryPanel(
     ),
 )
 
-@Preview
+@Preview(widthDp = 320)
 @Composable
 private fun TelemetryPanelFreshPreview() {
     GcsTheme { TelemetryPanelContent(panel = PreviewPanel) }
 }
 
-@Preview
+@Preview(widthDp = 320)
 @Composable
 private fun TelemetryPanelStalePreview() {
     GcsTheme {
@@ -247,7 +245,7 @@ private fun TelemetryPanelStalePreview() {
 }
 
 /** Values the vehicle does not know or sent out of range (#49), and an MGRS outside UTM. */
-@Preview
+@Preview(widthDp = 320)
 @Composable
 private fun TelemetryPanelMissingPreview() {
     GcsTheme {

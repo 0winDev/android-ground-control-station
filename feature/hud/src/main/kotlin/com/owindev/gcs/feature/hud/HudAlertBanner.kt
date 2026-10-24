@@ -69,8 +69,8 @@ private fun ShowingBanner(banner: AlertBanner.Showing, onAcknowledge: (occurrenc
         border = style.border?.let { BorderStroke(width = EmergencyBorder, color = it) },
     ) {
         Row(
-            modifier = Modifier.padding(all = ChipPadding),
-            horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
+            modifier = Modifier.padding(all = GcsTheme.spacing.chipPadding),
+            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Decorative: the text next to it says the level.
@@ -130,8 +130,8 @@ private fun OthersCount(others: Int, level: AlertLevel) {
         border = style.border?.let { BorderStroke(width = EmergencyBorder, color = it) },
     ) {
         Row(
-            modifier = Modifier.padding(all = ChipSpacing),
-            horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
+            modifier = Modifier.padding(all = GcsTheme.spacing.chip),
+            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painter = painterResource(id = style.icon), contentDescription = null)
@@ -158,8 +158,8 @@ private fun AcknowledgedBanner(count: Int, level: AlertLevel, recorded: Boolean)
         border = style.border?.let { BorderStroke(width = EmergencyBorder, color = it) },
     ) {
         Row(
-            modifier = Modifier.padding(all = ChipPadding),
-            horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
+            modifier = Modifier.padding(all = GcsTheme.spacing.chipPadding),
+            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painter = painterResource(id = DesignSystemR.drawable.ic_check_circle), contentDescription = null)
@@ -252,7 +252,7 @@ private val EmergencyBorder = 2.dp
 @Composable
 private fun AlertBannerPreview() {
     GcsTheme {
-        Column(verticalArrangement = Arrangement.spacedBy(ContentSpacing)) {
+        Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content)) {
             AlertBannerContent(
                 banner = AlertBanner.Showing(
                     alert = Alert.BatteryCritical,

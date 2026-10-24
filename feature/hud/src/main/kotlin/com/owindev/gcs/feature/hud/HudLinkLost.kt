@@ -45,8 +45,8 @@ internal fun EmergencyBanner(state: HudUiState.LinkLost) {
         border = BorderStroke(width = EmergencyBorder, color = GcsTheme.colors.emergency),
     ) {
         Row(
-            modifier = Modifier.padding(all = ScreenPadding),
-            horizontalArrangement = Arrangement.spacedBy(ScreenPadding),
+            modifier = Modifier.padding(all = GcsTheme.spacing.screen),
+            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.screen),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Decorative: the title right beside it says the same in words.
@@ -54,9 +54,9 @@ internal fun EmergencyBanner(state: HudUiState.LinkLost) {
                 painter = painterResource(id = DesignSystemR.drawable.ic_link_lost),
                 contentDescription = null,
                 tint = GcsTheme.colors.emergency,
-                modifier = Modifier.size(EmergencyIconSize),
+                modifier = Modifier.size(GcsTheme.spacing.largeIcon),
             )
-            Column(verticalArrangement = Arrangement.spacedBy(ChipSpacing)) {
+            Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip)) {
                 if (state.recorded) RecordedTag()
                 Text(
                     text = stringResource(id = R.string.hud_link_lost_title).uppercase(),
@@ -133,8 +133,8 @@ private fun CautionBanner(text: String) {
         contentColor = GcsTheme.colors.onCaution,
     ) {
         Row(
-            modifier = Modifier.padding(all = ChipPadding),
-            horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
+            modifier = Modifier.padding(all = GcsTheme.spacing.chipPadding),
+            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Decorative: the text next to it carries the warning.
@@ -144,5 +144,4 @@ private fun CautionBanner(text: String) {
     }
 }
 
-private val EmergencyIconSize = 72.dp
 private val EmergencyBorder = 2.dp

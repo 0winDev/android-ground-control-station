@@ -45,8 +45,8 @@ internal fun LicencesDialog(onDismiss: () -> Unit) {
             Column(
                 modifier = Modifier
                     .verticalScroll(rememberScrollState())
-                    .padding(all = ScreenPadding),
-                verticalArrangement = Arrangement.spacedBy(ContentSpacing),
+                    .padding(all = GcsTheme.spacing.screen),
+                verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -93,8 +93,11 @@ internal fun LicencesButton(onClick: () -> Unit) {
         border = BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outline),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = ChipPadding, vertical = ChipPadding / 2),
-            horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
+            modifier = Modifier.padding(
+                horizontal = GcsTheme.spacing.chipPadding,
+                vertical = GcsTheme.spacing.chipPadding / 2,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Decorative: the text next to it says what it opens.
@@ -140,7 +143,10 @@ internal fun RecordingsButton(onClick: () -> Unit) {
         border = BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outline),
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = ChipPadding, vertical = ChipPadding / 2),
+            modifier = Modifier.padding(
+                horizontal = GcsTheme.spacing.chipPadding,
+                vertical = GcsTheme.spacing.chipPadding / 2,
+            ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
