@@ -99,7 +99,6 @@ private fun ReplayTitle(banner: ReplayBanner, phone: Boolean, modifier: Modifier
     }
 }
 
-/** Pause or resume in one place, then Stop apart, laid out by the row they are called in. */
 @Composable
 private fun RowScope.ReplayButtons(banner: ReplayBanner, controls: ReplayControls, iconOnly: Boolean) {
     when (banner.status) {

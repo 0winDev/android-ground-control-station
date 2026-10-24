@@ -12,6 +12,5 @@ import kotlin.math.hypot
  */
 internal val FOLLOW_DEAD_ZONE: Dp = 4.dp
 
-/** Whether the vehicle at [vehicle] on screen is close enough to the [centre] to leave the camera where it is. */
 internal fun withinDeadZone(centre: DpOffset, vehicle: DpOffset): Boolean =
     hypot((vehicle.x - centre.x).value, (vehicle.y - centre.y).value) < FOLLOW_DEAD_ZONE.value

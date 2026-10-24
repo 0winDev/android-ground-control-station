@@ -27,7 +27,6 @@ internal class ActiveVehicle @Inject constructor() {
     private var live: SystemId? = null
     private var replay: SystemId? = null
 
-    /** The replay playing, if any. */
     private var replaySession: SessionId? = null
 
     private val current = MutableStateFlow<SystemId?>(null)

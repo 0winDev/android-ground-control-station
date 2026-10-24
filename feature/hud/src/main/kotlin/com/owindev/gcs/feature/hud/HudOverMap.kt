@@ -185,18 +185,14 @@ private fun MapAbovePanel(minMapHeight: Dp, map: @Composable () -> Unit, panel: 
  */
 internal fun stableInset(covered: Dp): Dp = INSET_STEP * ceil(covered / INSET_STEP)
 
-/** A part this size and the margin before it; nothing when the part is empty. */
 private fun Dp.coveredWithMargin(): Dp = if (this > 0.dp) this + OverlayMargin else 0.dp
 
 internal val OverlayMargin = 16.dp
 
-/** The step the covered sides are rounded up to. */
 internal val INSET_STEP = 16.dp
 
-/** The share of the map's width or height that can count as covered. */
 private const val MAX_COVERED = 0.6f
 
-/** The telemetry column's width beside the alerts on a wide screen. */
 private val StartWidth = 320.dp
 
 /**

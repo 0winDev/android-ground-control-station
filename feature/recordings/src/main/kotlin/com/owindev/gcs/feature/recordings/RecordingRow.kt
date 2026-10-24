@@ -29,10 +29,6 @@ import com.owindev.gcs.core.domain.recording.RecordingSummary
 import java.text.DateFormat
 import java.util.Date
 
-/**
- * One recording: when it started, its file name, how long it runs and its size, then what can be done with it, beside
- * it or, at a phone's width, under it.
- */
 @Composable
 internal fun RecordingRow(recording: RecordingSummary, actions: RecordingActions, modifier: Modifier = Modifier) {
     Surface(

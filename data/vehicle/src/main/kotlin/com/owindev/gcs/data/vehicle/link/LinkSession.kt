@@ -295,7 +295,6 @@ internal class LinkSession @Inject constructor(
         session = session,
     )
 
-    /** Where the datagrams of a [session] come from. */
     private sealed interface Source {
         val session: SessionId
 

@@ -25,16 +25,13 @@ fun Telemetry.isPositionVerified(staleness: StalenessRule): Boolean = positionTr
 enum class PositionTrust {
     VERIFIED,
 
-    /** No position has arrived. */
     NO_POSITION,
 
-    /** No GPS report has arrived. */
     NO_GPS,
 
     /** The GPS stopped reporting: its last report is older than its staleness threshold. */
     GPS_STALE,
 
-    /** The GPS reports, but without a 3D fix. */
     NO_3D_FIX,
 
     /** Exactly 0°, 0°: ArduPilot's position before it has one, even with a 3D fix. */

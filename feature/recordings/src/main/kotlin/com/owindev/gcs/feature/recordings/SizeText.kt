@@ -15,7 +15,6 @@ internal enum class SizeFormat(@StringRes val text: Int) {
     WHOLE(R.string.recordings_size_whole),
 }
 
-/** A size to show: the figure in MiB and how to write it. */
 internal data class MebibyteSize(val mebibytes: Double, val format: SizeFormat)
 
 /**

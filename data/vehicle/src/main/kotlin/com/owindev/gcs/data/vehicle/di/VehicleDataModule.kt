@@ -62,11 +62,9 @@ abstract class VehicleDataModule {
     @Binds
     internal abstract fun bindAlertRepository(impl: DefaultAlertRepository): AlertRepository
 
-    /** The live link's datagrams come from the one transport. */
     @Binds
     internal abstract fun bindLiveSource(transport: UdpTransport): DatagramSource
 
-    /** One clock for the whole pipeline (see [providePipelineClock]). */
     @Binds
     internal abstract fun bindTimeSource(clock: PipelineClock): TimeSource.WithComparableMarks
 
@@ -101,7 +99,6 @@ abstract class VehicleDataModule {
         @Provides
         fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
 
-        /** When the operator may leave the flight screen, judging link loss as every screen does (ADR 0007). */
         @Provides
         fun provideFlightAttentionRule(linkLossRule: LinkLossRule): FlightAttentionRule =
             FlightAttentionRule(linkLossRule)
@@ -156,7 +153,6 @@ abstract class VehicleDataModule {
         fun provideImportRule(recordingRule: RecordingRule): ImportRule =
             ImportRule(maxBytes = recordingRule.maxTotalBytes)
 
-        /** The recordings list, its deletes and imports, read on `Dispatchers.IO`. */
         @Provides
         @Singleton
         internal fun provideRecordingRepository(
@@ -172,7 +168,6 @@ abstract class VehicleDataModule {
             ioDispatcher = Dispatchers.IO,
         )
 
-        /** Replays only the GCS's own recordings (REQ-037), read on `Dispatchers.IO`. */
         // One parameter per collaborator of the repository, as its constructor has.
         @Suppress("LongParameterList")
         @Provides

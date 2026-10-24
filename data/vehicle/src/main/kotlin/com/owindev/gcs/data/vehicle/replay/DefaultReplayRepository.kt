@@ -20,8 +20,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Plays the GCS's own recordings, the .tlogs in the [folder], through the [session] (REQ-037).
- *
  * [play] checks, in order, that the file is one of the [folder]'s recordings (by its real path, so `..` or a link
  * cannot reach another file) and that [rule] allows a replay with every live vehicle as it is now; either failing
  * leaves the live link untouched. Then the [folder] keeps that file from retention while it plays, since
@@ -122,7 +120,6 @@ internal class DefaultReplayRepository(
         if (replayClock === clock) mutableSkippedGap.value = skipped
     }
 
-    /** The end of a recording or a failure to read it, as the session reports it while a replay is on. */
     private fun follow(status: LinkStatus) = mutableState.update { current ->
         // Read late, after another replay started: it belongs to the one before.
         if (session.status.value != status) return@update current

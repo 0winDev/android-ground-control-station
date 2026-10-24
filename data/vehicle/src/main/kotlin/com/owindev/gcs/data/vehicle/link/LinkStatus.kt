@@ -33,6 +33,5 @@ internal sealed interface LinkStatus {
     /** The recording has been played to its end; [datagrams] in all. */
     data class ReplayEnded(val datagrams: Long) : LinkStatus
 
-    /** The recording could not be read any further. */
     data class ReplayFailed(val cause: IOException) : LinkStatus
 }

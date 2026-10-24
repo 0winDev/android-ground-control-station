@@ -125,7 +125,6 @@ internal class DefaultVehicleRepository @Inject constructor(
         mutableVehicles.asStateFlow()
     }
 
-    /** Runs [job] while the link is the live one, never during a replay (REQ-037). */
     private suspend fun whileLive(job: suspend () -> Unit) {
         session.session.map { it.origin }.distinctUntilChanged().collectLatest { origin ->
             if (origin == DataOrigin.LIVE) job()

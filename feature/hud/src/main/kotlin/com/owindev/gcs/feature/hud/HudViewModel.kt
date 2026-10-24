@@ -38,8 +38,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * Maps the link traffic and the active vehicle to what the HUD shows.
- *
  * The active vehicle is chosen by [VehicleRepository.activeSystemId] (REQ-020), never here. Whether its
  * link is lost is decided by [LinkLossRule]: the watchdog's [VehicleLink.LOST], or the rule applied to the
  * vehicle's age right now, because the watchdog's timer can run late after the device sleeps (#12). A
@@ -239,7 +237,6 @@ private fun Vehicle.toStatus() = VehicleStatus(
     armed = state.armed,
 )
 
-/** Where this traffic comes from: a replay's or the live link's. */
 private fun LinkTraffic.origin(): DataOrigin = when (this) {
     is LinkTraffic.Replaying, LinkTraffic.ReplayFailed -> DataOrigin.REPLAY
     else -> DataOrigin.LIVE

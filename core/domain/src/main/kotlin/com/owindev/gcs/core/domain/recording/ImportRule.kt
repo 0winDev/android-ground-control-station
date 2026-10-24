@@ -15,7 +15,6 @@ class ImportRule(val maxBytes: Long = RecordingRule.DEFAULT_MAX_TOTAL_BYTES) {
     /** Whether a source declaring [declaredBytes] is refused before a byte is copied; an unknown size is not. */
     fun refusesDeclared(declaredBytes: Long?): Boolean = declaredBytes != null && declaredBytes > maxBytes
 
-    /** Whether the copy must stop once it has counted [copiedBytes]. */
     fun exceeds(copiedBytes: Long): Boolean = copiedBytes > maxBytes
 
     /**

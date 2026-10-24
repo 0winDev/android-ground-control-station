@@ -9,5 +9,4 @@ import com.owindev.gcs.core.domain.link.DataOrigin
  */
 internal data class SessionId(val origin: DataOrigin, val epoch: Long)
 
-/** The live session the app starts with. */
 internal val FIRST_SESSION = SessionId(DataOrigin.LIVE, epoch = 0)

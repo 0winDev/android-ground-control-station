@@ -24,7 +24,6 @@ class TlogReader {
     private var follows = false
     private var resynchronising = false
 
-    /** What has been dropped so far. */
     val stats: TlogStats
         get() = TlogStats(skippedBytes = skippedBytes, truncatedRecords = truncatedRecords)
 

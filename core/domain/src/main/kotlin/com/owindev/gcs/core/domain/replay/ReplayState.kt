@@ -33,7 +33,6 @@ sealed interface ReplayState {
         override val origin = DataOrigin.LIVE
     }
 
-    /** [recording] could not be played, for [reason]. */
     data class Failed(val recording: File, val reason: ReplayFailure) : ReplayState {
         override val origin = reason.origin
     }
@@ -44,7 +43,6 @@ sealed interface ReplayState {
  * failsafe watches (`FS_GCS_ENABLE`).
  */
 enum class ReplayRefusal {
-    /** The live vehicle is being heard. */
     VEHICLE_CONNECTED,
 
     /** The live vehicle was armed when last heard, connected or not. */

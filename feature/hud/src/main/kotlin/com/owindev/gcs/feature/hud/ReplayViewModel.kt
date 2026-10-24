@@ -32,7 +32,6 @@ class ReplayViewModel @Inject constructor(private val replay: ReplayRepository) 
 
     fun onResume() = replay.resume()
 
-    /** Ends the replay and gives the link back to the live session. */
     fun onStop() = replay.stop()
 
     private companion object {
@@ -48,7 +47,6 @@ data class ReplayBanner(val recording: String, val status: ReplayStatus, val ski
 
 enum class ReplayStatus { PLAYING, PAUSED, ENDED, UNREADABLE }
 
-/** What the operator can do with the replay on screen. */
 internal class ReplayControls(val onPause: () -> Unit, val onResume: () -> Unit, val onStop: () -> Unit)
 
 /** The banner for [state], `null` only when the link is the live one. */
