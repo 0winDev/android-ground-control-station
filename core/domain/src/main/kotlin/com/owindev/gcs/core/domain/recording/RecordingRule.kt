@@ -27,14 +27,15 @@ class RecordingRule(
     /**
      * The [recordings] to delete, oldest first (by last write, then name), until the rest fit in [maxTotalBytes]. Never
      * the one named [kept], the last one closed or the one closing, so it alone can stay over the limit; with no name,
-     * the newest is kept, as the last one closed before the app started. Nor the one being [replayed] (REQ-037), which
-     * still counts in the total.
+     * the newest is kept, as the last one closed before the app started. Nor the one being [replayed] (REQ-037) nor the
+     * one being recorded ([recording]), as when an import applies the limit (REQ-038); both still count in the total.
      */
-    fun toDelete(recordings: List<Recording>, kept: String?, replayed: String?): List<Recording> {
+    fun toDelete(recordings: List<Recording>, kept: String?, replayed: String?, recording: String?): List<Recording> {
         var excess = recordings.sumOf { it.sizeBytes } - maxTotalBytes
         val oldestFirst = recordings.sortedWith(compareBy({ it.lastModifiedMillis }, { it.name }))
         val keptName = kept ?: oldestFirst.lastOrNull()?.name
-        val candidates = oldestFirst.filter { it.name != keptName && it.name != replayed }.iterator()
+        val protected = setOf(keptName, replayed, recording)
+        val candidates = oldestFirst.filter { it.name !in protected }.iterator()
         val deleted = mutableListOf<Recording>()
         while (excess > 0 && candidates.hasNext()) {
             val oldest = candidates.next()

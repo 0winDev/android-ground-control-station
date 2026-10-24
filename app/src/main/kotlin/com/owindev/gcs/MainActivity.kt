@@ -17,8 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
-import com.owindev.gcs.feature.hud.HudScreen
-import com.owindev.gcs.feature.map.MapScreen
+import com.owindev.gcs.navigation.FlightGuardViewModel
+import com.owindev.gcs.navigation.GcsNavigation
+import com.owindev.gcs.navigation.shareRecording
 import com.owindev.gcs.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -26,6 +27,7 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val themeViewModel: ThemeViewModel by viewModels()
+    private val flightGuard: FlightGuardViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,11 +41,12 @@ class MainActivity : ComponentActivity() {
             }
             GcsTheme(palette = palette) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    HudScreen(
+                    GcsNavigation(
                         palette = palette,
                         onToggleTheme = themeViewModel::onThemeToggled,
+                        guard = flightGuard,
+                        onShare = ::shareRecording,
                         modifier = Modifier.padding(innerPadding),
-                        map = { insets -> MapScreen(palette = palette, viewportInsets = insets) },
                     )
                 }
             }

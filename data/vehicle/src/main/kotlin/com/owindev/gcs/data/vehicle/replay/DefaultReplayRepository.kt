@@ -9,12 +9,9 @@ import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.LinkStatus
-import com.owindev.gcs.data.vehicle.recording.FlightRecorder
-import com.owindev.gcs.data.vehicle.recording.LastClosedMarker
+import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import java.io.File
-import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.InvalidPathException
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,11 +20,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Plays the GCS's own recordings, the .tlogs in [recordings], through the [session] (REQ-037).
+ * Plays the GCS's own recordings, the .tlogs in the [folder], through the [session] (REQ-037).
  *
- * [play] checks, in order, that the file is one of [recordings] (by its real path, so `..` or a link cannot reach
- * another file) and that [rule] allows a replay with every live vehicle as it is now; either
- * failing leaves the live link untouched. Then the [recorder] keeps that file from retention while it plays, since
+ * [play] checks, in order, that the file is one of the [folder]'s recordings (by its real path, so `..` or a link
+ * cannot reach another file) and that [rule] allows a replay with every live vehicle as it is now; either failing
+ * leaves the live link untouched. Then the [folder] keeps that file from retention while it plays, since
  * closing the live recording applies the limit, and the session closes the live link and plays the file from
  * [replaySource] on a new replay clock, with its own pin of the active vehicle; the session switches the [clock] once
  * the live link has closed. [stop] gives the link back to a new live session.
@@ -41,20 +38,22 @@ internal class DefaultReplayRepository(
     private val session: LinkSession,
     private val vehicleRepository: VehicleRepository,
     private val clock: PipelineClock,
-    private val recorder: FlightRecorder,
+    private val folder: RecordingsFolder,
     private val rule: ReplayRule,
-    private val recordings: File,
-    private val replaySource: (File, ReplayClock) -> DatagramSource,
+    private val replaySource: (File, ReplayClock, (Duration?) -> Unit) -> DatagramSource,
     scope: CoroutineScope,
 ) : ReplayRepository {
 
     private val lock = Any()
     private val mutableState = MutableStateFlow<ReplayState>(ReplayState.Off)
+    private val mutableSkippedGap = MutableStateFlow<Duration?>(null)
 
     /** The clock of the replay playing now; under [lock]. */
     private var replayClock: ReplayClock? = null
 
     override val state: StateFlow<ReplayState> = mutableState.asStateFlow()
+
+    override val skippedGap: StateFlow<Duration?> = mutableSkippedGap.asStateFlow()
 
     init {
         scope.launch { session.status.collect(::follow) }
@@ -64,7 +63,10 @@ internal class DefaultReplayRepository(
         val playing = mutableState.value.origin == DataOrigin.REPLAY
         // The live link is already closed during a replay: playing another one changes nothing for the vehicle.
         val refusal = if (playing) null else rule.refusalFor(vehicleRepository.vehicles.value.values)
-        val real = recordingAt(recording)
+        // Found and kept from retention in one step, so a delete or an import's limit never takes it in between.
+        val real = folder.locked {
+            folder.recordingAt(recording)?.also { if (refusal == null) folder.replayed = it.name }
+        }
         val result = when {
             real == null -> ReplayState.Failed(recording, ReplayFailure.NOT_A_RECORDING)
 
@@ -99,37 +101,25 @@ internal class DefaultReplayRepository(
     override fun stop() = synchronized(lock) {
         if (mutableState.value.origin == DataOrigin.REPLAY) {
             session.live()
-            recorder.replayed = null
+            folder.replayed = null
             replayClock = null
+            mutableSkippedGap.value = null
         }
         mutableState.value = ReplayState.Off
     }
 
     /** A replay after another starts afresh too: its own pin and time, and the session switches source. */
     private fun start(recording: File) {
-        recorder.replayed = recording.name
         val started = clock.newReplayClock()
         replayClock = started
-        session.replay(replaySource(recording, started), started)
+        mutableSkippedGap.value = null
+        session.replay(replaySource(recording, started) { skipped -> skipping(started, skipped) }, started)
         started.play()
     }
 
-    /**
-     * [file] by its real path if it is one of the GCS's recordings: a regular file named as the recorder names its logs
-     * (`.tlog`, never the marker) right in [recordings], by real paths, links resolved, which a canonical path does not
-     * do on every platform, so neither `..` nor a link can reach another file. `null` for anything else, a file that
-     * does not exist included. The replay opens the real path it returns, never the name it was given.
-     */
-    private fun recordingAt(file: File): File? = try {
-        val real = file.toPath().toRealPath()
-        val isRecording = real.parent == recordings.toPath().toRealPath() &&
-            Files.isRegularFile(real) &&
-            real.fileName.toString().matches(LastClosedMarker.LOG_NAME)
-        real.toFile().takeIf { isRecording }
-    } catch (@Suppress("SwallowedException") unresolvable: IOException) {
-        null
-    } catch (@Suppress("SwallowedException") invalid: InvalidPathException) {
-        null
+    /** A gap reported by the source of the replay on [clock]; one from a replay before it comes too late to count. */
+    private fun skipping(clock: ReplayClock, skipped: Duration?) = synchronized(lock) {
+        if (replayClock === clock) mutableSkippedGap.value = skipped
     }
 
     /** The end of a recording or a failure to read it, as the session reports it while a replay is on. */

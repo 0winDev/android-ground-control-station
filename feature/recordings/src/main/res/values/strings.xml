@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recordings_title">Recordings</string>
+    <plurals name="recordings_count">
+        <item quantity="one">%1$d .tlog file</item>
+        <item quantity="other">%1$d .tlog files</item>
+    </plurals>
+    <string name="recordings_back">‹ Flight</string>
+    <string name="recordings_back_description">Back to the flight screen</string>
+    <string name="recordings_import">Import</string>
+    <string name="recordings_importing">Importing…</string>
+    <string name="recordings_loading">Reading the recordings…</string>
+    <string name="recordings_empty">No recordings yet. A flight is recorded from the vehicle\'s first HEARTBEAT.</string>
+    <string name="recordings_column_start">Start</string>
+    <string name="recordings_column_duration">Duration</string>
+    <string name="recordings_column_size">Size</string>
+    <string name="recordings_no_value" translatable="false">—</string>
+    <string name="recordings_size_under" translatable="false">&lt; %1$.2f MiB</string>
+    <string name="recordings_size_two_decimals" translatable="false">%1$.2f MiB</string>
+    <string name="recordings_size_one_decimal" translatable="false">%1$.1f MiB</string>
+    <string name="recordings_size_whole" translatable="false">%1$.0f MiB</string>
+    <string name="recordings_no_frames">No valid frames</string>
+    <string name="recordings_in_progress">Recording</string>
+    <string name="recordings_replaying">Replaying</string>
+    <string name="recordings_play">Play</string>
+    <string name="recordings_share">Share</string>
+    <string name="recordings_save">Save</string>
+    <string name="recordings_delete">Delete</string>
+    <string name="recordings_delete_title">Delete this recording?</string>
+    <string name="recordings_delete_body">%1$s will be deleted from this device. This cannot be undone.</string>
+    <string name="recordings_delete_confirm">Delete</string>
+    <string name="recordings_delete_cancel">Keep</string>
+    <string name="recordings_dismiss">OK</string>
+    <string name="recordings_imported">Imported as %1$s.</string>
+    <string name="recordings_imported_deleted">To stay within the recordings limit, these older recordings were deleted: %1$s.</string>
+    <string name="recordings_import_too_large">The file is larger than %1$s, the recordings limit. Nothing was imported.</string>
+    <string name="recordings_import_too_large_sized">The file is %1$s, larger than %2$s, the recordings limit. Nothing was imported.</string>
+    <string name="recordings_import_not_tlog">The file holds no MAVLink 2 telemetry log. Nothing was imported.</string>
+    <string name="recordings_import_no_room">No room: the last recording closed and the one being replayed fill the recordings limit. Nothing was imported.</string>
+    <string name="recordings_import_recording">A flight is being recorded. Import once the recording closes, so the copy cannot fill the storage it needs. Nothing was imported.</string>
+    <string name="recordings_import_failed">The file could not be read or copied. Nothing was imported.</string>
+    <string name="recordings_delete_in_progress">This recording is in progress and cannot be deleted.</string>
+    <string name="recordings_delete_replaying">This recording is being replayed. Stop the replay to delete it.</string>
+    <string name="recordings_delete_failed">The recording could not be deleted.</string>
+    <string name="recordings_delete_not_found">This recording is no longer on this device.</string>
+    <string name="recordings_export_in_progress">This recording is in progress. Share or save it once it closes.</string>
+    <string name="recordings_saved">A copy of %1$s was saved on the device.</string>
+    <string name="recordings_save_cancelled">No place was picked. Nothing was saved.</string>
+    <string name="recordings_save_failed">The copy could not be saved.</string>
+    <string name="recordings_missing">%1$s is no longer on this device.</string>
+    <string name="recordings_replay_connected">A vehicle is connected. A replay would close the live link: disconnect the vehicle first.</string>
+    <string name="recordings_replay_armed">The vehicle was armed when last heard. A replay would close the live link: it needs a disarmed vehicle.</string>
+    <string name="recordings_replay_not_a_recording">This file is not one of this station\'s recordings.</string>
+    <string name="recordings_replay_unreadable">The recording could not be read.</string>
+</resources>

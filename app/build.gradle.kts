@@ -27,5 +27,9 @@ dependencies {
     implementation(projects.feature.hud)
     implementation(projects.feature.map)
     implementation(projects.feature.mission)
+    implementation(projects.feature.recordings)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
 }

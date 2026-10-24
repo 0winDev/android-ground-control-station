@@ -57,6 +57,7 @@ internal fun EmergencyBanner(state: HudUiState.LinkLost) {
                 modifier = Modifier.size(EmergencyIconSize),
             )
             Column(verticalArrangement = Arrangement.spacedBy(ChipSpacing)) {
+                if (state.recorded) RecordedTag()
                 Text(
                     text = stringResource(id = R.string.hud_link_lost_title).uppercase(),
                     style = MaterialTheme.typography.displayMedium,

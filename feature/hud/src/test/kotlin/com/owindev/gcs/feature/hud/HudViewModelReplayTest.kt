@@ -23,6 +23,7 @@ import com.owindev.gcs.core.testing.MainDispatcherExtension
 import io.mockk.every
 import io.mockk.mockk
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -102,6 +103,33 @@ class HudViewModelReplayTest {
     }
 
     @Test
+    fun `GIVEN a replayed vehicle lost WHEN observing the state THEN its link loss is marked recorded`() = runTest {
+        turbineScope {
+            traffic.value = LinkTraffic.Replaying(datagrams = DATAGRAMS)
+            activeSystemId.value = SYSTEM_1
+            vehicles.value = mapOf(
+                SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = LOST_FOR).copy(origin = DataOrigin.REPLAY),
+            )
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            (result.expectMostRecentItem() as HudUiState.LinkLost).recorded shouldBeEqualTo true
+        }
+    }
+
+    @Test
+    fun `GIVEN a live vehicle lost WHEN observing the state THEN its link loss is never marked recorded`() = runTest {
+        turbineScope {
+            activeSystemId.value = SYSTEM_1
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(SYSTEM_1, VehicleLink.LOST, heardAgo = LOST_FOR))
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            (result.expectMostRecentItem() as HudUiState.LinkLost).recorded shouldBeEqualTo false
+        }
+    }
+
+    @Test
     fun `GIVEN a recording that cannot be read WHEN observing the state THEN says so, not a link error`() = runTest {
         turbineScope {
             traffic.value = LinkTraffic.ReplayFailed
@@ -121,6 +149,7 @@ private fun TestScope.vehicle(systemId: SystemId, link: VehicleLink, heardAgo: D
 )
 
 private const val PORT = 14550
+private val LOST_FOR = 5.seconds
 private const val DATAGRAMS = 42L
 private val SYSTEM_1 = SystemId(1)
 private val GUIDED = FlightMode.Named("Guided")

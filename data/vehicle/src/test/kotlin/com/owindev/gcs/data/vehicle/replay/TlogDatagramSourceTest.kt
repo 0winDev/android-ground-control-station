@@ -6,6 +6,7 @@ import com.owindev.gcs.core.transport.Datagram
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -38,6 +39,7 @@ class TlogDatagramSourceTest {
     private val testScope = TestScope()
     private val clock = ReplayClock(testScope.testScheduler.timeSource)
     private val recording get() = File(temp, "flight.tlog")
+    private val gaps = mutableListOf<Pair<Long, Duration?>>()
 
     private lateinit var source: TlogDatagramSource
 
@@ -47,6 +49,7 @@ class TlogDatagramSourceTest {
             recording = recording,
             clock = clock,
             ioDispatcher = StandardTestDispatcher(testScope.testScheduler),
+            onGap = { gaps += testScope.currentTime to it },
         )
     }
 
@@ -198,6 +201,80 @@ class TlogDatagramSourceTest {
         result shouldBeEqualTo 20.milliseconds
     }
 
+    @Test
+    fun `GIVEN a gap longer than the maximum WHEN collecting THEN reports what it skips until the next record`() =
+        testScope.runTest {
+            recording.writeRecords(START to STABILIZE, START + GAP.inWholeMicroseconds to GUIDED)
+            clock.play()
+
+            source.datagrams().toList()
+
+            gaps shouldBeEqualTo listOf(0L to GAP - MAX_RECORD_WAIT, MAX_RECORD_WAIT.inWholeMilliseconds to null)
+        }
+
+    @Test
+    fun `GIVEN a pause while skipping a gap WHEN collecting THEN the gap stays reported through the pause`() =
+        testScope.runTest {
+            recording.writeRecords(START to STABILIZE, START + GAP.inWholeMicroseconds to GUIDED)
+            clock.play()
+            backgroundScope.launch {
+                delay(1.seconds)
+                clock.pause()
+                delay(PAUSE)
+                clock.play()
+            }
+
+            source.datagrams().toList()
+
+            gaps shouldBeEqualTo listOf(
+                0L to GAP - MAX_RECORD_WAIT,
+                (MAX_RECORD_WAIT + PAUSE).inWholeMilliseconds to null,
+            )
+        }
+
+    @Test
+    fun `GIVEN a collection cancelled while skipping a gap WHEN it stops THEN the gap is no longer reported`() =
+        testScope.runTest {
+            recording.writeRecords(START to STABILIZE, START + GAP.inWholeMicroseconds to GUIDED)
+            clock.play()
+            val collection = backgroundScope.launch { source.datagrams().toList() }
+            delay(1.seconds)
+
+            collection.cancel()
+            testScheduler.runCurrent()
+
+            gaps shouldBeEqualTo listOf(0L to GAP - MAX_RECORD_WAIT, 1_000L to null)
+        }
+
+    @Test
+    fun `GIVEN a gap of exactly the maximum WHEN collecting THEN nothing is skipped`() = testScope.runTest {
+        recording.writeRecords(START to STABILIZE, START + MAX_RECORD_WAIT.inWholeMicroseconds to GUIDED)
+        clock.play()
+
+        source.datagrams().toList()
+
+        gaps shouldBeEqualTo emptyList()
+    }
+
+    @Test
+    fun `GIVEN a wall clock set back WHEN collecting THEN nothing is reported as skipped`() = testScope.runTest {
+        recording.writeRecords(START to STABILIZE, START - 1.hours.inWholeMicroseconds to GUIDED)
+        clock.play()
+
+        source.datagrams().toList()
+
+        gaps shouldBeEqualTo emptyList()
+    }
+
+    @Test
+    fun `GIVEN two stamps whose difference overflows a Long WHEN naming what is skipped THEN nothing`() {
+        val previous = -1L
+
+        val result = skippedBetween(previous = previous, next = Long.MAX_VALUE)
+
+        result shouldBeEqualTo null
+    }
+
     private suspend fun TestScope.arrivalTimes(): List<Long> = source.datagrams().map { currentTime }.toList()
 }
 
@@ -210,6 +287,9 @@ private fun records(vararg records: Pair<Long, ByteArray>): ByteArray =
 private const val START = 1_760_634_598_000_000L
 private const val GARBAGE_LENGTH = 37
 private val PAUSE = 30.seconds
+
+/** A downlink cut of 8 min 10 s kept in the log: the replay waits 10 s of it and skips 8 min. */
+private val GAP = 490.seconds
 private val STABILIZE = readFixture("heartbeat/disarmed-stabilize.bin")
 private val GUIDED = readFixture("heartbeat/disarmed-guided.bin")
 private val LOITER = readFixture("heartbeat/disarmed-loiter.bin")

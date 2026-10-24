@@ -1,7 +1,6 @@
 package com.owindev.gcs.data.vehicle.recording
 
 import android.util.Log
-import com.owindev.gcs.core.domain.recording.Recording
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.mavlink.LogFrame
 import com.owindev.gcs.core.mavlink.MavlinkMessages
@@ -38,11 +37,8 @@ import kotlinx.coroutines.launch
 /** Records not yet written beyond which new ones are dropped and counted: a few seconds of a busy link. */
 internal const val MAX_PENDING_RECORDS = 1024
 
-/** The folder of the flight logs in the app's private files (`docs/security.md`, S-5). */
-internal const val RECORDINGS_FOLDER = "tlogs"
-
 /**
- * Records each flight to a .tlog in [directory] (REQ-036): every frame received and sent while a recording is open,
+ * Records each flight to a .tlog in the [folder] (REQ-036): every frame received and sent while a recording is open,
  * each stamped on [clock] when it is handed over, signatures stripped and SETUP_SIGNING left out (ADR 0006).
  *
  * A recording opens with the first HEARTBEAT of the [activeVehicle] (REQ-020), as `yyyy-MM-dd_HH-mm-ss.tlog` in
@@ -50,11 +46,11 @@ internal const val RECORDINGS_FOLDER = "tlogs"
  * after [RecordingRule.closeAfterLinkLoss] without a HEARTBEAT from that vehicle, measured on [timeSource]; its next
  * HEARTBEAT then opens a new one. A closed log is synced to the disk.
  *
- * The limit is applied when a recording opens and when it closes (REQ-039): the oldest logs in [directory] are deleted
- * until all fit in [RecordingRule.maxTotalBytes], never the one being recorded nor the last one closed, named by the
- * [LastClosedMarker] across restarts (the newest on disk when it is missing or damaged). A log a disk failure cut short
- * counts as closed. While open, a recording grows past the limit unchecked: about 1.1 kB/s from ArduCopter SITL, so
- * 256 MiB in some 65 hours.
+ * The limit is applied when a recording opens and when it closes (REQ-039): the oldest logs in the [folder] are
+ * deleted until all fit in [RecordingRule.maxTotalBytes], never the one being recorded nor the last one closed, named
+ * by the [LastClosedMarker] across restarts (the newest on disk when it is missing or damaged). A log a disk failure
+ * cut short counts as closed. While open, a recording grows past the limit unchecked: about 1.1 kB/s from ArduCopter
+ * SITL, so 256 MiB in some 65 hours.
  *
  * Only the live link feeds it: a replay is never recorded. The callers never wait: frames queue for one writer in
  * [scope] (on a device, on `Dispatchers.IO`), and beyond [MAX_PENDING_RECORDS] they are dropped and counted. A disk
@@ -64,7 +60,7 @@ internal const val RECORDINGS_FOLDER = "tlogs"
 // One collaborator per concern above; grouping them would only hide that.
 @Suppress("LongParameterList")
 internal class FlightRecorder(
-    private val directory: File,
+    private val folder: RecordingsFolder,
     private val rule: RecordingRule,
     private val activeVehicle: ActiveVehicle,
     private val timeSource: TimeSource.WithComparableMarks,
@@ -81,7 +77,8 @@ internal class FlightRecorder(
     private val signedUnknownCount = AtomicLong()
     private val setupSigningCount = AtomicLong()
     private val mutableStatus = MutableStateFlow(RecorderStatus.IDLE)
-    private val marker = LastClosedMarker(directory)
+    private val directory = folder.directory
+    private val marker = folder.marker
 
     /**
      * The latest HEARTBEAT of the active vehicle not yet taken by the writer. One per session, replaced when it stops,
@@ -102,13 +99,6 @@ internal class FlightRecorder(
             signedUnknownMessage = signedUnknownCount.get(),
             setupSigning = setupSigningCount.get(),
         )
-
-    /**
-     * The name of the log being replayed, which retention never deletes (REQ-037), `null` once no replay reads it. Set
-     * before the replay closes the live session, whose closing applies the limit.
-     */
-    @Volatile
-    var replayed: String? = null
 
     /** A frame from the link, with its decoded [message] when it has one; called from the receive loop. */
     fun received(frame: RawFrame, message: ReceivedMessage?) {
@@ -214,17 +204,19 @@ internal class FlightRecorder(
         /** After a disk failure, until the session stops: no log opens. */
         var blocked = false
 
-        /** Unknown after the app starts, when the [marker] stands for it. */
-        var lastClosed: String? = null
-
         fun openIfIdle(atMillis: Long) {
             if (open != null || blocked) return
             guarded {
-                if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
-                val file = newFile(atMillis)
-                deleteOldest(kept = lastClosed ?: marker.read())
-                val output = openOutput(file)
-                open = OpenRecording(file, output, BufferedOutputStream(output))
+                // Under the folder's lock, so an import never takes the new log's name nor deletes it as it opens.
+                val file = folder.locked {
+                    if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
+                    val file = newFile(atMillis)
+                    folder.deleteOldest()
+                    val output = openOutput(file)
+                    open = OpenRecording(file, output, BufferedOutputStream(output))
+                    folder.recording = file.name
+                    file
+                }
                 status = RecorderStatus.RECORDING
                 Log.i(TAG, "Recording the flight to ${file.name}")
             }
@@ -250,13 +242,20 @@ internal class FlightRecorder(
                 open = null
                 status = RecorderStatus.IDLE
                 Log.i(TAG, "Recording ${recording.file.name} closed; left out so far: $stats")
-                closed(recording.file.name)
-                deleteOldest(kept = recording.file.name)
+                // Protected as the one recorded until the marker names it, so an import in between never deletes it.
+                folder.locked {
+                    try {
+                        closed(recording.file.name)
+                    } finally {
+                        folder.recording = null
+                    }
+                    folder.deleteOldest()
+                }
             }
         }
 
         private fun closed(name: String) {
-            lastClosed = name
+            folder.lastClosed = name
             marker.write(name)
         }
 
@@ -276,9 +275,12 @@ internal class FlightRecorder(
             val recording = open ?: return
             open = null
             runCatchingIo { recording.stream.close() }
-            if (recording.file.isFile) {
-                lastClosed = recording.file.name
-                runCatchingIo { marker.write(recording.file.name) }
+            folder.locked {
+                if (recording.file.isFile) {
+                    folder.lastClosed = recording.file.name
+                    runCatchingIo { marker.write(recording.file.name) }
+                }
+                folder.recording = null
             }
         }
     }
@@ -288,18 +290,6 @@ internal class FlightRecorder(
         return generateSequence(0) { it + 1 }
             .map { clash -> File(directory, if (clash == 0) "$stamp$EXTENSION" else "${stamp}_$clash$EXTENSION") }
             .first { !it.exists() }
-    }
-
-    private fun deleteOldest(kept: String?) {
-        val recordings = directory.listFiles { file -> file.isFile && file.name.endsWith(EXTENSION) }.orEmpty()
-            .map { Recording(name = it.name, sizeBytes = it.length(), lastModifiedMillis = it.lastModified()) }
-        rule.toDelete(recordings, kept, replayed).forEach { recording ->
-            if (File(directory, recording.name).delete()) {
-                Log.i(TAG, "Deleted ${recording.name} to stay within the recordings limit")
-            } else {
-                Log.w(TAG, "Could not delete ${recording.name}")
-            }
-        }
     }
 
     private class OpenRecording(val file: File, val output: OutputStream, val stream: OutputStream)

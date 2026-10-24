@@ -38,7 +38,8 @@ sealed interface HudUiState {
     /**
      * The active vehicle is no longer heard (REQ-017): [lastKnown] is its state at its last HEARTBEAT,
      * [sinceLastHeartbeat] how long ago that was, in whole seconds, and [lastData] its last telemetry, which is never
-     * shown as current. [localFault] is set when the problem is on this device, not the vehicle.
+     * shown as current. [localFault] is set when the problem is on this device, not the vehicle. [recorded] when the
+     * vehicle is a replay's, so its loss never passes for a live one (REQ-037).
      */
     data class LinkLost(
         val lastKnown: VehicleStatus,
@@ -46,6 +47,7 @@ sealed interface HudUiState {
         val otherVehicles: List<Int>,
         val localFault: LocalLinkFault? = null,
         val lastData: TelemetryPanel = TelemetryPanel(),
+        val recorded: Boolean = false,
     ) : HudUiState
 
     data class PortUnavailable(val port: Int) : HudUiState

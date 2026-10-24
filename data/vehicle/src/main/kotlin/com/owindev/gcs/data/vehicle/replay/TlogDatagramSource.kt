@@ -40,12 +40,16 @@ private const val CHUNK_SIZE = 4096
  * start, its first record at once at the clock's position then, so collecting it again never plays a burst. Damaged
  * bytes are left to the [TlogReader], which never throws; a file that cannot be read fails the flow with an
  * [java.io.IOException]. The flow completes at the end of the file. The file is read on [ioDispatcher].
+ *
+ * While it waits out a gap cut to [MAX_RECORD_WAIT], [onGap] has the recorded time it skips, and `null` once the next
+ * record is delivered or the collection ends, so the operator knows the replay jumped (REQ-037).
  */
 internal class TlogDatagramSource(
     private val recording: File,
     private val clock: ReplayClock,
     private val ioDispatcher: CoroutineDispatcher,
     private val open: (File) -> InputStream = File::inputStream,
+    private val onGap: (Duration?) -> Unit = {},
 ) : DatagramSource {
 
     override fun datagrams(): Flow<Datagram> = flow {
@@ -68,9 +72,16 @@ internal class TlogDatagramSource(
         private var previous: Long? = null
 
         suspend fun deliver(record: TlogRecord, collector: FlowCollector<Datagram>) {
+            val skipped = previous?.let { skippedBetween(it, record.timestampMicros) }
             due += previous?.let { waitBetween(it, record.timestampMicros) } ?: Duration.ZERO
             previous = record.timestampMicros
-            clock.awaitPosition(due)
+            if (skipped != null) onGap(skipped)
+            try {
+                clock.awaitPosition(due)
+            } finally {
+                // Also when the collection is cancelled inside the gap, or a new one would show it while it plays.
+                if (skipped != null) onGap(null)
+            }
             collector.emit(Datagram(record.frame, REPLAY_SENDER))
         }
     }
@@ -84,4 +95,15 @@ internal fun waitBetween(previous: Long, next: Long): Duration = try {
     Math.subtractExact(next, previous).microseconds.coerceIn(Duration.ZERO, MAX_RECORD_WAIT)
 } catch (@Suppress("SwallowedException") overflow: ArithmeticException) {
     MAX_RECORD_WAIT
+}
+
+/**
+ * The recorded time a replay skips between records stamped [previous] and [next]: how much their gap exceeds
+ * [MAX_RECORD_WAIT], `null` when it does not. A clock set back skips nothing it could name, and neither does a
+ * difference that overflows a Long.
+ */
+internal fun skippedBetween(previous: Long, next: Long): Duration? = try {
+    (Math.subtractExact(next, previous).microseconds - MAX_RECORD_WAIT).takeIf { it > Duration.ZERO }
+} catch (@Suppress("SwallowedException") overflow: ArithmeticException) {
+    null
 }

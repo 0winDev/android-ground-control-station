@@ -25,7 +25,7 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 | S-2 | No secrets in source code, resources, build files or the repository. | v0.0 | ✅ | gitleaks pre-commit hook; `.gitignore` excludes keystores and `*.mavkey` |
 | S-3 | No sensitive data (keys, signatures) in logs. | v0.6 | ⏳ | |
 | S-4 | Backups exclude the signing key and sensitive data (`data_extraction_rules.xml`, `backup_rules.xml`). | v0.6 | 🚧 | Flight logs (`tlogs/`) excluded from cloud backup and device transfer (#70, `BackupRulesTest`); the signing key from v0.6 |
-| S-5 | Missions and flight logs are stored in app-private storage. | v0.5 | 🚧 | Flight logs in `filesDir/tlogs`, owner-only (`-rw-------`, checked in SITL, #70); missions in v0.5 |
+| S-5 | Missions and flight logs are stored in app-private storage. | v0.5 | 🚧 | Flight logs in `filesDir/tlogs`, owner-only (`-rw-------`, checked in SITL, #70); imported logs (#74) are copied into the same folder, so the same rules and the backup exclusion of S-4 apply to them; missions in v0.5 |
 
 ## MASVS-CRYPTO
 
@@ -57,7 +57,7 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 
 | # | Control | Phase | Status | Evidence / notes |
 |---|---|---|---|---|
-| P-1 | Only the launcher activity is exported; no other exported components. | v0.0 | ✅ | `AndroidManifest.xml` |
+| P-1 | Only the launcher activity is exported; no other exported components. | v0.0 | ✅ | `AndroidManifest.xml`. The recordings FileProvider (#74) is not exported (`exported=false`); it serves `files-path tlogs/` only and grants read access to one URI, to the app the operator picks in the share sheet. The recording in progress is never exported. |
 | P-2 | Only the permissions needed by the current phase are requested. | v0.0 | ✅ | `INTERNET`, for the UDP vehicle link (`data/vehicle/src/main/AndroidManifest.xml`) and the map's tiles (`feature/map/src/main/AndroidManifest.xml`, #73); `ACCESS_NETWORK_STATE`, added by MapLibre Compose (checked in the merged manifest). The map dependency also brings two non-exported content providers (`org.maplibre.compose.mlnffi.AndroidContextProvider`, `org.jetbrains.compose.resources.AndroidContextProvider`) and the transitive `org.maplibre.compose:location-android`, which adds no location permission: its 0.20.0 manifest declares none, and neither merged manifest (debug, release) has any, so no `tools:node="remove"` is needed. Check it again on every MapLibre Compose upgrade. |
 | P-3 | Sensitive screens (key management) are protected from screenshots/recents. | v0.6 | ⏳ | |
 
@@ -70,7 +70,7 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 | K-3 | Missions are validated before upload (altitude, distance from home, geofence, waypoint count). | v0.5 | ⏳ | |
 | K-4 | Dependencies are kept up to date (Dependabot) and checked in CI. | v0.0 | ✅ | `.github/dependabot.yml`, `android-ci.yml` |
 | K-5 | Release builds are minified and debuggable is off. | v1.0 | ⏳ | |
-| K-6 | A replay opens only the GCS's own recordings. | v0.3 | ✅ | #71: a regular `.tlog` file right in `filesDir/tlogs`, by real path (links and `..` resolved, the marker file excluded), opened by that resolved path; anything else is `NOT_A_RECORDING` and the live link is left untouched (`DefaultReplayRepositoryTest`). The file being replayed is kept from retention while it plays (REQ-039). Imported files (#74) are untrusted input on top of this. |
+| K-6 | A replay opens only the GCS's own recordings. | v0.3 | ✅ | #71: a regular `.tlog` file right in `filesDir/tlogs`, by real path (links and `..` resolved, the marker file excluded), opened by that resolved path; anything else is `NOT_A_RECORDING` and the live link is left untouched (`DefaultReplayRepositoryTest`). The file being replayed is kept from retention while it plays (REQ-039), from the moment the replay finds it. Imports (#74) join the recordings only through `RecordingsFolder.admit`, under the folder's lock, so a replay opens an import by the same real-path rule. An import is untrusted input: refused while a flight is recorded (so it never fills the disk under the black box), refused above the limit when declared and stopped when the bytes counted pass it (a declared size can lie), stored under a name of its own (last path part, `[A-Za-z0-9._-]`, no leading dot, 64 characters, always `.tlog`, never the marker's), admitted only with a valid MAVLink 2 frame as the replay reads it, its temporary copy always deleted. No provider failure (I/O, security, state, a stream that never ends or stalls) crashes the app or blocks the next import (`DefaultRecordingRepositoryTest`, `RecordingsFolderTest`, `ImportRuleTest`, `ClosingOnCancelTest`). |
 
 ## MASVS-RESILIENCE
 
@@ -84,4 +84,5 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 |---|---|---|---|---|
 | V-1 | No analytics or tracking SDKs. | v0.0 | ✅ | No such dependencies |
 | V-2 | Location data (vehicle, home, operator) stays on the device unless the operator enables CoT output. | v0.7 | ⏳ | #73, ADR 0005: no position is ever sent, but the map's tile requests reveal the area on screen, and so roughly where the vehicle flies, to OpenFreeMap and its CDN (Cloudflare); OpenFreeMap logs no IP address by default and deletes logs after 7 days. The follow zoom (17, some 150 m across) narrows that area to a few hundred metres. Viewed tiles stay in MapLibre's 50 MiB cache in the app's cache directory, which is not backed up, so the device keeps a record of where the vehicle flew until the cache evicts it. Offline maps (v1.0) remove the requests. |
-| V-3 | Logs name no file the operator chose. | v0.3 | ✅ | #71: a replay that cannot be read logs only the kind of failure, never its message, which names the file (`DefaultLinkRepositoryTest`). |
+| V-3 | Logs name no file the operator chose. | v0.3 | ✅ | #71: a replay that cannot be read logs only the kind of failure, never its message, which names the file (`DefaultLinkRepositoryTest`). #74: imports, deletes, retention and exports log no recording name and only the kind of a failure, since an import is named after the file the operator picked. |
+| V-4 | A recording leaves the app only when the operator sends or saves it. | v0.3 | ✅ | #74: a .tlog holds the vehicle's whole track and home in clear (signatures stripped, ADR 0006); it is offered only through the share sheet the operator opens, to the one app picked, read-only (P-1, checked on the emulator with a test app: read whole, write refused), or copied to a document the operator creates with the system picker. Once saved there it is outside app-private storage and readable by whatever can read that folder. The recording in progress is neither shared nor saved. |

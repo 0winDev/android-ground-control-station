@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the recordings folder is ever shared (REQ-038); the rest of the app's files are never reachable. -->
+<paths>
+    <files-path name="recordings" path="tlogs/" />
+</paths>

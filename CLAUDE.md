@@ -269,6 +269,8 @@ the issue number to an existing one.
 - A camera move restarted for every position (5 Hz) is cancelled before the camera moves: follow with one conflated
   loop, and check your own timing before blaming the library's gesture reason (#73).
 - Ages shown side by side need one clock and one rounding, or the banner says 116 s and the panel 117 s (#73).
+- An activity-scoped `Eagerly` collector keeps the link alive in the background: use `repeatOnLifecycle` (#74).
+- A blocking read ignores cancellation: close its stream on cancel, or a stalled provider holds the lock (#74).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
@@ -277,6 +279,9 @@ the issue number to an existing one.
 - An occurrence id fixes a race in the repository, not on screen: a banner that swaps alerts under a finger needs a
   guard, and an acknowledged caution keeps its level beside a newer advisory (#56).
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
+- A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
+- Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
+- Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough (no WSL/Docker). Its mirror binds the port it sends to and only one
@@ -295,6 +300,7 @@ the issue number to an existing one.
 - A SITL TCP port can stay silent for a whole session (5762 sent nothing while 5763 worked): count raw bytes on it
   first (#70).
 - In flight the map must be checked moving, not only hovering: a camera bug showed only at 10 m/s (#73).
+- Other GCSs' HEARTBEATs (sysid 255) keep the GCS failsafe off: check the app's own HEARTBEAT stop instead (#74).
 
 **Emulator, Windows and tooling**
 - `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first and
@@ -317,3 +323,4 @@ the issue number to an existing one.
   script without an identifying User-Agent (#73).
 - A screen holding MapLibre content needs `@UiComposable`, or the compiler infers MapLibre's applier for callers (#73).
 - Never `--no-verify` a split commit: run the hooks on it, they check the files as staged (#73).
+- `git checkout -- <file>` to undo a mutation also drops the uncommitted fix: copy the file aside first (#74).

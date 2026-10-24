@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.replay
 
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayFailure
 import com.owindev.gcs.core.domain.replay.ReplayRefusal
 import com.owindev.gcs.core.domain.replay.ReplayRule
@@ -18,7 +19,7 @@ import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.LinkStatus
-import com.owindev.gcs.data.vehicle.recording.FlightRecorder
+import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import io.mockk.CapturingSlot
 import io.mockk.Runs as runs
 import io.mockk.every
@@ -29,6 +30,8 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.FileSystemException
 import java.nio.file.Files
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -59,31 +62,31 @@ class DefaultReplayRepositoryTest {
     private val status = MutableStateFlow<LinkStatus>(LinkStatus.Running(datagrams = 0))
     private val vehicleRepository: VehicleRepository = mockk()
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
-    private val recorder: FlightRecorder = mockk()
     private val replayClock: CapturingSlot<ReplayClock> = slot()
     private val events = mutableListOf<String>()
     private val replayed = mutableListOf<File>()
+    private val gapReports = mutableListOf<(Duration?) -> Unit>()
     private val recordings get() = File(temp, "tlogs").apply { mkdirs() }
     private val recording get() = File(recordings, "2026-10-16_17-09-58.tlog").apply { writeBytes(ByteArray(0)) }
+    private val folder by lazy { RecordingsFolder(recordings, RecordingRule()) }
 
     private lateinit var repository: DefaultReplayRepository
 
     @BeforeEach
     fun setUp() {
         every { session.status } returns status
-        every { session.replay(any(), capture(replayClock)) } answers { events += "replay" }
-        every { session.live() } answers { events += "live" }
-        every { recorder.replayed = any() } answers { events += "kept ${firstArg<String?>()}" }
+        every { session.replay(any(), capture(replayClock)) } answers { events += "replay keeping ${folder.replayed}" }
+        every { session.live() } answers { events += "live keeping ${folder.replayed}" }
         every { vehicleRepository.vehicles } returns vehicles
         repository = DefaultReplayRepository(
             session = session,
             vehicleRepository = vehicleRepository,
             clock = clock,
-            recorder = recorder,
+            folder = folder,
             rule = ReplayRule(LinkLossRule()),
-            recordings = recordings,
-            replaySource = { file, _ ->
+            replaySource = { file, _, onGap ->
                 replayed += file
+                gapReports += onGap
                 emptySource()
             },
             scope = testScope.backgroundScope,
@@ -260,12 +263,45 @@ class DefaultReplayRepositoryTest {
         }
 
     @Test
+    fun `GIVEN a replay WHEN its source skips a gap THEN the time skipped is shown`() {
+        repository.play(recording)
+
+        gapReports.single()(SKIPPED)
+        val result = repository.skippedGap.value
+
+        result shouldBeEqualTo SKIPPED
+    }
+
+    @Test
+    fun `GIVEN a replay after another WHEN the first one's source reports a gap late THEN it is ignored`() {
+        val file = recording
+        repository.play(file)
+        repository.play(file)
+
+        gapReports.first()(SKIPPED)
+        val result = repository.skippedGap.value
+
+        result shouldBeEqualTo null
+    }
+
+    @Test
+    fun `GIVEN a gap being skipped WHEN the replay stops THEN no gap is shown`() {
+        repository.play(recording)
+        gapReports.single()(SKIPPED)
+
+        repository.stop()
+        val result = repository.skippedGap.value
+
+        result shouldBeEqualTo null
+    }
+
+    @Test
     fun `GIVEN a recording WHEN playing it THEN retention keeps it before the live recording closes`() {
         val file = recording
 
         repository.play(file)
 
-        events shouldBeEqualTo listOf("kept ${file.name}", "replay")
+        events shouldBeEqualTo listOf("replay keeping ${file.name}")
     }
 
     @Test
@@ -276,8 +312,8 @@ class DefaultReplayRepositoryTest {
         repository.stop()
         val result = repository.state.value
 
-        result shouldBeEqualTo ReplayState.Off
-        events shouldBeEqualTo listOf("kept ${file.name}", "replay", "live", "kept null")
+        (result to folder.replayed) shouldBeEqualTo (ReplayState.Off to null)
+        events shouldBeEqualTo listOf("replay keeping ${file.name}", "live keeping ${file.name}")
     }
 
     @Test
@@ -339,3 +375,4 @@ private fun createdLink(link: File, target: File): Boolean = try {
 
 private val PLAYED = 2.seconds
 private val LONG_SILENT = 10.seconds
+private val SKIPPED = 8.minutes

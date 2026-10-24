@@ -3,7 +3,10 @@ package com.owindev.gcs.data.vehicle.di
 import android.content.Context
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.attention.FlightAttentionRule
 import com.owindev.gcs.core.domain.link.LinkRepository
+import com.owindev.gcs.core.domain.recording.ImportRule
+import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayRule
@@ -18,8 +21,10 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.recording.DefaultRecordingRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
+import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import com.owindev.gcs.data.vehicle.replay.DefaultReplayRepository
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.replay.TlogDatagramSource
@@ -96,6 +101,11 @@ abstract class VehicleDataModule {
         @Provides
         fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
 
+        /** When the operator may leave the flight screen, judging link loss as every screen does (ADR 0007). */
+        @Provides
+        fun provideFlightAttentionRule(linkLossRule: LinkLossRule): FlightAttentionRule =
+            FlightAttentionRule(linkLossRule)
+
         /** The staleness thresholds decided in #39 (REQ-026); change them here. */
         @Provides
         fun provideStalenessRule(): StalenessRule = StalenessRule()
@@ -113,24 +123,53 @@ abstract class VehicleDataModule {
         @Provides
         fun provideRecordingRule(): RecordingRule = RecordingRule()
 
+        /** Flight logs in the app's private files (S-5), one folder for the recorder, the replay and the list. */
+        @Provides
+        @Singleton
+        internal fun provideRecordingsFolder(
+            @ApplicationContext context: Context,
+            rule: RecordingRule,
+        ): RecordingsFolder = RecordingsFolder(directory = File(context.filesDir, RECORDINGS_FOLDER), rule = rule)
+
         /**
-         * Flight logs in the app's private files (S-5), written on `Dispatchers.IO`, stamped with the wall clock. Only
-         * the live link is recorded, so its link loss is timed on the device clock, never a replay's.
+         * Flight logs written on `Dispatchers.IO`, stamped with the wall clock. Only the live link is recorded, so its
+         * link loss is timed on the device clock, never a replay's.
          */
         @Provides
         @Singleton
         internal fun provideFlightRecorder(
-            @ApplicationContext context: Context,
+            folder: RecordingsFolder,
             rule: RecordingRule,
             activeVehicle: ActiveVehicle,
             @ApplicationScope scope: CoroutineScope,
         ): FlightRecorder = FlightRecorder(
-            directory = File(context.filesDir, RECORDINGS_FOLDER),
+            folder = folder,
             rule = rule,
             activeVehicle = activeVehicle,
             timeSource = ElapsedRealtimeTimeSource,
             clock = Clock.systemDefaultZone(),
             scope = scope + Dispatchers.IO,
+        )
+
+        /** Imports are held to the recordings limit (REQ-038, REQ-039), whatever their source declares. */
+        @Provides
+        fun provideImportRule(recordingRule: RecordingRule): ImportRule =
+            ImportRule(maxBytes = recordingRule.maxTotalBytes)
+
+        /** The recordings list, its deletes and imports, read on `Dispatchers.IO`. */
+        @Provides
+        @Singleton
+        internal fun provideRecordingRepository(
+            folder: RecordingsFolder,
+            recorder: FlightRecorder,
+            replay: ReplayRepository,
+            rule: ImportRule,
+        ): RecordingRepository = DefaultRecordingRepository(
+            folder = folder,
+            recorder = recorder,
+            replay = replay,
+            rule = rule,
+            ioDispatcher = Dispatchers.IO,
         )
 
         /** Replays only the GCS's own recordings (REQ-037), read on `Dispatchers.IO`. */
@@ -139,22 +178,20 @@ abstract class VehicleDataModule {
         @Provides
         @Singleton
         internal fun provideReplayRepository(
-            @ApplicationContext context: Context,
             session: LinkSession,
             vehicleRepository: VehicleRepository,
             clock: PipelineClock,
-            recorder: FlightRecorder,
+            folder: RecordingsFolder,
             linkLossRule: LinkLossRule,
             @ApplicationScope scope: CoroutineScope,
         ): ReplayRepository = DefaultReplayRepository(
             session = session,
             vehicleRepository = vehicleRepository,
             clock = clock,
-            recorder = recorder,
+            folder = folder,
             rule = ReplayRule(linkLossRule),
-            recordings = File(context.filesDir, RECORDINGS_FOLDER),
-            replaySource = { recording, replayClock ->
-                TlogDatagramSource(recording, replayClock, ioDispatcher = Dispatchers.IO)
+            replaySource = { recording, replayClock, onGap ->
+                TlogDatagramSource(recording, replayClock, ioDispatcher = Dispatchers.IO, onGap = onGap)
             },
             scope = scope,
         )

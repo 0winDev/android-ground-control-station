@@ -4,6 +4,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -24,7 +25,7 @@ sealed interface AlertBanner {
      * emergency. [others] is how many more alerts are active, acknowledged or not, and [othersLevel] the most urgent
      * of them, `null` with none: an acknowledged caution is still a caution, even under a newer advisory.
      * [batteryRemaining] is the battery's fresh remaining energy, in percent, for a low or critical battery, or
-     * `null` when not known.
+     * `null` when not known. [recorded] when a replay raised it, so it never passes for a live one (REQ-037).
      */
     data class Showing(
         val alert: Alert,
@@ -33,13 +34,14 @@ sealed interface AlertBanner {
         val others: Int,
         val othersLevel: AlertLevel? = null,
         val batteryRemaining: Int? = null,
+        val recorded: Boolean = false,
     ) : AlertBanner
 
     /**
      * Every one of the [count] active alerts has been acknowledged: still active, so still said, at the [level] of
-     * the most urgent of them.
+     * the most urgent of them; [recorded] when a replay raised any of them.
      */
-    data class AllAcknowledged(val count: Int, val level: AlertLevel) : AlertBanner
+    data class AllAcknowledged(val count: Int, val level: AlertLevel, val recorded: Boolean = false) : AlertBanner
 }
 
 /**
@@ -52,7 +54,11 @@ internal fun alertBannerOf(alerts: Alerts, panel: TelemetryPanel): AlertBanner {
     return when {
         active.isEmpty() -> AlertBanner.Hidden
 
-        shown == null -> AlertBanner.AllAcknowledged(count = active.size, level = active.maxOf { it.alert.level })
+        shown == null -> AlertBanner.AllAcknowledged(
+            count = active.size,
+            level = active.maxOf { it.alert.level },
+            recorded = active.any { it.origin == DataOrigin.REPLAY },
+        )
 
         else -> AlertBanner.Showing(
             alert = shown.alert,
@@ -61,6 +67,7 @@ internal fun alertBannerOf(alerts: Alerts, panel: TelemetryPanel): AlertBanner {
             others = active.size - 1,
             othersLevel = active.filter { it !== shown }.maxOfOrNull { it.alert.level },
             batteryRemaining = shown.batteryRemaining(panel),
+            recorded = shown.origin == DataOrigin.REPLAY,
         )
     }
 }

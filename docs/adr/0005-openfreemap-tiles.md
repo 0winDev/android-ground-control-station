@@ -1,6 +1,6 @@
 # 0005. Draw the map from OpenFreeMap's public tiles, with MapLibre's own cache
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-21
 - Issue: #73
 
@@ -54,7 +54,7 @@ link, so a stray tap in flight never takes the operator out of the app. OpenFree
 individuals to interact with the map … to see the attribution", and that where it does not link "the link must be
 provided in an easily locatable part of the web page, software, or application", such as "an 'About' option in a menu"
 (osmfoundation.org/wiki/Licence/Attribution_Guidelines). The links live in a Licences dialog opened from the status
-bar, shown only while no vehicle is armed; it moves to the settings screen with #74.
+bar, shown only while no vehicle is armed; it moves to the settings screen when that screen exists.
 
 We use the OpenGL ES runtime. Vulkan is optional on Android 8 devices and unreliable on the emulator.
 

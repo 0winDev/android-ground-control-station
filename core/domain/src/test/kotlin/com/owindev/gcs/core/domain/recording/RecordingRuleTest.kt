@@ -32,7 +32,22 @@ class RecordingRuleTest {
             recording(NEWEST, MIB_100, 3),
         )
 
-        val result = rule.toDelete(recordings, kept = NEWEST, replayed = OLDEST)
+        val result = rule.toDelete(recordings, kept = NEWEST, replayed = OLDEST, recording = null)
+
+        result.map(Recording::name) shouldBeEqualTo listOf(MIDDLE)
+    }
+
+    @Tag("REQ-038")
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN the oldest recording being recorded WHEN an import goes over the limit THEN the next oldest goes`() {
+        val recordings = listOf(
+            recording(OLDEST, MIB_100, 1),
+            recording(MIDDLE, MIB_100, 2),
+            recording(NEWEST, MIB_100, 3),
+        )
+
+        val result = rule.toDelete(recordings, kept = NEWEST, replayed = null, recording = OLDEST)
 
         result.map(Recording::name) shouldBeEqualTo listOf(MIDDLE)
     }
@@ -81,7 +96,7 @@ class RecordingRuleTest {
             recording(NEWEST, 56, 3),
         )
 
-        val result = rule.toDelete(recordings, kept = NEWEST, replayed = null)
+        val result = rule.toDelete(recordings, kept = NEWEST, replayed = null, recording = null)
 
         result.shouldBeEmpty()
     }
@@ -95,7 +110,7 @@ class RecordingRuleTest {
             recording(NEWEST, MIB_56, 3),
         )
 
-        val result = rule.toDelete(recordings, kept = null, replayed = null)
+        val result = rule.toDelete(recordings, kept = null, replayed = null, recording = null)
 
         result.shouldBeEmpty()
     }
@@ -106,7 +121,7 @@ class RecordingRuleTest {
         val oldest = recording(OLDEST, MIB_100, 1)
         val recordings = listOf(recording(NEWEST, MIB_56 + 1, 3), oldest, recording(MIDDLE, MIB_100, 2))
 
-        val result = rule.toDelete(recordings, kept = null, replayed = null)
+        val result = rule.toDelete(recordings, kept = null, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(oldest)
     }
@@ -118,7 +133,7 @@ class RecordingRuleTest {
         val middle = recording(MIDDLE, MIB_100, 2)
         val recordings = listOf(recording(NEWEST, MIB_200, 3), middle, oldest)
 
-        val result = rule.toDelete(recordings, kept = null, replayed = null)
+        val result = rule.toDelete(recordings, kept = null, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(oldest, middle)
     }
@@ -129,7 +144,7 @@ class RecordingRuleTest {
         val middle = recording(MIDDLE, MIB_100, 2)
         val recordings = listOf(recording(OLDEST, MIB_100, 1), middle, recording(NEWEST, MIB_100, 3))
 
-        val result = rule.toDelete(recordings, kept = OLDEST, replayed = null)
+        val result = rule.toDelete(recordings, kept = OLDEST, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(middle)
     }
@@ -141,7 +156,7 @@ class RecordingRuleTest {
         val middle = recording(MIDDLE, 1, 2)
         val recordings = listOf(oldest, middle, recording(NEWEST, MIB_300, 3))
 
-        val result = rule.toDelete(recordings, kept = NEWEST, replayed = null)
+        val result = rule.toDelete(recordings, kept = NEWEST, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(oldest, middle)
     }
@@ -153,7 +168,7 @@ class RecordingRuleTest {
         val middle = recording(MIDDLE, 1, 2)
         val recordings = listOf(recording(NEWEST, MIB_300, 3), middle, oldest)
 
-        val result = rule.toDelete(recordings, kept = null, replayed = null)
+        val result = rule.toDelete(recordings, kept = null, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(oldest, middle)
     }
@@ -164,7 +179,7 @@ class RecordingRuleTest {
         val newest = recording(NEWEST, MIB_300, 3)
         val recordings = listOf(recording(OLDEST, 1, 1), newest)
 
-        val result = rule.toDelete(recordings, kept = OLDEST, replayed = null)
+        val result = rule.toDelete(recordings, kept = OLDEST, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(newest)
     }
@@ -175,7 +190,7 @@ class RecordingRuleTest {
         val first = recording(IMPORTED_A, MIB_200, 1)
         val recordings = listOf(recording(IMPORTED_B, MIB_200, 1), first)
 
-        val result = rule.toDelete(recordings, kept = null, replayed = null)
+        val result = rule.toDelete(recordings, kept = null, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(first)
     }
@@ -185,7 +200,7 @@ class RecordingRuleTest {
     fun `GIVEN no recordings WHEN choosing what to delete THEN nothing is deleted`() {
         val recordings = emptyList<Recording>()
 
-        val result = rule.toDelete(recordings, kept = null, replayed = null)
+        val result = rule.toDelete(recordings, kept = null, replayed = null, recording = null)
 
         result.shouldBeEmpty()
     }
@@ -195,8 +210,9 @@ class RecordingRuleTest {
     fun `GIVEN a custom limit WHEN over it THEN the oldest goes`() {
         val custom = RecordingRule(maxTotalBytes = 10)
         val oldest = recording(OLDEST, 6, 1)
+        val recordings = listOf(oldest, recording(NEWEST, 6, 2))
 
-        val result = custom.toDelete(listOf(oldest, recording(NEWEST, 6, 2)), kept = NEWEST, replayed = null)
+        val result = custom.toDelete(recordings, kept = NEWEST, replayed = null, recording = null)
 
         result shouldBeEqualTo listOf(oldest)
     }

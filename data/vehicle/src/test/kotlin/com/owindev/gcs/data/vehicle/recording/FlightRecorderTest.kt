@@ -392,12 +392,14 @@ class FlightRecorderTest {
     @Test
     fun `GIVEN the oldest log being replayed WHEN the live recording closes over the limit THEN it is kept`() =
         testScope.runTest {
-            val small = recorder(RecordingRule(maxTotalBytes = LIMIT_BYTES))
+            val rule = RecordingRule(maxTotalBytes = LIMIT_BYTES)
+            val folder = RecordingsFolder(directory, rule)
+            val small = recorder(rule, folder)
             receive(DISARMED_STABILIZE, small)
             runCurrent()
             oldLog(OLDEST_NAME, LIMIT_BYTES, lastModifiedMillis = 1)
             oldLog(IMPORTED_NAME, LIMIT_BYTES / 2, lastModifiedMillis = 2)
-            small.replayed = OLDEST_NAME
+            folder.replayed = OLDEST_NAME
 
             small.sessionStopped()
             runCurrent()
@@ -643,13 +645,55 @@ class FlightRecorderTest {
             }
         }
 
+    @Tag("REQ-038")
+    @Test
+    fun `GIVEN the active vehicle heard WHEN its recording opens THEN the folder protects it as the one recorded`() =
+        testScope.runTest {
+            val folder = RecordingsFolder(directory, RecordingRule())
+            val opening = recorder(folder = folder)
+
+            receive(DISARMED_STABILIZE, opening)
+            runCurrent()
+
+            folder.recording shouldBeEqualTo START_NAME
+        }
+
+    @Tag("REQ-038")
+    @Test
+    fun `GIVEN a recording WHEN it closes THEN the folder no longer protects it as the one recorded`() =
+        testScope.runTest {
+            val folder = RecordingsFolder(directory, RecordingRule())
+            val closing = recorder(folder = folder)
+            receive(DISARMED_STABILIZE, closing)
+            runCurrent()
+
+            closing.sessionStopped()
+            runCurrent()
+
+            (folder.recording to folder.marker.read()) shouldBeEqualTo (null to START_NAME)
+        }
+
+    @Tag("REQ-038")
+    @Test
+    fun `GIVEN a full disk WHEN the recording fails THEN the folder no longer protects it as the one recorded`() =
+        testScope.runTest {
+            val folder = RecordingsFolder(directory, RecordingRule())
+            val failing = recorder(folder = folder, openOutput = { FailingStream() })
+
+            receive(DISARMED_STABILIZE, failing)
+            runCurrent()
+
+            folder.recording shouldBeEqualTo null
+        }
+
     private fun recorder(
         rule: RecordingRule = RecordingRule(),
+        folder: RecordingsFolder = RecordingsFolder(directory, rule),
         openOutput: (File) -> OutputStream = ::opened,
         syncOutput: (OutputStream) -> Unit = {},
         timeSource: TimeSource.WithComparableMarks = testScope.testScheduler.timeSource,
     ) = FlightRecorder(
-        directory = directory,
+        folder = folder,
         rule = rule,
         activeVehicle = activeVehicle,
         timeSource = timeSource,

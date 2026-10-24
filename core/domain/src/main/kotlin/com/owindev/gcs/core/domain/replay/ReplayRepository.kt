@@ -1,6 +1,7 @@
 package com.owindev.gcs.core.domain.replay
 
 import java.io.File
+import kotlin.time.Duration
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -14,6 +15,12 @@ interface ReplayRepository {
 
     /** What is being played, if anything. */
     val state: StateFlow<ReplayState>
+
+    /**
+     * The recorded time the replay is skipping now: set while it waits out a gap in the recording longer than it ever
+     * waits between two records, `null` otherwise, paused or not.
+     */
+    val skippedGap: StateFlow<Duration?>
 
     /**
      * Starts playing [recording] from its beginning at 1×, and returns the state it led to: [ReplayState.Playing], or a
