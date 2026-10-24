@@ -9,7 +9,6 @@ import kotlin.time.Duration
 /** A time shown to the operator, truncated to the whole second, never rounded up. */
 data class ElapsedParts(val hours: Long, val minutes: Int, val seconds: Int)
 
-/** [elapsed] in whole hours, minutes and seconds. */
 fun elapsedPartsOf(elapsed: Duration): ElapsedParts =
     elapsed.toComponents { hours, minutes, seconds, _ -> ElapsedParts(hours, minutes, seconds) }
 
