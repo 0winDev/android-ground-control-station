@@ -14,9 +14,12 @@ internal val BackStackSaver: Saver<SnapshotStateList<Destination>, Any> = listSa
     restore = { names -> names.map(Destination::valueOf).toMutableStateList() },
 )
 
-/** Opens the recordings over the flight screen, once. */
-internal fun MutableList<Destination>.openRecordings() {
-    if (lastOrNull() != Destination.RECORDINGS) add(Destination.RECORDINGS)
+/**
+ * Opens the recordings over the flight screen, once, only if the operator [mayLeaveFlight] when it runs: a tap drawn
+ * a frame before a vehicle armed can arrive after the app went back to the flight screen.
+ */
+internal fun MutableList<Destination>.openRecordings(mayLeaveFlight: Boolean) {
+    if (mayLeaveFlight && lastOrNull() != Destination.RECORDINGS) add(Destination.RECORDINGS)
 }
 
 /** Back to the flight screen, whatever is on top of it. */

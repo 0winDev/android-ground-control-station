@@ -233,6 +233,20 @@ class TlogDatagramSourceTest {
         }
 
     @Test
+    fun `GIVEN a collection cancelled while skipping a gap WHEN it stops THEN the gap is no longer reported`() =
+        testScope.runTest {
+            recording.writeRecords(START to STABILIZE, START + GAP.inWholeMicroseconds to GUIDED)
+            clock.play()
+            val collection = backgroundScope.launch { source.datagrams().toList() }
+            delay(1.seconds)
+
+            collection.cancel()
+            testScheduler.runCurrent()
+
+            gaps shouldBeEqualTo listOf(0L to GAP - MAX_RECORD_WAIT, 1_000L to null)
+        }
+
+    @Test
     fun `GIVEN a gap of exactly the maximum WHEN collecting THEN nothing is skipped`() = testScope.runTest {
         recording.writeRecords(START to STABILIZE, START + MAX_RECORD_WAIT.inWholeMicroseconds to GUIDED)
         clock.play()

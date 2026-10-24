@@ -204,9 +204,6 @@ internal class FlightRecorder(
         /** After a disk failure, until the session stops: no log opens. */
         var blocked = false
 
-        /** Unknown after the app starts, when the [marker] stands for it. */
-        var lastClosed: String? = null
-
         fun openIfIdle(atMillis: Long) {
             if (open != null || blocked) return
             guarded {
@@ -214,7 +211,7 @@ internal class FlightRecorder(
                 val file = folder.locked {
                     if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
                     val file = newFile(atMillis)
-                    folder.deleteOldest(kept = lastClosed ?: marker.read())
+                    folder.deleteOldest()
                     val output = openOutput(file)
                     open = OpenRecording(file, output, BufferedOutputStream(output))
                     folder.recording = file.name
@@ -252,13 +249,13 @@ internal class FlightRecorder(
                     } finally {
                         folder.recording = null
                     }
-                    folder.deleteOldest(kept = recording.file.name)
+                    folder.deleteOldest()
                 }
             }
         }
 
         private fun closed(name: String) {
-            lastClosed = name
+            folder.lastClosed = name
             marker.write(name)
         }
 
@@ -280,7 +277,7 @@ internal class FlightRecorder(
             runCatchingIo { recording.stream.close() }
             folder.locked {
                 if (recording.file.isFile) {
-                    lastClosed = recording.file.name
+                    folder.lastClosed = recording.file.name
                     runCatchingIo { marker.write(recording.file.name) }
                 }
                 folder.recording = null

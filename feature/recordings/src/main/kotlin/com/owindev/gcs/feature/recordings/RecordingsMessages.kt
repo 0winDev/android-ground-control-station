@@ -78,6 +78,7 @@ private fun messageText(message: RecordingsMessage): String = when (message) {
     is RecordingsMessage.Import -> importText(message.result)
     is RecordingsMessage.Delete -> stringResource(deleteText(message.result))
     is RecordingsMessage.Replay -> stringResource(replayText(message.state))
+    is RecordingsMessage.ExportInProgress -> stringResource(R.string.recordings_export_in_progress)
     is RecordingsMessage.Save -> saveText(message)
     is RecordingsMessage.Missing -> stringResource(R.string.recordings_missing, message.name)
 }
@@ -106,6 +107,8 @@ private fun importText(result: ImportResult): String = when (result) {
     ImportResult.NotATlog -> stringResource(R.string.recordings_import_not_tlog)
 
     ImportResult.NoRoom -> stringResource(R.string.recordings_import_no_room)
+
+    ImportResult.Recording -> stringResource(R.string.recordings_import_recording)
 
     ImportResult.Failed -> stringResource(R.string.recordings_import_failed)
 }

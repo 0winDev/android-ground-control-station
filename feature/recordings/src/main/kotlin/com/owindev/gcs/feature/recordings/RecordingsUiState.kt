@@ -18,6 +18,10 @@ data class RecordingsUiState(
     val message: RecordingsMessage? = null,
 )
 
+/** Whether the recording [name] is being recorded, as last listed. */
+internal fun RecordingsUiState.isInProgress(name: String): Boolean =
+    recordings.orEmpty().any { it.name == name && it.inProgress }
+
 /** What an action left for the operator to read; a failure stays until dismissed. */
 sealed interface RecordingsMessage {
 
@@ -29,6 +33,9 @@ sealed interface RecordingsMessage {
 
     /** A replay that did not start: [ReplayState.Refused] or [ReplayState.Failed]. */
     data class Replay(val state: ReplayState) : RecordingsMessage
+
+    /** The recording [name] is still being recorded, so it is neither shared nor saved yet. */
+    data class ExportInProgress(val name: String) : RecordingsMessage
 
     /** How saving a copy of [name] to the device went, a closed picker included. */
     data class Save(val name: String, val result: SaveResult) : RecordingsMessage

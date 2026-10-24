@@ -42,7 +42,7 @@ private const val CHUNK_SIZE = 4096
  * [java.io.IOException]. The flow completes at the end of the file. The file is read on [ioDispatcher].
  *
  * While it waits out a gap cut to [MAX_RECORD_WAIT], [onGap] has the recorded time it skips, and `null` once the next
- * record is delivered, so the operator knows the replay jumped (REQ-037).
+ * record is delivered or the collection ends, so the operator knows the replay jumped (REQ-037).
  */
 internal class TlogDatagramSource(
     private val recording: File,
@@ -76,8 +76,12 @@ internal class TlogDatagramSource(
             due += previous?.let { waitBetween(it, record.timestampMicros) } ?: Duration.ZERO
             previous = record.timestampMicros
             if (skipped != null) onGap(skipped)
-            clock.awaitPosition(due)
-            if (skipped != null) onGap(null)
+            try {
+                clock.awaitPosition(due)
+            } finally {
+                // Also when the collection is cancelled inside the gap, or a new one would show it while it plays.
+                if (skipped != null) onGap(null)
+            }
             collector.emit(Datagram(record.frame, REPLAY_SENDER))
         }
     }

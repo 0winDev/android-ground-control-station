@@ -31,7 +31,8 @@
     <string name="recordings_import_too_large">El archivo ocupa más de %1$s, el límite de grabaciones. No se importó nada.</string>
     <string name="recordings_import_too_large_sized">El archivo ocupa %1$s, más de %2$s, el límite de grabaciones. No se importó nada.</string>
     <string name="recordings_import_not_tlog">El archivo no contiene un registro de telemetría MAVLink 2. No se importó nada.</string>
-    <string name="recordings_import_no_room">No hay sitio: la grabación en curso, la última cerrada y la que se reproduce llenan el límite de grabaciones. No se importó nada.</string>
+    <string name="recordings_import_no_room">No hay sitio: la última grabación cerrada y la que se reproduce llenan el límite de grabaciones. No se importó nada.</string>
+    <string name="recordings_import_recording">Se está grabando un vuelo. Importa cuando se cierre la grabación, para que la copia no llene el almacenamiento que necesita. No se importó nada.</string>
     <string name="recordings_import_failed">No se pudo leer o copiar el archivo. No se importó nada.</string>
     <string name="recordings_delete_in_progress">Esta grabación está en curso y no se puede borrar.</string>
     <string name="recordings_delete_replaying">Esta grabación se está reproduciendo. Detén la reproducción para borrarla.</string>

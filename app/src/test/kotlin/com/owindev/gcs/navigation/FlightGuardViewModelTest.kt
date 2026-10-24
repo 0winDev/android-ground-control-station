@@ -118,13 +118,47 @@ class FlightGuardViewModelTest {
     }
 
     @Test
-    fun `GIVEN a disarmed vehicle lost long ago WHEN the operator opens the recordings THEN it is allowed`() {
+    fun `GIVEN a disarmed vehicle lost long ago WHEN the operator opens the recordings THEN it is allowed`() = runTest {
         vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false, link = VehicleLink.LOST))
+        viewModel.returnToFlight.test {
+            val result = viewModel.mayLeaveFlight.value
 
-        val result = viewModel.mayLeaveFlight.value
-
-        result shouldBeEqualTo true
+            result shouldBeEqualTo true
+            cancelAndIgnoreRemainingEvents()
+        }
     }
+
+    @Test
+    fun `GIVEN the guard not watched WHEN the app is in the background THEN nothing observes the live vehicles`() {
+        vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false))
+
+        val result = vehicles.subscriptionCount.value to alerts.subscriptionCount.value
+
+        result shouldBeEqualTo (0 to 0)
+    }
+
+    @Test
+    fun `GIVEN the guard watched WHEN the watch stops THEN nothing observes the live vehicles any longer`() = runTest {
+        vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false))
+
+        viewModel.returnToFlight.test { cancelAndIgnoreRemainingEvents() }
+
+        vehicles.subscriptionCount.value shouldBeEqualTo 0
+    }
+
+    @Test
+    fun `GIVEN a vehicle that armed while the app was in the background WHEN watched again THEN returns to flight`() =
+        runTest {
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false))
+            viewModel.returnToFlight.test { cancelAndIgnoreRemainingEvents() }
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = true))
+
+            viewModel.returnToFlight.test {
+                val result = awaitItem() to viewModel.mayLeaveFlight.value
+
+                result shouldBeEqualTo (Unit to false)
+            }
+        }
 
     private fun vehicle(
         armed: Boolean,

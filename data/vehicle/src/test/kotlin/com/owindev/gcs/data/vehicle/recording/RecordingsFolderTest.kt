@@ -144,10 +144,23 @@ class RecordingsFolderTest {
     @Tag("REQ-038")
     @Tag("REQ-039")
     @Test
-    fun `GIVEN the recording in progress as the oldest WHEN an import goes over the limit THEN it is kept`() {
+    fun `GIVEN no marker WHEN an import needs the newest recording's room THEN no room and the newest is kept`() {
         log(OLDEST, HALF, lastModifiedMillis = 1)
-        log(MIDDLE, HALF / 2, lastModifiedMillis = 2)
-        folder.recording = OLDEST
+        log(MIDDLE, HALF, lastModifiedMillis = 2)
+        val copy = temporary(HALF + HALF / 2)
+
+        val result = folder.admit(copy, IMPORTED, names)
+
+        (result to logs()) shouldBeEqualTo (ImportResult.NoRoom to listOf(OLDEST, MIDDLE))
+    }
+
+    @Tag("REQ-038")
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN the last one closed without its marker WHEN an import goes over the limit THEN it is kept`() {
+        log(OLDEST, HALF, lastModifiedMillis = 1)
+        log(MIDDLE, HALF, lastModifiedMillis = 2)
+        folder.lastClosed = OLDEST
         val copy = temporary(HALF)
 
         val result = folder.admit(copy, IMPORTED, names)
@@ -159,10 +172,24 @@ class RecordingsFolderTest {
     @Tag("REQ-038")
     @Tag("REQ-039")
     @Test
+    fun `GIVEN a recording that opened during the copy WHEN admitting the import THEN refused and nothing changes`() {
+        log(OLDEST, HALF, lastModifiedMillis = 1)
+        log(MIDDLE, HALF / 2, lastModifiedMillis = 2)
+        folder.recording = MIDDLE
+        val copy = temporary(HALF)
+
+        val result = folder.admit(copy, IMPORTED, names)
+
+        (result to logs()) shouldBeEqualTo (ImportResult.Recording to listOf(OLDEST, MIDDLE))
+    }
+
+    @Tag("REQ-038")
+    @Tag("REQ-039")
+    @Test
     fun `GIVEN the protected recordings fill the limit WHEN admitting an import THEN no room and nothing changes`() {
         log(OLDEST, HALF, lastModifiedMillis = 1)
         log(MIDDLE, HALF, lastModifiedMillis = 2)
-        folder.recording = OLDEST
+        folder.replayed = OLDEST
         folder.marker.write(MIDDLE)
         val copy = temporary(1)
 
@@ -201,6 +228,7 @@ class RecordingsFolderTest {
         const val OLDEST = "2026-10-20_14-30-05.tlog"
         const val OLDEST_TAKEN = "2026-10-20_14-30-05_1.tlog"
         const val MIDDLE = "2026-10-21_09-12-44.tlog"
+        const val NEWEST = "2026-10-22_18-03-10.tlog"
         const val IMPORTED = "imported.tlog"
     }
 }

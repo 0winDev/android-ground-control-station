@@ -45,20 +45,27 @@ class RecordingsViewModel @Inject constructor(
     val effect: Flow<RecordingsEffect> = effects.receiveAsFlow()
 
     fun onPlay(name: String) {
-        val file = repository.fileOf(name) ?: return show(RecordingsMessage.Missing(name))
-        when (val started = replay.play(file)) {
-            is ReplayState.Playing -> effects.trySend(RecordingsEffect.ReplayStarted)
-            else -> show(RecordingsMessage.Replay(started))
+        viewModelScope.launch {
+            val file = repository.fileOf(name) ?: return@launch show(RecordingsMessage.Missing(name))
+            when (val started = replay.play(file)) {
+                is ReplayState.Playing -> effects.trySend(RecordingsEffect.ReplayStarted)
+                else -> show(RecordingsMessage.Replay(started))
+            }
         }
     }
 
+    /** The recording in progress has no Export button; a tap drawn before it opened is refused here too. */
     fun onShare(name: String) {
-        val file = repository.fileOf(name) ?: return show(RecordingsMessage.Missing(name))
-        effects.trySend(RecordingsEffect.Share(file))
+        if (state.value.isInProgress(name)) return show(RecordingsMessage.ExportInProgress(name))
+        viewModelScope.launch {
+            val file = repository.fileOf(name) ?: return@launch show(RecordingsMessage.Missing(name))
+            effects.trySend(RecordingsEffect.Share(file))
+        }
     }
 
-    /** Asks the screen for a place to save [name] to. */
+    /** Asks the screen for a place to save [name] to; the recording in progress is refused first, as for sharing. */
     fun onSaveRequested(name: String) {
+        if (state.value.isInProgress(name)) return show(RecordingsMessage.ExportInProgress(name))
         effects.trySend(RecordingsEffect.PickSaveTarget(name))
     }
 

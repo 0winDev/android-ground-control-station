@@ -11,8 +11,13 @@ import com.owindev.gcs.core.domain.recording.RecordingSummary
 import com.owindev.gcs.core.domain.recording.SaveResult
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -25,6 +30,9 @@ import kotlinx.coroutines.withContext
 /**
  * The recordings in the [folder] (REQ-036, REQ-038): listed with the span of their valid frames, deleted unless being
  * recorded or replayed, and imported from outside under the [rule].
+ *
+ * Nothing is imported while a flight is recorded, checked before, during and at the end of the copy, so an import never
+ * fills the disk under the black box (REQ-036).
  *
  * An import is untrusted input (`docs/security.md` K-1, K-2). It is refused when its source declares more than the
  * limit, copied into a hidden temporary file in the folder while its bytes are counted against the limit, scanned as
@@ -49,13 +57,16 @@ internal class DefaultRecordingRepository(
     override val recordings: Flow<List<RecordingSummary>> =
         combine(changes, recorder.status, replay.state) { _, _, _ -> summaries.all() }.flowOn(ioDispatcher)
 
-    override fun fileOf(name: String): File? = folder.recordingAt(File(folder.directory, name))
+    override suspend fun fileOf(name: String): File? = withContext(ioDispatcher) {
+        folder.recordingAt(File(folder.directory, name))
+    }
 
     override suspend fun delete(name: String): DeleteResult = withContext(ioDispatcher) {
         folder.delete(name).also { if (it == DeleteResult.Deleted) changed() }
     }
 
     override suspend fun import(source: ImportSource): ImportResult = withContext(ioDispatcher) {
+        if (folder.recording != null) return@withContext ImportResult.Recording
         if (rule.refusesDeclared(source.declaredBytes)) {
             return@withContext ImportResult.TooLarge(rule.maxBytes, source.declaredBytes)
         }
@@ -84,14 +95,15 @@ internal class DefaultRecordingRepository(
         folder.directory.mkdirs()
         File.createTempFile(TEMPORARY_PREFIX, TEMPORARY_SUFFIX, folder.directory)
     } catch (e: IOException) {
-        Log.w(TAG, "Could not start an import", e)
+        Log.w(TAG, "Could not start an import: ${e.javaClass.simpleName}")
         null
     }
 
     private suspend fun admit(source: ImportSource, temporary: File): ImportResult =
-        when (source.copyInto(temporary, rule)) {
+        when (source.copyInto(temporary, rule) { folder.recording != null }) {
             ImportCopy.COPIED -> stored(temporary, source.displayName)
             ImportCopy.TOO_LARGE -> ImportResult.TooLarge(rule.maxBytes)
+            ImportCopy.RECORDING -> ImportResult.Recording
             ImportCopy.FAILED -> ImportResult.Failed
         }
 
@@ -111,7 +123,7 @@ internal class DefaultRecordingRepository(
             ImportResult.NotATlog
         }
     } catch (e: IOException) {
-        Log.w(TAG, "Could not store an import", e)
+        Log.w(TAG, "Could not store an import: ${e.javaClass.simpleName}")
         ImportResult.Failed
     }
 

@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.owindev.gcs.R
 import java.io.File
@@ -14,7 +15,14 @@ import java.io.File
  * folder and nothing else, read-only and only to the app the operator picks.
  */
 internal fun Context.shareRecording(recording: File) {
-    val uri = FileProvider.getUriForFile(this, "$packageName$RECORDINGS_AUTHORITY_SUFFIX", recording)
+    // Throws for a file outside the provider's folder, which the recordings' real paths should never be.
+    val uri = try {
+        FileProvider.getUriForFile(this, "$packageName$RECORDINGS_AUTHORITY_SUFFIX", recording)
+    } catch (e: IllegalArgumentException) {
+        Log.w(TAG, "The recordings provider does not serve the recording to export: ${e.javaClass.simpleName}")
+        Toast.makeText(this, R.string.app_share_recording_failed, Toast.LENGTH_LONG).show()
+        return
+    }
     // The read grant covers the Uris in ClipData; set it ourselves rather than rely on the platform copying the extra.
     val send = Intent(Intent.ACTION_SEND)
         .setType(TLOG_TYPE)

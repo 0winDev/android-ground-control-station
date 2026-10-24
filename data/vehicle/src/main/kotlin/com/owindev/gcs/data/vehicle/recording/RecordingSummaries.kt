@@ -56,7 +56,7 @@ internal class RecordingSummaries(private val folder: RecordingsFolder) {
         return try {
             file.inputStream().use(RecordingScan::of).also { scans[file.name] = CachedScan(size, modified, it) }
         } catch (e: IOException) {
-            Log.w(TAG, "Could not read ${file.name}", e)
+            Log.w(TAG, "Could not read a recording: ${e.javaClass.simpleName}")
             null
         }
     }

@@ -45,6 +45,11 @@ back stack. The return to the flight screen is a pure function from the flight s
 emergency raised) to "leave Recordings", tested on its own and applied by `:app` to the stack. LINK LOST and the
 alerts stay part of the flight screen's state, never a destination.
 
+The guard that applies that return observes the flight only while the app is started (`repeatOnLifecycle`), as the
+screens do: a backgrounded app lets the live link go after its stop timeout, so the GCS HEARTBEAT stops and the
+vehicle's GCS failsafe follows the app, as before #74. Back in the foreground it compares the flight with the last
+one it saw, so a vehicle that armed meanwhile still takes the operator back.
+
 ## Alternatives considered
 
 ### Navigation Compose 2.x

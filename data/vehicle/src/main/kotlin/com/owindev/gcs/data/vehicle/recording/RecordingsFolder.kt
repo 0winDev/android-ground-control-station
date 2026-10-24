@@ -38,15 +38,23 @@ internal class RecordingsFolder(val directory: File, private val rule: Recording
     @Volatile
     var recording: String? = null
 
+    /**
+     * The last log the recorder closed since the app started, set under [locked] before the [marker] is written, so a
+     * marker that fails to write never leaves it unprotected.
+     */
+    @Volatile
+    var lastClosed: String? = null
+
     /** Runs [action] under the folder's lock, as a recording opening or closing must. */
     fun <T> locked(action: () -> T): T = synchronized(lock, action)
 
     /**
-     * Deletes the oldest logs until all fit in [RecordingRule.maxTotalBytes], never [kept], the one [replayed] nor the
-     * one [recording] (REQ-039), and returns the names deleted.
+     * Deletes the oldest logs until all fit in [RecordingRule.maxTotalBytes], never the last one closed, the one
+     * [replayed] nor the one [recording] (REQ-039), and returns the names deleted.
      */
-    fun deleteOldest(kept: String?): List<String> = locked {
-        removed(rule.toDelete(logs(), kept, replayed, recording))
+    fun deleteOldest(): List<String> = locked {
+        val logs = logs()
+        removed(rule.toDelete(logs, keptAmong(logs), replayed, recording))
     }
 
     /** The GCS's recordings on disk, each as [recordingAt] accepts it. */
@@ -64,7 +72,7 @@ internal class RecordingsFolder(val directory: File, private val rule: Recording
             replayed -> DeleteResult.Replaying
 
             else -> if (file.delete()) {
-                Log.i(TAG, "Deleted ${file.name} at the operator's request")
+                Log.i(TAG, "Deleted a recording at the operator's request")
                 DeleteResult.Deleted
             } else {
                 DeleteResult.Failed
@@ -75,17 +83,21 @@ internal class RecordingsFolder(val directory: File, private val rule: Recording
     /**
      * Moves the copy of an import, [temporary] in this folder, in among the recordings under a name of its own from
      * [displayName] (REQ-038), and applies the limit as a new recording does: the oldest logs go, never the protected
-     * ones. When the limit would take the import itself, nothing is moved nor deleted and it is [ImportResult.NoRoom].
+     * ones. When the limit would take the import itself, nothing is moved nor deleted and it is [ImportResult.NoRoom];
+     * while a flight is recorded, it is [ImportResult.Recording].
      * The caller deletes [temporary] whatever the result.
      */
     @Throws(IOException::class)
     fun admit(temporary: File, displayName: String?, names: ImportRule): ImportResult = locked {
+        if (recording != null) return@locked ImportResult.Recording
         val name = names.nameFor(displayName, taken = directory.list().orEmpty().toSet())
         val incoming = Recording(name, temporary.length(), temporary.lastModified())
-        val doomed = rule.toDelete(logs() + incoming, marker.read(), replayed, recording)
+        val logs = logs()
+        // Named before the import joins, or the rule would take the import, the newest file, for the last one closed.
+        val doomed = rule.toDelete(logs + incoming, keptAmong(logs), replayed, recording)
         if (doomed.any { it.name == name }) return@locked ImportResult.NoRoom
         Files.move(temporary.toPath(), File(directory, name).toPath(), StandardCopyOption.ATOMIC_MOVE)
-        Log.i(TAG, "Imported a recording as $name")
+        Log.i(TAG, "Imported a recording")
         ImportResult.Imported(name, deleted = removed(doomed))
     }
 
@@ -111,12 +123,17 @@ internal class RecordingsFolder(val directory: File, private val rule: Recording
         directory.listFiles { file -> file.isFile && file.name.endsWith(EXTENSION) }.orEmpty()
             .map { Recording(name = it.name, sizeBytes = it.length(), lastModifiedMillis = it.lastModified()) }
 
+    /** The last one closed: this run's, else the [marker]'s, else the newest of [logs], as before the app started. */
+    private fun keptAmong(logs: List<Recording>): String? = lastClosed?.takeIf { File(directory, it).isFile }
+        ?: marker.read()
+        ?: logs.maxWithOrNull(compareBy({ it.lastModifiedMillis }, { it.name }))?.name
+
     private fun removed(recordings: List<Recording>): List<String> = recordings.mapNotNull { recording ->
         if (File(directory, recording.name).delete()) {
-            Log.i(TAG, "Deleted ${recording.name} to stay within the recordings limit")
+            Log.i(TAG, "Deleted a recording to stay within the recordings limit")
             recording.name
         } else {
-            Log.w(TAG, "Could not delete ${recording.name}")
+            Log.w(TAG, "Could not delete a recording to stay within the limit")
             null
         }
     }

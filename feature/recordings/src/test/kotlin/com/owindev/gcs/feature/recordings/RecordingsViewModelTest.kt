@@ -67,7 +67,7 @@ class RecordingsViewModelTest {
     @Tag("REQ-037")
     @Test
     fun `GIVEN a replay that starts WHEN playing a recording THEN the operator goes to the flight screen`() = runTest {
-        every { repository.fileOf(NAME) } returns FILE
+        coEvery { repository.fileOf(NAME) } returns FILE
         every { replay.play(FILE) } returns ReplayState.Playing(FILE)
         viewModel.effect.test {
             viewModel.onPlay(NAME)
@@ -84,7 +84,7 @@ class RecordingsViewModelTest {
         runTest {
             turbineScope {
                 val refused = ReplayState.Refused(ReplayRefusal.VEHICLE_CONNECTED)
-                every { repository.fileOf(NAME) } returns FILE
+                coEvery { repository.fileOf(NAME) } returns FILE
                 every { replay.play(FILE) } returns refused
                 val state = viewModel.state.testIn(backgroundScope)
                 val effects = viewModel.effect.testIn(backgroundScope)
@@ -101,7 +101,7 @@ class RecordingsViewModelTest {
     fun `GIVEN a recording that is not one WHEN playing it THEN the failure is shown`() = runTest {
         turbineScope {
             val failed = ReplayState.Failed(FILE, ReplayFailure.NOT_A_RECORDING)
-            every { repository.fileOf(NAME) } returns FILE
+            coEvery { repository.fileOf(NAME) } returns FILE
             every { replay.play(FILE) } returns failed
             val state = viewModel.state.testIn(backgroundScope)
 
@@ -115,7 +115,7 @@ class RecordingsViewModelTest {
     fun `GIVEN a recording no longer there WHEN playing it THEN it is shown missing and no replay is asked`() =
         runTest {
             turbineScope {
-                every { repository.fileOf(NAME) } returns null
+                coEvery { repository.fileOf(NAME) } returns null
                 val state = viewModel.state.testIn(backgroundScope)
 
                 viewModel.onPlay(NAME)
@@ -129,7 +129,7 @@ class RecordingsViewModelTest {
 
     @Test
     fun `GIVEN a recording WHEN exporting it THEN its file goes to the share sheet`() = runTest {
-        every { repository.fileOf(NAME) } returns FILE
+        coEvery { repository.fileOf(NAME) } returns FILE
         viewModel.effect.test {
             viewModel.onShare(NAME)
 
@@ -140,6 +140,21 @@ class RecordingsViewModelTest {
     }
 
     @Test
+    fun `GIVEN the recording in progress WHEN exporting it THEN it is refused and nothing goes to the share sheet`() =
+        runTest {
+            turbineScope {
+                recordings.value = listOf(RECORDING.copy(inProgress = true))
+                val state = viewModel.state.testIn(backgroundScope)
+                val effects = viewModel.effect.testIn(backgroundScope)
+
+                viewModel.onShare(NAME)
+
+                state.expectMostRecentItem().message shouldBeEqualTo RecordingsMessage.ExportInProgress(NAME)
+                effects.expectNoEvents()
+            }
+        }
+
+    @Test
     fun `GIVEN a closed recording WHEN saving it THEN the screen picks a place suggested under its name`() = runTest {
         viewModel.effect.test {
             viewModel.onSaveRequested(NAME)
@@ -147,6 +162,20 @@ class RecordingsViewModelTest {
             val result = awaitItem()
 
             result shouldBeEqualTo RecordingsEffect.PickSaveTarget(NAME)
+        }
+    }
+
+    @Test
+    fun `GIVEN the recording in progress WHEN saving it THEN refused before any place is picked`() = runTest {
+        turbineScope {
+            recordings.value = listOf(RECORDING.copy(inProgress = true))
+            val state = viewModel.state.testIn(backgroundScope)
+            val effects = viewModel.effect.testIn(backgroundScope)
+
+            viewModel.onSaveRequested(NAME)
+
+            state.expectMostRecentItem().message shouldBeEqualTo RecordingsMessage.ExportInProgress(NAME)
+            effects.expectNoEvents()
         }
     }
 

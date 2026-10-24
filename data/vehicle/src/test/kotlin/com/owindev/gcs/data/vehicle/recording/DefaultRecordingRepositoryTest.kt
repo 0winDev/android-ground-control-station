@@ -279,6 +279,31 @@ class DefaultRecordingRepositoryTest {
             (result to files()) shouldBeEqualTo (List(failures.size) { ImportResult.Failed } to emptyList())
         }
 
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a flight being recorded WHEN importing THEN refused without opening the source`() = testScope.runTest {
+        log(OLDEST, qgroundcontrolLog)
+        folder.recording = OLDEST
+        val source = BytesSource(qgroundcontrolLog, QGROUNDCONTROL_NAME)
+
+        val deferred = async(start = CoroutineStart.UNDISPATCHED) { repository.import(source) }
+        val result = deferred.await()
+
+        (result to source.opened) shouldBeEqualTo (ImportResult.Recording to false)
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a recording that opens while copying WHEN importing THEN refused and nothing is left`() =
+        testScope.runTest {
+            val source = RecordingOpensSource(qgroundcontrolLog)
+
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) { repository.import(source) }
+            val result = deferred.await()
+
+            (result to files()) shouldBeEqualTo (ImportResult.Recording to emptyList())
+        }
+
     @Test
     fun `GIVEN a source failing halfway WHEN importing THEN fails and nothing is left`() = testScope.runTest {
         val source = BytesSource(qgroundcontrolLog, QGROUNDCONTROL_NAME, failAfterBytes = HALFWAY_BYTES)
@@ -302,7 +327,7 @@ class DefaultRecordingRepositoryTest {
     }
 
     @Test
-    fun `GIVEN a recording WHEN asking for its file THEN its real path`() {
+    fun `GIVEN a recording WHEN asking for its file THEN its real path`() = testScope.runTest {
         log(OLDEST, qgroundcontrolLog)
 
         val result = repository.fileOf(OLDEST)
@@ -362,7 +387,7 @@ class DefaultRecordingRepositoryTest {
         }
 
     @Test
-    fun `GIVEN a name leaving the folder WHEN asking for its file THEN none`() {
+    fun `GIVEN a name leaving the folder WHEN asking for its file THEN none`() = testScope.runTest {
         File(temp, OLDEST).writeBytes(qgroundcontrolLog)
 
         val result = repository.fileOf("../$OLDEST")
@@ -428,6 +453,17 @@ class DefaultRecordingRepositoryTest {
         }
     }
 
+    /** A vehicle heard as the copy starts: the recorder opens a log while the import reads. */
+    private inner class RecordingOpensSource(private val bytes: ByteArray) : ImportSource {
+        override val displayName = QGROUNDCONTROL_NAME
+        override val declaredBytes: Long? = bytes.size.toLong()
+
+        override fun open(): InputStream {
+            folder.recording = OPENED_DURING_COPY
+            return bytes.inputStream()
+        }
+    }
+
     /** Another app's document, kept in memory. */
     private class BytesTarget : ExportTarget {
         private val output = ByteArrayOutputStream()
@@ -454,6 +490,7 @@ class DefaultRecordingRepositoryTest {
     private companion object {
         const val QGROUNDCONTROL_LOG = "replay/qgroundcontrol.tlog"
         const val QGROUNDCONTROL_NAME = "qgroundcontrol.tlog"
+        const val OPENED_DURING_COPY = "2026-10-24_10-00-00.tlog"
         const val FIRST_MILLIS = 1_792_091_306_747L
         const val DURATION_MILLIS = 9_935L
         const val LIMIT_BYTES = 120_000L

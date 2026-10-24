@@ -6,7 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -32,8 +35,13 @@ internal fun GcsNavigation(
 ) {
     val backStack = rememberSaveable(saver = BackStackSaver) { mutableStateListOf(Destination.FLIGHT) }
     val mayLeaveFlight by guard.mayLeaveFlight.collectAsStateWithLifecycle()
-    LaunchedEffect(mayLeaveFlight) { if (!mayLeaveFlight) backStack.backToFlight() }
-    LaunchedEffect(guard) { guard.returnToFlight.collect { backStack.backToFlight() } }
+    LaunchedEffect(mayLeaveFlight, backStack.lastOrNull()) { if (!mayLeaveFlight) backStack.backToFlight() }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(guard, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            guard.returnToFlight.collect { backStack.backToFlight() }
+        }
+    }
     NavDisplay(
         backStack = backStack,
         modifier = modifier,
@@ -48,7 +56,11 @@ internal fun GcsNavigation(
                     Destination.FLIGHT -> HudScreen(
                         palette = palette,
                         onToggleTheme = onToggleTheme,
-                        onOpenRecordings = if (mayLeaveFlight) ({ backStack.openRecordings() }) else null,
+                        onOpenRecordings = if (mayLeaveFlight) {
+                            { backStack.openRecordings(guard.mayLeaveFlight.value) }
+                        } else {
+                            null
+                        },
                         map = { insets -> MapScreen(palette = palette, viewportInsets = insets) },
                     )
 

@@ -11,8 +11,8 @@ import kotlinx.coroutines.flow.Flow
  * The flight recordings on the device, recorded or imported (REQ-036, REQ-038). Implemented in `:data:vehicle` and
  * bound there with Hilt.
  *
- * The recording in progress and the one being replayed are never deleted. An import is untrusted input: it never
- * throws, and whatever it refuses leaves the recordings as they were.
+ * The recording in progress and the one being replayed are never deleted, and nothing is imported while a flight is
+ * recorded. An import is untrusted input: it never throws, and whatever it refuses leaves the recordings as they were.
  */
 interface RecordingRepository {
 
@@ -20,7 +20,7 @@ interface RecordingRepository {
     val recordings: Flow<List<RecordingSummary>>
 
     /** The recording named [name] by its real path, for a replay or an export; `null` if it is not one. */
-    fun fileOf(name: String): File?
+    suspend fun fileOf(name: String): File?
 
     suspend fun delete(name: String): DeleteResult
 
@@ -104,8 +104,11 @@ sealed interface ImportResult {
     /** It holds no valid MAVLink 2 frame in .tlog records. */
     data object NotATlog : ImportResult
 
-    /** The recording in progress, the last one closed and the one replayed leave it no room within the limit. */
+    /** The last one closed and the one replayed leave it no room within the limit. */
     data object NoRoom : ImportResult
+
+    /** A flight is being recorded: an import could fill the disk under its black box. */
+    data object Recording : ImportResult
 
     /** Reading the source or writing the copy failed. */
     data object Failed : ImportResult

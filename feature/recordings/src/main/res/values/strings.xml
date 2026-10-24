@@ -36,7 +36,8 @@
     <string name="recordings_import_too_large">The file is larger than %1$s, the recordings limit. Nothing was imported.</string>
     <string name="recordings_import_too_large_sized">The file is %1$s, larger than %2$s, the recordings limit. Nothing was imported.</string>
     <string name="recordings_import_not_tlog">The file holds no MAVLink 2 telemetry log. Nothing was imported.</string>
-    <string name="recordings_import_no_room">No room: the recording in progress, the last one closed and the one being replayed fill the recordings limit. Nothing was imported.</string>
+    <string name="recordings_import_no_room">No room: the last recording closed and the one being replayed fill the recordings limit. Nothing was imported.</string>
+    <string name="recordings_import_recording">A flight is being recorded. Import once the recording closes, so the copy cannot fill the storage it needs. Nothing was imported.</string>
     <string name="recordings_import_failed">The file could not be read or copied. Nothing was imported.</string>
     <string name="recordings_delete_in_progress">This recording is in progress and cannot be deleted.</string>
     <string name="recordings_delete_replaying">This recording is being replayed. Stop the replay to delete it.</string>

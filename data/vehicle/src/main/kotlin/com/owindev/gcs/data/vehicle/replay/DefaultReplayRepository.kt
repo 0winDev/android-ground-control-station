@@ -63,7 +63,10 @@ internal class DefaultReplayRepository(
         val playing = mutableState.value.origin == DataOrigin.REPLAY
         // The live link is already closed during a replay: playing another one changes nothing for the vehicle.
         val refusal = if (playing) null else rule.refusalFor(vehicleRepository.vehicles.value.values)
-        val real = folder.recordingAt(recording)
+        // Found and kept from retention in one step, so a delete or an import's limit never takes it in between.
+        val real = folder.locked {
+            folder.recordingAt(recording)?.also { if (refusal == null) folder.replayed = it.name }
+        }
         val result = when {
             real == null -> ReplayState.Failed(recording, ReplayFailure.NOT_A_RECORDING)
 
@@ -107,7 +110,6 @@ internal class DefaultReplayRepository(
 
     /** A replay after another starts afresh too: its own pin and time, and the session switches source. */
     private fun start(recording: File) {
-        folder.replayed = recording.name
         val started = clock.newReplayClock()
         replayClock = started
         mutableSkippedGap.value = null

@@ -10,13 +10,15 @@ import kotlin.coroutines.cancellation.CancellationException
 private const val TAG = "SaveCopy"
 
 /**
- * Copies this recording to [target] (REQ-038). A target is a document from another app's provider, which can throw
- * any exception a Binder parcel carries; every one fails the copy, never the app, but cancellation. Logs only the kind
- * of a failure (`docs/security.md` V-3).
+ * Copies this recording to [target] (REQ-038), both streams closed when the caller is cancelled. A target is a
+ * document from another app's provider, which can throw any exception a Binder parcel carries; every one fails the
+ * copy, never the app, but cancellation. Logs only the kind of a failure (`docs/security.md` V-3).
  */
 @Suppress("TooGenericExceptionCaught")
 internal suspend fun File.copyTo(target: ExportTarget): SaveResult = try {
-    inputStream().use { input -> target.open().use { output -> input.copyTo(output) } }
+    inputStream().closingOnCancel { input ->
+        target.open().closingOnCancel { output -> input.copyTo(output) }
+    }
     SaveResult.Saved
 } catch (e: CancellationException) {
     throw e
