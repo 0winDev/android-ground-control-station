@@ -19,7 +19,6 @@ internal class ReplayClock(private val device: TimeSource.WithComparableMarks) {
 
     private val state = MutableStateFlow<State>(State.Paused(position = Duration.ZERO))
 
-    /** The position now. */
     val position: Duration
         get() = state.value.position()
 

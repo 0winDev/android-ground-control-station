@@ -45,7 +45,6 @@ internal class RecordingsFolder(val directory: File, private val rule: Recording
     @Volatile
     var lastClosed: String? = null
 
-    /** Runs [action] under the folder's lock, as a recording opening or closing must. */
     fun <T> locked(action: () -> T): T = synchronized(lock, action)
 
     /**
@@ -57,7 +56,6 @@ internal class RecordingsFolder(val directory: File, private val rule: Recording
         removed(rule.toDelete(logs, keptAmong(logs), replayed, recording))
     }
 
-    /** The GCS's recordings on disk, each as [recordingAt] accepts it. */
     fun recordingFiles(): List<File> =
         directory.listFiles { file -> file.isFile && file.name.matches(LastClosedMarker.LOG_NAME) }.orEmpty().toList()
 

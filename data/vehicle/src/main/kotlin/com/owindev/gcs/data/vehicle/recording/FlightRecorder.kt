@@ -110,7 +110,6 @@ internal class FlightRecorder(
         offer(frame.bytes, micros(atMillis))
     }
 
-    /** A frame this GCS has just sent on the link. */
     fun sent(frame: ByteArray) = offer(frame, micros(clock.millis()))
 
     /** The link session has stopped: the recording closes. Called from the receive loop, after its last frame. */
@@ -329,7 +328,6 @@ internal class FlightRecorder(
     }
 }
 
-/** Whether the recorder is writing a log, waiting for the active vehicle, or stopped by a disk failure. */
 internal enum class RecorderStatus { IDLE, RECORDING, FAILED }
 
 /** Frames left out of the logs: [dropped] behind a slow disk, and the two kinds ADR 0006 keeps out. */

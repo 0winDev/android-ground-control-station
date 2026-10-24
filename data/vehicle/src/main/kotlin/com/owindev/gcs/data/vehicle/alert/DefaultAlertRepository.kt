@@ -181,7 +181,6 @@ internal class DefaultAlertRepository @Inject constructor(
     /** `BatteryLow (caution)`, `TelemetryStale(kind=GPS) (advisory)`. */
     private fun Alert.describe(): String = "$this (${level.name.lowercase()})"
 
-    /** The active vehicle, [systemId], of the link's [session]. */
     private data class ActiveIn(val session: SessionId, val systemId: SystemId)
 
     /** The active vehicle's [telemetry], whether it is [armed], and since when its alerts have been evaluated. */

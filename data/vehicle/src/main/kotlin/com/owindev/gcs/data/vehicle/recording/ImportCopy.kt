@@ -14,7 +14,6 @@ import kotlinx.coroutines.ensureActive
 private const val TAG = "ImportCopy"
 private const val COPY_CHUNK_SIZE = 64 * 1024
 
-/** How copying an import into its temporary file ended. */
 internal enum class ImportCopy { COPIED, TOO_LARGE, RECORDING, FAILED }
 
 /**

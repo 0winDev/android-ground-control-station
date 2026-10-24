@@ -28,9 +28,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * The recordings in the [folder] (REQ-036, REQ-038): listed with the span of their valid frames, deleted unless being
- * recorded or replayed, and imported from outside under the [rule].
- *
  * Nothing is imported while a flight is recorded, checked before, during and at the end of the copy, so an import never
  * fills the disk under the black box (REQ-036).
  *
@@ -38,9 +35,6 @@ import kotlinx.coroutines.withContext
  * limit, copied into a hidden temporary file in the folder while its bytes are counted against the limit, scanned as
  * the replay reads it, and admitted only if it holds a valid MAVLink 2 frame and fits within the limit with the
  * recordings kept; the temporary file is always deleted. Nothing it holds or its source does makes it throw.
- *
- * The list ([RecordingSummaries]) is read again when the recorder opens or closes a log, a replay starts or stops, or
- * an import or a delete changes the folder. Files are read on [ioDispatcher].
  */
 internal class DefaultRecordingRepository(
     private val folder: RecordingsFolder,
@@ -107,7 +101,6 @@ internal class DefaultRecordingRepository(
             ImportCopy.FAILED -> ImportResult.Failed
         }
 
-    /** The copy in [temporary], scanned and, if it holds a valid frame, admitted among the recordings. */
     private fun stored(temporary: File, displayName: String?): ImportResult = try {
         val scan = temporary.inputStream().use(RecordingScan::of)
         val size = temporary.length()

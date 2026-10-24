@@ -61,7 +61,6 @@ internal class RecordingSummaries(private val folder: RecordingsFolder) {
         }
     }
 
-    /** Caches the [scan] of a log just written as [name], as it is now on disk. */
     fun remember(name: String, size: Long, modified: Long, scan: RecordingScan) {
         scans[name] = CachedScan(size, modified, scan)
     }

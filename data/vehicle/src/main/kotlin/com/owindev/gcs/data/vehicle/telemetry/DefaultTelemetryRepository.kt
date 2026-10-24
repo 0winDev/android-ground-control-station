@@ -17,8 +17,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * The active vehicle's telemetry and trail, from the [TelemetryStore].
- *
  * It observes [VehicleRepository.vehicles] as well, because that is what keeps the link listened to: the
  * telemetry is filled by the same listener as the HEARTBEATs, so observing it keeps the link open.
  *
