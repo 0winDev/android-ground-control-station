@@ -48,8 +48,11 @@ import kotlinx.coroutines.delay
 internal fun AlertBannerContent(banner: AlertBanner, onAcknowledge: (occurrence: Long) -> Unit) {
     when (banner) {
         AlertBanner.Hidden -> Unit
+
         is AlertBanner.Showing -> ShowingBanner(banner = banner, onAcknowledge = onAcknowledge)
-        is AlertBanner.AllAcknowledged -> AcknowledgedBanner(count = banner.count, level = banner.level)
+
+        is AlertBanner.AllAcknowledged ->
+            AcknowledgedBanner(count = banner.count, level = banner.level, recorded = banner.recorded)
     }
 }
 
@@ -72,6 +75,7 @@ private fun ShowingBanner(banner: AlertBanner.Showing, onAcknowledge: (occurrenc
         ) {
             // Decorative: the text next to it says the level.
             Icon(painter = painterResource(id = style.icon), contentDescription = null)
+            if (banner.recorded) RecordedTag()
             Text(
                 text = stringResource(
                     id = R.string.hud_alert_banner,
@@ -144,7 +148,7 @@ private fun OthersCount(others: Int, level: AlertLevel) {
  * urgent of them.
  */
 @Composable
-private fun AcknowledgedBanner(count: Int, level: AlertLevel) {
+private fun AcknowledgedBanner(count: Int, level: AlertLevel, recorded: Boolean) {
     val style = styleOf(level)
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -159,6 +163,7 @@ private fun AcknowledgedBanner(count: Int, level: AlertLevel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painter = painterResource(id = DesignSystemR.drawable.ic_check_circle), contentDescription = null)
+            if (recorded) RecordedTag()
             Text(
                 text = stringResource(
                     id = R.string.hud_alert_banner,

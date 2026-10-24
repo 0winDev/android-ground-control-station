@@ -184,8 +184,8 @@ abstract class VehicleDataModule {
             clock = clock,
             folder = folder,
             rule = ReplayRule(linkLossRule),
-            replaySource = { recording, replayClock ->
-                TlogDatagramSource(recording, replayClock, ioDispatcher = Dispatchers.IO)
+            replaySource = { recording, replayClock, onGap ->
+                TlogDatagramSource(recording, replayClock, ioDispatcher = Dispatchers.IO, onGap = onGap)
             },
             scope = scope,
         )

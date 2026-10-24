@@ -30,6 +30,8 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.FileSystemException
 import java.nio.file.Files
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,6 +65,7 @@ class DefaultReplayRepositoryTest {
     private val replayClock: CapturingSlot<ReplayClock> = slot()
     private val events = mutableListOf<String>()
     private val replayed = mutableListOf<File>()
+    private val gapReports = mutableListOf<(Duration?) -> Unit>()
     private val recordings get() = File(temp, "tlogs").apply { mkdirs() }
     private val recording get() = File(recordings, "2026-10-16_17-09-58.tlog").apply { writeBytes(ByteArray(0)) }
     private val folder by lazy { RecordingsFolder(recordings, RecordingRule()) }
@@ -81,8 +84,9 @@ class DefaultReplayRepositoryTest {
             clock = clock,
             folder = folder,
             rule = ReplayRule(LinkLossRule()),
-            replaySource = { file, _ ->
+            replaySource = { file, _, onGap ->
                 replayed += file
+                gapReports += onGap
                 emptySource()
             },
             scope = testScope.backgroundScope,
@@ -259,6 +263,39 @@ class DefaultReplayRepositoryTest {
         }
 
     @Test
+    fun `GIVEN a replay WHEN its source skips a gap THEN the time skipped is shown`() {
+        repository.play(recording)
+
+        gapReports.single()(SKIPPED)
+        val result = repository.skippedGap.value
+
+        result shouldBeEqualTo SKIPPED
+    }
+
+    @Test
+    fun `GIVEN a replay after another WHEN the first one's source reports a gap late THEN it is ignored`() {
+        val file = recording
+        repository.play(file)
+        repository.play(file)
+
+        gapReports.first()(SKIPPED)
+        val result = repository.skippedGap.value
+
+        result shouldBeEqualTo null
+    }
+
+    @Test
+    fun `GIVEN a gap being skipped WHEN the replay stops THEN no gap is shown`() {
+        repository.play(recording)
+        gapReports.single()(SKIPPED)
+
+        repository.stop()
+        val result = repository.skippedGap.value
+
+        result shouldBeEqualTo null
+    }
+
+    @Test
     fun `GIVEN a recording WHEN playing it THEN retention keeps it before the live recording closes`() {
         val file = recording
 
@@ -338,3 +375,4 @@ private fun createdLink(link: File, target: File): Boolean = try {
 
 private val PLAYED = 2.seconds
 private val LONG_SILENT = 10.seconds
+private val SKIPPED = 8.minutes

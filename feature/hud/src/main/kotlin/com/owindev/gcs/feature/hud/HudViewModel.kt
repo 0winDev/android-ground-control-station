@@ -167,6 +167,7 @@ class HudViewModel @Inject constructor(
                 otherVehicles = otherVehicles,
                 localFault = traffic.toLocalFault(),
                 lastData = panelOf(sessionTelemetry, staleness, lostSince = active.lastHeartbeat),
+                recorded = active.origin == DataOrigin.REPLAY,
             )
         }
         return when (traffic) {

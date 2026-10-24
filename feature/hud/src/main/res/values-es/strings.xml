@@ -119,4 +119,16 @@
     <string name="hud_licence_fonts_terms">SIL Open Font License 1.1</string>
     <string name="hud_licence_material_symbols">Material Symbols</string>
     <string name="hud_licence_material_symbols_terms">Apache License 2.0</string>
+    <string name="hud_replay_title">Modo reproducción · Sin dron en vivo</string>
+    <string name="hud_replay_playing">Reproduciendo</string>
+    <string name="hud_replay_paused">En pausa</string>
+    <string name="hud_replay_ended">Terminada</string>
+    <string name="hud_replay_unreadable_status">Ilegible</string>
+    <string name="hud_replay_skipped">+%1$s sin datos</string>
+    <string name="hud_replay_pause">Pausa</string>
+    <string name="hud_replay_resume">Seguir</string>
+    <string name="hud_replay_stop">Detener</string>
+    <string name="hud_recorded">De la grabación</string>
+    <string name="hud_recordings">Grabaciones</string>
+    <string name="hud_recordings_open">Abrir las grabaciones</string>
 </resources>

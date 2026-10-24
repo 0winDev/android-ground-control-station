@@ -125,4 +125,16 @@
     <string name="hud_licence_fonts_terms">SIL Open Font License 1.1</string>
     <string name="hud_licence_material_symbols">Material Symbols</string>
     <string name="hud_licence_material_symbols_terms">Apache License 2.0</string>
+    <string name="hud_replay_title">Replay mode · No live vehicle</string>
+    <string name="hud_replay_playing">Playing</string>
+    <string name="hud_replay_paused">Paused</string>
+    <string name="hud_replay_ended">Ended</string>
+    <string name="hud_replay_unreadable_status">Unreadable</string>
+    <string name="hud_replay_skipped">+%1$s without data</string>
+    <string name="hud_replay_pause">Pause</string>
+    <string name="hud_replay_resume">Resume</string>
+    <string name="hud_replay_stop">Stop</string>
+    <string name="hud_recorded">Recorded</string>
+    <string name="hud_recordings">Recordings</string>
+    <string name="hud_recordings_open">Open the recordings</string>
 </resources>

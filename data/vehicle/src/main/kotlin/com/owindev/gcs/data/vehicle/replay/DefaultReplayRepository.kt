@@ -11,6 +11,7 @@ import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.LinkStatus
 import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import java.io.File
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,17 +40,20 @@ internal class DefaultReplayRepository(
     private val clock: PipelineClock,
     private val folder: RecordingsFolder,
     private val rule: ReplayRule,
-    private val replaySource: (File, ReplayClock) -> DatagramSource,
+    private val replaySource: (File, ReplayClock, (Duration?) -> Unit) -> DatagramSource,
     scope: CoroutineScope,
 ) : ReplayRepository {
 
     private val lock = Any()
     private val mutableState = MutableStateFlow<ReplayState>(ReplayState.Off)
+    private val mutableSkippedGap = MutableStateFlow<Duration?>(null)
 
     /** The clock of the replay playing now; under [lock]. */
     private var replayClock: ReplayClock? = null
 
     override val state: StateFlow<ReplayState> = mutableState.asStateFlow()
+
+    override val skippedGap: StateFlow<Duration?> = mutableSkippedGap.asStateFlow()
 
     init {
         scope.launch { session.status.collect(::follow) }
@@ -96,6 +100,7 @@ internal class DefaultReplayRepository(
             session.live()
             folder.replayed = null
             replayClock = null
+            mutableSkippedGap.value = null
         }
         mutableState.value = ReplayState.Off
     }
@@ -105,8 +110,14 @@ internal class DefaultReplayRepository(
         folder.replayed = recording.name
         val started = clock.newReplayClock()
         replayClock = started
-        session.replay(replaySource(recording, started), started)
+        mutableSkippedGap.value = null
+        session.replay(replaySource(recording, started) { skipped -> skipping(started, skipped) }, started)
         started.play()
+    }
+
+    /** A gap reported by the source of the replay on [clock]; one from a replay before it comes too late to count. */
+    private fun skipping(clock: ReplayClock, skipped: Duration?) = synchronized(lock) {
+        if (replayClock === clock) mutableSkippedGap.value = skipped
     }
 
     /** The end of a recording or a failure to read it, as the session reports it while a replay is on. */

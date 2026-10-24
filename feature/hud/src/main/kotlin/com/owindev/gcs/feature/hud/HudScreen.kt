@@ -31,23 +31,34 @@ import com.owindev.gcs.core.designsystem.theme.GcsTheme
 
 /**
  * The HUD in the [palette] in use, with the operator's switch between night and day ([onToggleTheme], REQ-030), laid
- * over the [map], which it tells the part of it its content covers.
+ * over the [map], which it tells the part of it its content covers. During a replay its banner is above everything
+ * (REQ-037). [onOpenRecordings] opens the recordings, `null` while the operator must stay here (ADR 0007).
  */
 @Composable
 fun HudScreen(
     palette: GcsPalette,
     onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenRecordings: (() -> Unit)? = null,
     map: @Composable (insets: PaddingValues) -> Unit = {},
     viewModel: HudViewModel = hiltViewModel(),
+    replayViewModel: ReplayViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val replay by replayViewModel.banner.collectAsStateWithLifecycle()
     HudContent(
         state = state,
         onAcknowledgeAlert = viewModel::onAlertAcknowledged,
         modifier = modifier,
         palette = palette,
         onToggleTheme = onToggleTheme,
+        replay = replay,
+        replayControls = ReplayControls(
+            onPause = replayViewModel::onPause,
+            onResume = replayViewModel::onResume,
+            onStop = replayViewModel::onStop,
+        ),
+        onOpenRecordings = onOpenRecordings,
         map = map,
     )
 }
@@ -59,6 +70,9 @@ internal fun HudContent(
     modifier: Modifier = Modifier,
     palette: GcsPalette = GcsPalette.NIGHT,
     onToggleTheme: () -> Unit = {},
+    replay: ReplayBanner? = null,
+    replayControls: ReplayControls = ReplayControls(onPause = {}, onResume = {}, onStop = {}),
+    onOpenRecordings: (() -> Unit)? = null,
     map: @Composable (insets: PaddingValues) -> Unit = {},
 ) {
     var licencesOpen by rememberSaveable { mutableStateOf(false) }
@@ -73,9 +87,12 @@ internal fun HudContent(
                     palette = palette,
                     onToggleTheme = onToggleTheme,
                     onOpenLicences = { licencesOpen = true },
+                    onOpenRecordings = onOpenRecordings,
                 )
             }
         }
+        // Above the alert banner and the link-lost emergency: a replay must never look like a live flight.
+        replay?.let { ReplayBannerContent(banner = it, controls = replayControls) }
         // One map whatever the state, so the camera never jumps when the link is lost or comes back.
         HudOverMap(
             map = map,

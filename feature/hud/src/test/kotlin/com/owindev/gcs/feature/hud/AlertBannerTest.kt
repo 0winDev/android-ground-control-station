@@ -135,12 +135,55 @@ class AlertBannerTest {
         )
     }
 
-    private fun raised(alert: Alert, occurrence: Long, acknowledged: Boolean = false) = ActiveAlert(
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN an emergency raised by a replay WHEN building the banner THEN it is marked recorded`() {
+        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryCritical, occurrence = 1, origin = DataOrigin.REPLAY)))
+
+        val result = alertBannerOf(alerts, TelemetryPanel())
+
+        result shouldBeEqualTo AlertBanner.Showing(
+            alert = Alert.BatteryCritical,
+            occurrence = 1,
+            acknowledgeable = false,
+            others = 0,
+            recorded = true,
+        )
+    }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN every replayed alert acknowledged WHEN building the banner THEN the summary is marked recorded`() {
+        val alerts = Alerts.Evaluated(
+            listOf(raised(Alert.GpsFixLost, occurrence = 1, acknowledged = true, origin = DataOrigin.REPLAY)),
+        )
+
+        val result = alertBannerOf(alerts, TelemetryPanel())
+
+        result shouldBeEqualTo AlertBanner.AllAcknowledged(count = 1, level = AlertLevel.CAUTION, recorded = true)
+    }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN a live alert WHEN building the banner THEN it is never marked recorded`() {
+        val alerts = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = 1)))
+
+        val result = alertBannerOf(alerts, TelemetryPanel())
+
+        (result as AlertBanner.Showing).recorded shouldBeEqualTo false
+    }
+
+    private fun raised(
+        alert: Alert,
+        occurrence: Long,
+        acknowledged: Boolean = false,
+        origin: DataOrigin = DataOrigin.LIVE,
+    ) = ActiveAlert(
         alert = alert,
         occurrence = occurrence,
         raisedAt = clock.markNow(),
         acknowledged = acknowledged,
-        origin = DataOrigin.LIVE,
+        origin = origin,
     )
 }
 

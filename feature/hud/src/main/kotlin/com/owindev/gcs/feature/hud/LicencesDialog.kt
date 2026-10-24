@@ -3,6 +3,7 @@ package com.owindev.gcs.feature.hud
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -124,3 +125,35 @@ private val LICENCES = listOf(
         "https://www.apache.org/licenses/LICENSE-2.0",
     ),
 )
+
+/** Opens the recordings; `:app` offers it only while the operator may leave the flight screen (ADR 0007). */
+@Composable
+internal fun RecordingsButton(onClick: () -> Unit) {
+    val description = stringResource(id = R.string.hud_recordings_open)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .heightIn(min = GcsTheme.sizes.minTouchTarget)
+            .semantics { contentDescription = description },
+        shape = ChipShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outline),
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = ChipPadding, vertical = ChipPadding / 2),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(id = R.string.hud_recordings).uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+    }
+}
+
+/** The buttons that open another screen, each only while the operator may look away from the vehicle. */
+@Composable
+internal fun ScreenButtons(state: HudUiState, onOpenLicences: () -> Unit, onOpenRecordings: (() -> Unit)?) {
+    if (state.licencesAvailable) LicencesButton(onClick = onOpenLicences)
+    onOpenRecordings?.let { RecordingsButton(onClick = it) }
+}

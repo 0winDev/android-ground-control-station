@@ -120,8 +120,8 @@ class ReplayPipelineTest {
             clock = clock,
             folder = RecordingsFolder(recordings, RecordingRule()),
             rule = ReplayRule(LinkLossRule()),
-            replaySource = { file, replayClock ->
-                TlogDatagramSource(file, replayClock, StandardTestDispatcher(testScope.testScheduler))
+            replaySource = { file, replayClock, onGap ->
+                TlogDatagramSource(file, replayClock, StandardTestDispatcher(testScope.testScheduler), onGap = onGap)
             },
             scope = testScope.backgroundScope,
         )

@@ -41,6 +41,7 @@ internal fun StatusBar(
     palette: GcsPalette,
     onToggleTheme: () -> Unit,
     onOpenLicences: () -> Unit = {},
+    onOpenRecordings: (() -> Unit)? = null,
 ) {
     val noValue = stringResource(id = R.string.hud_no_value)
     val lost = state is HudUiState.LinkLost
@@ -53,7 +54,7 @@ internal fun StatusBar(
         horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
     ) {
         ThemeToggle(palette = palette, onToggle = onToggleTheme)
-        if (state.licencesAvailable) LicencesButton(onClick = onOpenLicences)
+        ScreenButtons(state = state, onOpenLicences = onOpenLicences, onOpenRecordings = onOpenRecordings)
         FlowRow(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(space = ChipSpacing, alignment = Alignment.End),
