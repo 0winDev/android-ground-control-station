@@ -24,8 +24,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * Maps the active vehicle, its telemetry and its trail to what the map shows (REQ-034).
- *
  * The vehicle is drawn as live only while its link is not lost ([LinkLossRule.isLost], as the HUD judges it), its
  * position is fresh and verified ([StalenessRule], REQ-026, REQ-029); otherwise it is greyed with the reason, and with
  * the position's age when it has one. The state is built again when something arrives, when a value goes stale, at
@@ -76,7 +74,6 @@ class MapViewModel @Inject constructor(
         following.value = false
     }
 
-    /** The camera goes back to the vehicle and follows it again. */
     fun onRecenter() {
         following.value = true
     }
