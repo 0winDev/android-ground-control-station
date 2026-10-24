@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.di
 import android.content.Context
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.attention.FlightAttentionRule
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.recording.ImportRule
 import com.owindev.gcs.core.domain.recording.RecordingRepository
@@ -99,6 +100,11 @@ abstract class VehicleDataModule {
         /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
         @Provides
         fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
+
+        /** When the operator may leave the flight screen, judging link loss as every screen does (ADR 0007). */
+        @Provides
+        fun provideFlightAttentionRule(linkLossRule: LinkLossRule): FlightAttentionRule =
+            FlightAttentionRule(linkLossRule)
 
         /** The staleness thresholds decided in #39 (REQ-026); change them here. */
         @Provides
