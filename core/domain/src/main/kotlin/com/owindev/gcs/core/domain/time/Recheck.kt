@@ -10,5 +10,4 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 val MIN_RECHECK: Duration = 50.milliseconds
 
-/** This wait, never shorter than [MIN_RECHECK]. */
 fun Duration.atLeastRecheck(): Duration = maxOf(this, MIN_RECHECK)

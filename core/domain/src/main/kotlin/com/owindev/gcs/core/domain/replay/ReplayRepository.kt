@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
  */
 interface ReplayRepository {
 
-    /** What is being played, if anything. */
     val state: StateFlow<ReplayState>
 
     /**

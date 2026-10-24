@@ -45,7 +45,6 @@ sealed interface SaveResult {
     /** The operator closed the picker without choosing a place. */
     data object Cancelled : SaveResult
 
-    /** It is being recorded now. */
     data object InProgress : SaveResult
 
     /** The recording is no longer there, or reading it or writing the copy failed. */
@@ -81,10 +80,8 @@ sealed interface DeleteResult {
 
     data object Deleted : DeleteResult
 
-    /** It is being recorded now. */
     data object InProgress : DeleteResult
 
-    /** It is being replayed now. */
     data object Replaying : DeleteResult
 
     data object NotFound : DeleteResult
