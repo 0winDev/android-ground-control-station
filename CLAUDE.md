@@ -215,6 +215,7 @@ the issue number to an existing one.
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
 - Decode every reused fixture with pymavlink and list the existing captures before planning a new one (#35, #38).
+- A log may hold a message only as MAVLink 1 (Mission Planner's parameter download): count its MAVLink 2 frames (#97).
 - A false start marker with a plausible header holds the parser: noise tests must keep the stream going (#9).
 - Adding a message breaks tests that borrowed it as "unknown": borrow one the roadmap will never decode (#37).
 - Kluent compares maps in iteration order: sort both sides (#10).

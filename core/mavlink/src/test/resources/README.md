@@ -47,6 +47,8 @@ pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and m
 | VFR_HUD (74) | `common.xml` | 20 |
 | GPS_RAW_INT (24) | `common.xml` | 24 |
 | STATUSTEXT (253) | `common.xml` | 83 |
+| PARAM_REQUEST_READ (20) | `common.xml` | 214 |
+| PARAM_VALUE (22) | `common.xml` | 220 |
 
 ATTITUDE, GLOBAL_POSITION_INT and VFR_HUD were also computed with `mavparse` from `common.xml` and
 `standard.xml` on `mavlink/mavlink` master (#37), and SYS_STATUS and GPS_RAW_INT from `common.xml` on master
@@ -539,6 +541,56 @@ derived/statustext-utf8.bin       fd 0b 00 00 73 01 01 fd 00 00 06 63 61 66 c3 a
 derived/statustext-empty.bin      fd 01 00 00 73 01 01 fd 00 00 00 21 bf
 derived/statustext-severity-8.bin fd 0e 00 00 73 01 01 fd 00 00 08 41 72 6d 69 6e 67 20 6d 6f 74 6f
                                   72 73 1c b9
+```
+
+## PARAM_REQUEST_READ and PARAM_VALUE (#97)
+
+Extracted and built by `py tools/fixtures/derive_fixtures.py` (pymavlink 2.4.50, `dialects.v20.common`), no
+extensions in either. PARAM_REQUEST_READ: CRC_EXTRA 214, LEN 20, `param_index` (int16) at 0, `target_system` 2,
+`target_component` 3, `param_id` 4–19. PARAM_VALUE: CRC_EXTRA 220, LEN 25, `param_value` (float) at 0, `param_count`
+4, `param_index` 6, `param_id` 8–23, `param_type` 24. No capture holds a PARAM_REQUEST_READ, so its frames are built
+by pymavlink; the real request to ArduCopter is checked in #101. Of the 1,384 PARAM_VALUE in
+`tlog/mission-planner.tlog`, 1,370 are MAVLink 1 (Mission Planner's parameter download), which the parser skips.
+
+| File | Origin | What it proves |
+|---|---|---|
+| `param/stat-runtime.bin` | the real frame (seq 239, ArduCopter V4.7.2-beta1), `STAT_RUNTIME` 2008.0, type 6 (INT32), count 1370, index 65535 | an integer parameter as the float on the wire (REQ-041) |
+| `param/mot-thst-hover.bin` | the real frame (seq 181), `MOT_THST_HOVER` 0.39, type 9 (REAL32) | a real REAL32 parameter (REQ-041) |
+| `param/ins-gyr1-caltemp.bin` | the real frame (seq 11) of `tlog/mission-planner.tlog`, `INS_GYR1_CALTEMP`, 16 characters | a `param_id` with no NUL ends at the field's end (REQ-041) |
+| `derived/param-value-batt-low-volt.bin` | `mot-thst-hover.bin` as `BATT_LOW_VOLT` 10.5, REAL32 | the answer #101 waits for (REQ-041) |
+| `derived/param-value-fields.bin` | value -123.456 (`79 e9 f6 c2`), count 0x1234, index 0x5678, type 5, id `ABCDEFGHIJKLMNOP` | every offset and byte order (REQ-041) |
+| `derived/param-value-nul-inside.bin` | id `AB`, NUL, `CD` | the bytes after a NUL are not the id (REQ-041) |
+| `derived/param-value-type-0.bin` | `BATT_LOW_VOLT` with type 0 (outside `MAV_PARAM_TYPE`), LEN 21 | the id's padding and the type are truncated and read as zero (REQ-013, REQ-041) |
+| `derived/param-value-empty-id.bin` | no id, type 0, LEN 8 | the id starts past the payload and reads as empty (REQ-013, REQ-041) |
+| `derived/param-request-read-batt-low-volt.bin` | 255/190 to 1/1, seq 42, `BATT_LOW_VOLT`, index -1, LEN 17 | the encoder truncates the name's padding (REQ-041) |
+| `derived/param-request-read-16-chars.bin` | the same for `INS_GYR1_CALTEMP`, LEN 20 | a 16-character name goes without NUL (REQ-041) |
+| `derived/param-request-read-1-char.bin` | the same for `A`, LEN 5 | the shortest name (REQ-041) |
+| `param/session.tsv` | the 3 MAVLink 2 PARAM_VALUE of `heartbeat/session.tlog` (`derived/session-stream.bin`) as pymavlink decodes them | every real frame decoded, not only counted (REQ-041) |
+| `param/mission-planner.tsv` | the 14 MAVLink 2 PARAM_VALUE of `tlog/mission-planner.tlog` (`tlog/mission-planner.frames.bin`) | the same, ids of 10 to 16 characters (REQ-041) |
+
+Raw bytes:
+
+```
+param/stat-runtime.bin                       fd 19 00 00 ef 01 01 16 00 00 00 00 fb 44 5a 05 ff ff 53 54 41 54
+                                             5f 52 55 4e 54 49 4d 45 00 00 00 00 06 3b 41
+param/mot-thst-hover.bin                     fd 19 00 00 b5 01 01 16 00 00 14 ae c7 3e 5a 05 ff ff 4d 4f 54 5f
+                                             54 48 53 54 5f 48 4f 56 45 52 00 00 09 c1 fd
+param/ins-gyr1-caltemp.bin                   fd 19 00 00 0b 01 01 16 00 00 96 25 c8 41 5a 05 ff ff 49 4e 53 5f
+                                             47 59 52 31 5f 43 41 4c 54 45 4d 50 09 a1 a5
+derived/param-value-batt-low-volt.bin        fd 19 00 00 b5 01 01 16 00 00 00 00 28 41 5a 05 ff ff 42 41 54 54
+                                             5f 4c 4f 57 5f 56 4f 4c 54 00 00 00 09 02 4f
+derived/param-value-fields.bin               fd 19 00 00 b5 01 01 16 00 00 79 e9 f6 c2 34 12 78 56 41 42 43 44
+                                             45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 05 32 e2
+derived/param-value-nul-inside.bin           fd 19 00 00 b5 01 01 16 00 00 14 ae c7 3e 5a 05 ff ff 41 42 00 43
+                                             44 00 00 00 00 00 00 00 00 00 00 00 09 a1 6e
+derived/param-value-type-0.bin               fd 15 00 00 b5 01 01 16 00 00 14 ae c7 3e 5a 05 ff ff 42 41 54 54
+                                             5f 4c 4f 57 5f 56 4f 4c 54 d5 71
+derived/param-value-empty-id.bin             fd 08 00 00 b5 01 01 16 00 00 14 ae c7 3e 5a 05 ff ff 34 74
+derived/param-request-read-batt-low-volt.bin fd 11 00 00 2a ff be 14 00 00 ff ff 01 01 42 41 54 54 5f 4c 4f 57
+                                             5f 56 4f 4c 54 18 11
+derived/param-request-read-16-chars.bin      fd 14 00 00 2a ff be 14 00 00 ff ff 01 01 49 4e 53 5f 47 59 52 31
+                                             5f 43 41 4c 54 45 4d 50 5e 8b
+derived/param-request-read-1-char.bin        fd 05 00 00 2a ff be 14 00 00 ff ff 01 01 41 12 6f
 ```
 
 ## Raw frames for the flight log (#67)

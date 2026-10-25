@@ -1,3 +1,6 @@
+// One small read per wire type, so each can be reviewed on its own.
+@file:Suppress("TooManyFunctions")
+
 package com.owindev.gcs.core.mavlink
 
 // Little-endian reads of payload fields for MavlinkDecoder, kept apart so the decoder only holds the message
@@ -48,6 +51,12 @@ internal fun ByteArray.textEnd(offset: Int, length: Int): Int {
     }
     return end
 }
+
+/**
+ * The bytes from [offset] to [end] as UTF-8, or "" when the text starts past a truncated payload. Each invalid
+ * sequence becomes U+FFFD: decodeToString never throws on content.
+ */
+internal fun ByteArray.utf8(offset: Int, end: Int): String = if (end > offset) decodeToString(offset, end) else ""
 
 /** The [bytes] bytes at [offset], least significant first, as the low bits of an [Int]. */
 private fun ByteArray.littleEndian(offset: Int, bytes: Int): Int {

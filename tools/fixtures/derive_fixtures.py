@@ -175,6 +175,25 @@ Writes:
   <out>/derived/statustext-severity-8.bin       the same with severity 8, outside MAV_SEVERITY
   <out>/statustext/session.tsv                  every MAVLink 2 STATUSTEXT of heartbeat/session.tlog and of
   <out>/statustext/mission-planner.tsv          tlog/mission-planner.tlog as pymavlink decodes it, in order
+  <out>/param/stat-runtime.bin                  the first real PARAM_VALUE (not derived) of the session: STAT_RUNTIME,
+                                                an INT32 parameter sent as a float
+  <out>/param/mot-thst-hover.bin                the first real REAL32 PARAM_VALUE of the session: MOT_THST_HOVER
+  <out>/param/ins-gyr1-caltemp.bin              the first real PARAM_VALUE of tlog/mission-planner.tlog with a
+                                                16-character param_id, so no NUL
+  <out>/derived/param-value-batt-low-volt.bin   param/mot-thst-hover.bin re-packed by pymavlink as BATT_LOW_VOLT 10.5
+  <out>/derived/param-value-fields.bin          the same with a distinct byte in every field and a 16-character id
+  <out>/derived/param-value-nul-inside.bin      the same with id bytes after a NUL: the id ends at the NUL
+  <out>/derived/param-value-type-0.bin          the same with param_type 0: it and the id's NUL padding are
+                                                truncated
+  <out>/derived/param-value-empty-id.bin        the same with no id and param_type 0: LEN 8, the id starts past the
+                                                payload
+  <out>/derived/param-request-read-batt-low-volt.bin
+                                                a PARAM_REQUEST_READ from the GCS (255/190) to 1/1 for
+                                                BATT_LOW_VOLT, param_index -1, built by pymavlink: LEN 17
+  <out>/derived/param-request-read-16-chars.bin the same for a 16-character name: no NUL, LEN 20
+  <out>/derived/param-request-read-1-char.bin   the same for a 1-character name: LEN 5
+  <out>/param/session.tsv                       every MAVLink 2 PARAM_VALUE of heartbeat/session.tlog and of
+  <out>/param/mission-planner.tsv               tlog/mission-planner.tlog as pymavlink decodes it, in order
   <out>/derived/session-mavlink2-stream.bin     heartbeat/session.tlog's MAVLink 2 frames only, in order, as on
                                                 the wire: what the parser hands out of session-stream.bin
   <out>/derived/heartbeat-corrupted-len-raised.bin
@@ -241,6 +260,8 @@ TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_COMMAND_ACK: "command_ack",
     common.MAVLINK_MSG_ID_HOME_POSITION: "home_position",
     common.MAVLINK_MSG_ID_STATUSTEXT: "statustext",
+    common.MAVLINK_MSG_ID_PARAM_REQUEST_READ: "param_request_read",
+    common.MAVLINK_MSG_ID_PARAM_VALUE: "param_value",
 }
 SET_MESSAGE_INTERVAL = common.MAV_CMD_SET_MESSAGE_INTERVAL
 MAV_COMP_ID_MISSIONPLANNER = 190
@@ -415,6 +436,29 @@ FIRST_CHUNK_LENGTH = 52  # id 1 is 01 00: its zero high byte goes with the zero 
 CORRUPTED_LEN_RAISED = 255
 CORRUPTED_LEN_LOWERED = 1
 SESSION_MAVLINK2_FRAMES = 5522
+MISSION_PLANNER_LOG = "tlog/mission-planner.tlog"
+PARAM_ID_LENGTH = 16
+FULL_PARAM_VALUE_LENGTH = 25
+FULL_PARAM_REQUEST_READ_LENGTH = 20
+PARAM_REQUEST_READ_ID_OFFSET = 4  # param_index (int16), target_system, target_component, then param_id
+PARAM_VALUE_ID_OFFSET = 8  # param_value (float), param_count, param_index (uint16), then param_id
+PARAM_INDEX_BY_NAME = -1  # "-1 to use the param ID field as identifier (else the param id will be ignored)"
+# ArduCopter 4.7.2's BATT_LOW_VOLT default, as in tlog/mission-planner.tlog's parameter download (MAVLink 1 there).
+BATT_LOW_VOLT = {"param_id": b"BATT_LOW_VOLT", "param_value": 10.5, "param_type": common.MAV_PARAM_TYPE_REAL32}
+# A distinct non-zero byte in every field (79 e9 f6 c2, 34 12, 78 56): a swapped offset or byte order shows.
+PARAM_VALUE_FIELDS = {
+    "param_id": b"ABCDEFGHIJKLMNOP",
+    "param_value": -123.456,
+    "param_type": common.MAV_PARAM_TYPE_UINT32,
+    "param_count": 0x1234,
+    "param_index": 0x5678,
+}
+PARAM_VALUE_NUL_INSIDE = {"param_id": b"AB\x00CD"}
+PARAM_VALUE_TYPE_0 = {"param_id": b"BATT_LOW_VOLT", "param_type": 0}  # 0 is outside MAV_PARAM_TYPE
+PARAM_VALUE_EMPTY_ID = {"param_id": b"", "param_type": 0}
+PARAM_REQUEST_SEQ = 42
+SIXTEEN_CHAR_NAME = b"INS_GYR1_CALTEMP"
+ONE_CHAR_NAME = b"A"
 
 
 def decode(frame: bytes, key: bytes = None):
@@ -553,6 +597,30 @@ def statustext_table(log_path: Path) -> str:
         ends_in_field = len(field) < TEXT_LENGTH or 0 in field
         assert "\t" not in msg.text and msg.text.isascii(), "the table holds plain ASCII texts only"
         lines.append(f"{msg.severity}\t{msg.text}\t{msg.id}\t{msg.chunk_seq}\t{str(ends_in_field).lower()}")
+
+
+def param_request_read(name: bytes) -> bytes:
+    """A PARAM_REQUEST_READ by name from the GCS to the vehicle's autopilot, built by pymavlink."""
+    mav = common.MAVLink(io.BytesIO(), srcSystem=GCS_SYSTEM_ID, srcComponent=MAV_COMP_ID_MISSIONPLANNER)
+    mav.seq = PARAM_REQUEST_SEQ
+    msg = mav.param_request_read_encode(VEHICLE_SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, name, PARAM_INDEX_BY_NAME)
+    return bytes(msg.pack(mav))
+
+
+def param_value_table(log_path: Path) -> str:
+    """Every MAVLink 2 PARAM_VALUE of the log as pymavlink decodes it, one per line (tab-separated, header first),
+    param_value as float32 text."""
+    log = mavutil.mavlink_connection(str(log_path), dialect="common", robust_parsing=True)
+    lines = ["param_id\tparam_value\tparam_type\tparam_count\tparam_index"]
+    while True:
+        msg = log.recv_match(type="PARAM_VALUE", blocking=False)
+        if msg is None:
+            return "\n".join(lines) + "\n"
+        if msg.get_msgbuf()[0] != START_MARKER:
+            continue
+        assert "\t" not in msg.param_id and msg.param_id.isascii(), "the table holds plain ASCII ids only"
+        value = float32_text(msg.param_value)
+        lines.append(f"{msg.param_id}\t{value}\t{msg.param_type}\t{msg.param_count}\t{msg.param_index}")
 
 
 def session_frame(session: Path, message_type: str, matches) -> bytes:
@@ -773,7 +841,15 @@ def main() -> None:
     telemetry_dir.mkdir(parents=True, exist_ok=True)
     statustext_dir = args.out / "statustext"
     statustext_dir.mkdir(parents=True, exist_ok=True)
+    param_dir = args.out / "param"
+    param_dir.mkdir(parents=True, exist_ok=True)
     session = args.out / SESSION
+    mission_planner_log = args.out / MISSION_PLANNER_LOG
+    stat_runtime = session_frame(session, "PARAM_VALUE", lambda m: m.param_id == "STAT_RUNTIME")
+    hover = session_frame(session, "PARAM_VALUE", lambda m: m.param_type == common.MAV_PARAM_TYPE_REAL32)
+    sixteen_chars = session_frame(
+        mission_planner_log, "PARAM_VALUE", lambda m: len(m.param_id) == PARAM_ID_LENGTH
+    )
     arming_motors = session_frame(session, "STATUSTEXT", lambda m: m.text == ARMING_MOTORS)
     interval = session_frame(session, "COMMAND_LONG", lambda m: m.command == SET_MESSAGE_INTERVAL)
     interval_ack = session_frame(session, "COMMAND_ACK", lambda m: m.command == SET_MESSAGE_INTERVAL)
@@ -919,6 +995,19 @@ def main() -> None:
         derived_dir / "statustext-severity-8.bin": statustext_with(arming_motors, ARMING_MOTORS.encode(), OUTSIDE_SEVERITY),
         statustext_dir / "session.tsv": statustext_table(session).encode(),
         statustext_dir / "mission-planner.tsv": statustext_table(args.out / "tlog" / "mission-planner.tlog").encode(),
+        param_dir / "stat-runtime.bin": stat_runtime,
+        param_dir / "mot-thst-hover.bin": hover,
+        param_dir / "ins-gyr1-caltemp.bin": sixteen_chars,
+        derived_dir / "param-value-batt-low-volt.bin": with_message_fields(hover, **BATT_LOW_VOLT),
+        derived_dir / "param-value-fields.bin": with_message_fields(hover, **PARAM_VALUE_FIELDS),
+        derived_dir / "param-value-nul-inside.bin": with_message_fields(hover, **PARAM_VALUE_NUL_INSIDE),
+        derived_dir / "param-value-type-0.bin": with_message_fields(hover, **PARAM_VALUE_TYPE_0),
+        derived_dir / "param-value-empty-id.bin": with_message_fields(hover, **PARAM_VALUE_EMPTY_ID),
+        derived_dir / "param-request-read-batt-low-volt.bin": param_request_read(BATT_LOW_VOLT["param_id"]),
+        derived_dir / "param-request-read-16-chars.bin": param_request_read(SIXTEEN_CHAR_NAME),
+        derived_dir / "param-request-read-1-char.bin": param_request_read(ONE_CHAR_NAME),
+        param_dir / "session.tsv": param_value_table(session).encode(),
+        param_dir / "mission-planner.tsv": param_value_table(mission_planner_log).encode(),
         derived_dir / "session-mavlink2-stream.bin": session_mavlink2_stream(session),
         derived_dir / "heartbeat-corrupted-len-raised.bin": with_length(source, CORRUPTED_LEN_RAISED),
         derived_dir / "heartbeat-corrupted-len-lowered.bin": with_length(source, CORRUPTED_LEN_LOWERED),
@@ -1098,6 +1187,41 @@ def main() -> None:
     utf8 = outputs[derived_dir / "statustext-utf8.bin"]
     assert utf8[HEADER_LENGTH + 1:HEADER_LENGTH + utf8[1]] == UTF8_TEXT
     assert UTF8_TEXT.decode("utf-8", "replace") == UTF8_DECODED, "CPython's UTF-8 codec is the reference"
+    assert decode(stat_runtime).param_type == common.MAV_PARAM_TYPE_INT32
+    for real in (stat_runtime, hover, sixteen_chars):
+        assert real[1] == FULL_PARAM_VALUE_LENGTH, "ArduCopter's param_type is never 0, so nothing is truncated"
+    id_start = HEADER_LENGTH + PARAM_VALUE_ID_OFFSET
+    assert 0 not in sixteen_chars[id_start:id_start + PARAM_ID_LENGTH], "a 16-character param_id has no NUL"
+    for name, fields, length in (
+        ("param-value-batt-low-volt.bin", BATT_LOW_VOLT, FULL_PARAM_VALUE_LENGTH),
+        ("param-value-fields.bin", PARAM_VALUE_FIELDS, FULL_PARAM_VALUE_LENGTH),
+        ("param-value-nul-inside.bin", {"param_id": PARAM_VALUE_NUL_INSIDE["param_id"][:2]}, FULL_PARAM_VALUE_LENGTH),
+        (
+            "param-value-type-0.bin",
+            PARAM_VALUE_TYPE_0,
+            PARAM_VALUE_ID_OFFSET + len(PARAM_VALUE_TYPE_0["param_id"]),
+        ),
+        ("param-value-empty-id.bin", PARAM_VALUE_EMPTY_ID, PARAM_VALUE_ID_OFFSET),
+    ):
+        frame = outputs[derived_dir / name]
+        assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
+        assert frame[2:7] == hover[2:7], f"{name}: header fields must stay the real frame's"
+        derived = decode(frame)
+        expected = {k: v.decode("ascii") if isinstance(v, bytes) else v for k, v in fields.items()}
+        assert all(same(getattr(derived, field), value) for field, value in expected.items()), name
+    fields_payload = outputs[derived_dir / "param-value-fields.bin"][HEADER_LENGTH:HEADER_LENGTH + PARAM_VALUE_ID_OFFSET]
+    assert len(set(fields_payload)) == PARAM_VALUE_ID_OFFSET and 0 not in fields_payload, "every byte must differ"
+    for name, param_name in (
+        ("param-request-read-batt-low-volt.bin", BATT_LOW_VOLT["param_id"]),
+        ("param-request-read-16-chars.bin", SIXTEEN_CHAR_NAME),
+        ("param-request-read-1-char.bin", ONE_CHAR_NAME),
+    ):
+        frame = outputs[derived_dir / name]
+        length = PARAM_REQUEST_READ_ID_OFFSET + len(param_name)
+        assert frame[1] == length <= FULL_PARAM_REQUEST_READ_LENGTH, f"{name}: expected LEN {length}, got {frame[1]}"
+        request = decode(frame)
+        assert (request.target_system, request.target_component) == (VEHICLE_SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1)
+        assert request.param_id == param_name.decode("ascii") and request.param_index == PARAM_INDEX_BY_NAME, name
     mavlink2 = outputs[derived_dir / "session-mavlink2-stream.bin"]
     mav = common.MAVLink(io.BytesIO())
     mav.robust_parsing = True
@@ -1170,6 +1294,17 @@ def main() -> None:
         derived_dir / "statustext-utf8.bin",
         derived_dir / "statustext-empty.bin",
         derived_dir / "statustext-severity-8.bin",
+        param_dir / "stat-runtime.bin",
+        param_dir / "mot-thst-hover.bin",
+        param_dir / "ins-gyr1-caltemp.bin",
+        derived_dir / "param-value-batt-low-volt.bin",
+        derived_dir / "param-value-fields.bin",
+        derived_dir / "param-value-nul-inside.bin",
+        derived_dir / "param-value-type-0.bin",
+        derived_dir / "param-value-empty-id.bin",
+        derived_dir / "param-request-read-batt-low-volt.bin",
+        derived_dir / "param-request-read-16-chars.bin",
+        derived_dir / "param-request-read-1-char.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")
