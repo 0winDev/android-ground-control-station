@@ -7,6 +7,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
+import com.owindev.gcs.core.mavlink.MavlinkMessage.StatusText
 import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
@@ -497,6 +498,88 @@ class MavlinkDecoderTest {
         result shouldBeEqualTo sitlHomePosition.copy(timeUsec = 0)
     }
 
+    @Tag("REQ-013")
+    @Tag("REQ-040")
+    @Test
+    fun `GIVEN a real SITL STATUSTEXT truncated without extensions WHEN decoding THEN it is a single chunk`() {
+        val frame = parsedFrame(STATUSTEXT_ARMING_MOTORS)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(severity = INFO, text = "Arming motors", id = 0, chunkSeq = 0)
+    }
+
+    @Tag("REQ-040")
+    @ParameterizedTest(name = "{1}")
+    @CsvSource(
+        "derived/statustext-prearm.bin, PreArm: RC not found",
+        "derived/statustext-arm.bin, Arm: RTL mode not armable",
+    )
+    fun `GIVEN an ArduCopter arming failure WHEN decoding THEN has its CRITICAL severity and text`(
+        fixture: String,
+        text: String,
+    ) {
+        val frame = parsedFrame(fixture)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(severity = CRITICAL, text = text, id = 0, chunkSeq = 0)
+    }
+
+    @Tag("REQ-040")
+    @Test
+    fun `GIVEN a full STATUSTEXT with a 50-byte text WHEN decoding THEN each field lands in its place`() {
+        val frame = parsedFrame(STATUSTEXT_FULL)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(
+            severity = WARNING,
+            text = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx",
+            id = 0x1234,
+            chunkSeq = 7,
+        )
+    }
+
+    @Tag("REQ-040")
+    @ParameterizedTest(name = "chunk {2}")
+    @CsvSource(
+        "derived/statustext-chunk-1.bin, A STATUSTEXT longer than fifty bytes goes out in c, 0",
+        "derived/statustext-chunk-2.bin, hunks of fifty, 1",
+    )
+    fun `GIVEN a chunk of a long STATUSTEXT WHEN decoding THEN has its part of the text, id and chunk_seq`(
+        fixture: String,
+        text: String,
+        chunkSeq: Int,
+    ) {
+        val frame = parsedFrame(fixture)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(severity = INFO, text = text, id = CHUNK_ID, chunkSeq = chunkSeq)
+    }
+
+    @Tag("REQ-040")
+    @Test
+    fun `GIVEN a STATUSTEXT with bytes after a NUL WHEN decoding THEN the text ends at the NUL`() {
+        val frame = parsedFrame(STATUSTEXT_NUL_INSIDE)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(severity = INFO, text = "ab", id = 0, chunkSeq = 0)
+    }
+
+    @Tag("REQ-012")
+    @Tag("REQ-040")
+    @Test
+    fun `GIVEN a STATUSTEXT with UTF-8 and an invalid byte WHEN decoding THEN the invalid byte is a replacement`() {
+        val frame = parsedFrame(STATUSTEXT_UTF8)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(severity = INFO, text = "café � ok", id = 0, chunkSeq = 0)
+    }
+
     @Tag("REQ-012")
     @Test
     fun `GIVEN frames with random IDs and payloads of any size WHEN decoding THEN nothing is thrown`() {
@@ -532,6 +615,7 @@ class MavlinkDecoderTest {
     @Tag("REQ-024")
     @Tag("REQ-025")
     @Tag("REQ-032")
+    @Tag("REQ-040")
     @Test
     fun `GIVEN the SITL session WHEN parsing and decoding THEN each table message comes out as pymavlink counts`() {
         val parser = MavlinkParser(MavlinkMessages)
@@ -576,6 +660,7 @@ class MavlinkDecoderTest {
         is CommandAck -> "COMMAND_ACK"
         is CommandLong -> "COMMAND_LONG"
         is HomePosition -> "HOME_POSITION"
+        is StatusText -> "STATUSTEXT"
         is Undecoded -> "$messageId/${payload.size}"
     }
 
@@ -606,6 +691,14 @@ class MavlinkDecoderTest {
         const val HOME_POSITION_FULL = "derived/home-position-full.bin"
         const val HOME_POSITION_NO_EXTENSION = "derived/home-position-no-extension.bin"
         const val HOME_POSITION_CUT_AFTER_Q = "derived/home-position-cut-after-q.bin"
+        const val STATUSTEXT_ARMING_MOTORS = "statustext/arming-motors.bin"
+        const val STATUSTEXT_FULL = "derived/statustext-full.bin"
+        const val STATUSTEXT_NUL_INSIDE = "derived/statustext-nul-inside.bin"
+        const val STATUSTEXT_UTF8 = "derived/statustext-utf8.bin"
+        const val CRITICAL = 2
+        const val WARNING = 4
+        const val INFO = 6
+        const val CHUNK_ID = 1
 
         // Field values of the COMMAND_ACK fixtures as pymavlink decodes them (see the fixtures README).
         const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
@@ -649,7 +742,7 @@ class MavlinkDecoderTest {
         const val FUZZ_FRAMES = 10_000
         const val MAX_PAYLOAD = 255
         const val MAX_MESSAGE_ID = 0xFF_FFFF
-        val FUZZ_IDS = listOf(0, 1, 24, 30, 33, 36, 74, 76, 77, 125, 242)
+        val FUZZ_IDS = listOf(0, 1, 24, 30, 33, 36, 74, 76, 77, 125, 242, 253)
         const val SCALED_PRESSURE_ID = 29
         const val QUADROTOR = 2
         const val ARDUPILOTMEGA = 3
@@ -657,7 +750,7 @@ class MavlinkDecoderTest {
         const val MAVLINK_VERSION = 3
         const val DISARMED_STABILIZE_BASE_MODE = 81
         const val MAX_UINT32 = 4_294_967_295L
-        const val SESSION_UNKNOWN = 3_609L
+        const val SESSION_UNKNOWN = 3_607L
         const val SESSION_MAVLINK1_BYTES = 82L
         const val HEADER_LENGTH = 10
         const val LEN_INDEX = 1
@@ -679,6 +772,7 @@ class MavlinkDecoderTest {
             "76/33" to 11,
             "COMMAND_ACK" to 13,
             "HOME_POSITION" to 1,
+            "STATUSTEXT" to 2,
         )
 
         // telemetry/home-position.bin as pymavlink decodes it: ArduPilot sends q as NaN and the approach as 0; the
