@@ -363,6 +363,28 @@ sealed interface MavlinkMessage {
     ) : MavlinkMessage
 
     /**
+     * STATUSTEXT (id 253, https://mavlink.io/en/messages/common.html#STATUSTEXT): a text from the system, which
+     * ArduPilot uses for the reasons it refuses to arm (`PreArm: …`, `Arm: …`). [id] and [chunkSeq] are extensions:
+     * omitted, they read 0, and `id` 0 means the message is a single chunk.
+     *
+     * @property severity `MAV_SEVERITY`, 0 (emergency) to 7 (debug), as sent, even outside that range.
+     * @property text from up to 50 bytes, ending at the first NUL, the end of the field or the end of a truncated
+     * payload, decoded as UTF-8 with each invalid sequence replaced by U+FFFD; a character split between chunks is
+     * replaced in each of them.
+     * @property id the message's chunks share it; 0 for a message sent in one piece.
+     * @property chunkSeq "This chunk's sequence number; indexing is from zero."
+     * @property endsInField the text ended before the 50th byte (a NUL or a truncated payload), which on a chunk
+     * "is taken to mean this was the last chunk"; false when all 50 bytes are text.
+     */
+    data class StatusText(
+        val severity: Int,
+        val text: String,
+        val id: Int,
+        val chunkSeq: Int,
+        val endsInField: Boolean,
+    ) : MavlinkMessage
+
+    /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.
      *

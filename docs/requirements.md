@@ -71,6 +71,12 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-038 | The operator shall be able to export a recording, by sharing it or saving a copy on the device, and import a .tlog for replay; an imported file is untrusted input and shall never crash the app. | T, S |
 | REQ-039 | The GCS shall keep its flight recordings within 256 MiB, deleting the oldest when a recording opens and when it closes, and never the one being recorded nor the last one closed, which it remembers across restarts. | T |
 
+## v0.4 — Commands and pre-flight
+
+| ID | Requirement | Method |
+|---|---|---|
+| REQ-040 | The codec shall decode STATUSTEXT, including its `id` and `chunk_seq` extension fields, as defined in the MAVLink `common` dialect. | T |
+
 ## Requirement → verification matrix
 
 | ID | Verified by | Status |
@@ -112,6 +118,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-037 | `ReplayClockTest`, `PipelineClockTest`, `TlogDatagramSourceTest`, `LinkSessionReplayTest`, `ReplayPipelineTest`, `SessionChangeTest`, `DefaultReplayRepositoryTest`, `ReplayRuleTest`, `ReplayStateTest`, `RecheckTest`, `HudViewModelReplayTest`, `HudViewModelAlertTest`, `LinkChipStateTest`, `ReplayViewModelTest`, `AlertBannerTest`, `FlightAttentionRuleTest`, `FlightGuardViewModelTest`, `DestinationTest`. **S:** #71 (refused while a live vehicle is connected or armed); #74's SITL session (replayed without the simulator under the REPLAY banner, with no socket bound, HUD values equal to pymavlink's) | Verified |
 | REQ-038 | `ImportRuleTest`, `RecordingRuleTest`, `RecordingScanTest`, `RecordingsFolderTest`, `DefaultRecordingRepositoryTest`, `FlightRecorderTest`, `ClosingOnCancelTest`, `RecordingsViewModelTest`, `ContentImportSourceTest`, `ContentExportTargetTest`, `SizeTextTest`. **S:** #74 (a QGroundControl log imported and replayed; random bytes and a 257 MiB file refused without a crash; shared and saved byte for byte) | Verified |
 | REQ-039 | `RecordingRuleTest`, `FlightRecorderTest`, `LastClosedMarkerTest` | Verified |
+| REQ-040 | `MavlinkDecoderTest`, `MavlinkMessagesTest`, `MavlinkCrcTest` (ArduCopter's real STATUSTEXT and ArduCopter 4.7.2's arming texts, against pymavlink and `mavlink/mavlink` master) | Verified |
 
 ## Known limits
 
@@ -135,3 +142,5 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-037: the GCS failsafe was not triggered in SITL: QGroundControl and Mission Planner kept their HEARTBEATs.
 - REQ-038: delete of the recording in progress and import while recording were checked by hand only.
 - REQ-039: an open recording grows past the limit, about 1.1 kB/s from ArduCopter SITL (256 MiB in some 65 h).
+- REQ-040: a UTF-8 character split between two chunks decodes as U+FFFD in each; ArduPilot's texts are ASCII.
+- REQ-040: the `PreArm:` and `Arm:` frames are derived from ArduCopter's code, not captured (a capture comes with #100 or #102).

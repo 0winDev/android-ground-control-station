@@ -157,6 +157,24 @@ Writes:
   <out>/derived/home-position-lat-past-90.bin   the same with latitude 900000001 (90.0000001 degrees) (#69)
   <out>/derived/home-position-lat-int32-min.bin the same with latitude -2147483648 (INT32_MIN)
   <out>/derived/home-position-null-island.bin   the same with latitude and longitude 0: never a home (#69)
+  <out>/statustext/arming-motors.bin            the first real STATUSTEXT (not derived) of the session:
+                                                "Arming motors", INFO, truncated to LEN 14 without extensions
+  <out>/derived/statustext-prearm.bin           that STATUSTEXT re-packed by pymavlink (same seq, system,
+                                                component) as ArduCopter 4.7.2 reports a failed pre-arm check:
+                                                "PreArm: RC not found", CRITICAL (#96)
+  <out>/derived/statustext-arm.bin              the same as a refused arm: "Arm: RTL mode not armable", CRITICAL
+  <out>/derived/statustext-full.bin             the same with 50 distinct text bytes and no NUL, severity WARNING,
+                                                id 0x1234 and chunk_seq 7: nothing truncated, LEN 54
+  <out>/derived/statustext-chunk-1.bin          a text longer than 50 bytes split as ArduPilot does
+  <out>/derived/statustext-chunk-2.bin          (GCS_Common.cpp): id 1, chunk_seq 0 with the first 50 bytes,
+                                                chunk_seq 1 with the rest, NUL-padded before the extensions
+  <out>/derived/statustext-nul-inside.bin       the same with text bytes after a NUL: the text ends at the NUL
+  <out>/derived/statustext-utf8.bin             the same with a two-byte UTF-8 character and an invalid byte
+  <out>/derived/statustext-empty.bin            the same with no text and severity EMERGENCY: LEN 1, the first
+                                                payload byte is never truncated
+  <out>/derived/statustext-severity-8.bin       the same with severity 8, outside MAV_SEVERITY
+  <out>/statustext/session.tsv                  every MAVLink 2 STATUSTEXT of heartbeat/session.tlog and of
+  <out>/statustext/mission-planner.tsv          tlog/mission-planner.tlog as pymavlink decodes it, in order
   <out>/derived/session-mavlink2-stream.bin     heartbeat/session.tlog's MAVLink 2 frames only, in order, as on
                                                 the wire: what the parser hands out of session-stream.bin
   <out>/derived/heartbeat-corrupted-len-raised.bin
@@ -222,6 +240,7 @@ TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_COMMAND_LONG: "command_long",
     common.MAVLINK_MSG_ID_COMMAND_ACK: "command_ack",
     common.MAVLINK_MSG_ID_HOME_POSITION: "home_position",
+    common.MAVLINK_MSG_ID_STATUSTEXT: "statustext",
 }
 SET_MESSAGE_INTERVAL = common.MAV_CMD_SET_MESSAGE_INTERVAL
 MAV_COMP_ID_MISSIONPLANNER = 190
@@ -374,6 +393,23 @@ HOME_POSITION_MOVED = {"latitude": -353624514, "longitude": 1491663411, "altitud
 HOME_POSITION_LAT_PAST_90 = {"latitude": 900_000_001}
 HOME_POSITION_LAT_INT32_MIN = {"latitude": -(2**31)}
 HOME_POSITION_NULL_ISLAND = {"latitude": 0, "longitude": 0}
+# ArduCopter 4.7.2 (tag Copter-4.7.2): AP_Arming::check_failed sends "PreArm: %s" or, while arming, "Arm: %s" at
+# CRITICAL; AP_Arming_Copter.cpp has "RC not found" and "%s mode not armable", ModeRTL::name() is "RTL".
+ARMING_MOTORS = "Arming motors"
+PREARM_TEXT = b"PreArm: RC not found"
+ARM_TEXT = b"Arm: RTL mode not armable"
+FULL_TEXT = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx"
+CHUNKED_TEXT = b"A STATUSTEXT longer than fifty bytes goes out in chunks of fifty"
+NUL_INSIDE_TEXT = b"ab\x00cd"
+UTF8_TEXT = b"caf\xc3\xa9 \xff ok"  # U+00E9 as two bytes, then 0xFF, never valid in UTF-8
+TEXT_LENGTH = 50
+CHUNK_ID = 1
+FULL_TEXT_ID = 0x1234
+FULL_TEXT_CHUNK_SEQ = 7
+FULL_STATUSTEXT_LENGTH = 54
+UTF8_DECODED = "caf\u00e9 \ufffd ok"
+OUTSIDE_SEVERITY = 8
+FIRST_CHUNK_LENGTH = 52  # id 1 is 01 00: its zero high byte goes with the zero chunk_seq
 # A corrupted LEN, the checksum left as it was: the largest LEN makes a receiver wait for a maximum frame, the
 # smallest valid one cuts the frame short.
 CORRUPTED_LEN_RAISED = 255
@@ -487,6 +523,36 @@ def with_message_fields(frame: bytes, **fields) -> bytes:
     values.update(fields)
     copy = type(msg)(*[values[name] for name in msg.get_fieldnames()])
     return bytes(copy.pack(mav))
+
+
+def statustext_with(frame: bytes, text: bytes, severity: int = None, text_id: int = 0, chunk_seq: int = 0) -> bytes:
+    """The STATUSTEXT re-packed by pymavlink with another text, given as bytes since pymavlink packs a char array
+    from bytes; seq, system and component unchanged, the severity too unless given."""
+    msg = decode(frame)
+    mav = common.MAVLink(io.BytesIO(), srcSystem=msg.get_srcSystem(), srcComponent=msg.get_srcComponent())
+    mav.seq = msg.get_seq()
+    copy = common.MAVLink_statustext_message(
+        msg.severity if severity is None else severity, text, text_id, chunk_seq
+    )
+    return bytes(copy.pack(mav))
+
+
+def statustext_table(log_path: Path) -> str:
+    """Every MAVLink 2 STATUSTEXT of the log as pymavlink decodes it, one per line (tab-separated, header first).
+    ends_in_field comes from the wire bytes: a NUL in the text field, or a payload cut before its end."""
+    log = mavutil.mavlink_connection(str(log_path), dialect="common", robust_parsing=True)
+    lines = ["severity\ttext\tid\tchunk_seq\tends_in_field"]
+    while True:
+        msg = log.recv_match(type="STATUSTEXT", blocking=False)
+        if msg is None:
+            return "\n".join(lines) + "\n"
+        frame = bytes(msg.get_msgbuf())
+        if frame[0] != START_MARKER:
+            continue
+        field = frame[HEADER_LENGTH + 1:HEADER_LENGTH + min(frame[1], 1 + TEXT_LENGTH)]
+        ends_in_field = len(field) < TEXT_LENGTH or 0 in field
+        assert "\t" not in msg.text and msg.text.isascii(), "the table holds plain ASCII texts only"
+        lines.append(f"{msg.severity}\t{msg.text}\t{msg.id}\t{msg.chunk_seq}\t{str(ends_in_field).lower()}")
 
 
 def session_frame(session: Path, message_type: str, matches) -> bytes:
@@ -705,7 +771,10 @@ def main() -> None:
     command_dir.mkdir(parents=True, exist_ok=True)
     telemetry_dir = args.out / "telemetry"
     telemetry_dir.mkdir(parents=True, exist_ok=True)
+    statustext_dir = args.out / "statustext"
+    statustext_dir.mkdir(parents=True, exist_ok=True)
     session = args.out / SESSION
+    arming_motors = session_frame(session, "STATUSTEXT", lambda m: m.text == ARMING_MOTORS)
     interval = session_frame(session, "COMMAND_LONG", lambda m: m.command == SET_MESSAGE_INTERVAL)
     interval_ack = session_frame(session, "COMMAND_ACK", lambda m: m.command == SET_MESSAGE_INTERVAL)
     no_extensions = {"progress": 0, "result_param2": 0, "target_system": 0, "target_component": 0}
@@ -830,6 +899,26 @@ def main() -> None:
             home_position, **HOME_POSITION_LAT_INT32_MIN
         ),
         derived_dir / "home-position-null-island.bin": with_message_fields(home_position, **HOME_POSITION_NULL_ISLAND),
+        statustext_dir / "arming-motors.bin": arming_motors,
+        derived_dir / "statustext-prearm.bin": statustext_with(
+            arming_motors, PREARM_TEXT, severity=common.MAV_SEVERITY_CRITICAL
+        ),
+        derived_dir / "statustext-arm.bin": statustext_with(arming_motors, ARM_TEXT, severity=common.MAV_SEVERITY_CRITICAL),
+        derived_dir / "statustext-full.bin": statustext_with(
+            arming_motors, FULL_TEXT, common.MAV_SEVERITY_WARNING, FULL_TEXT_ID, FULL_TEXT_CHUNK_SEQ
+        ),
+        derived_dir / "statustext-chunk-1.bin": statustext_with(
+            arming_motors, CHUNKED_TEXT[:TEXT_LENGTH], text_id=CHUNK_ID, chunk_seq=0
+        ),
+        derived_dir / "statustext-chunk-2.bin": statustext_with(
+            arming_motors, CHUNKED_TEXT[TEXT_LENGTH:], text_id=CHUNK_ID, chunk_seq=1
+        ),
+        derived_dir / "statustext-nul-inside.bin": statustext_with(arming_motors, NUL_INSIDE_TEXT),
+        derived_dir / "statustext-utf8.bin": statustext_with(arming_motors, UTF8_TEXT),
+        derived_dir / "statustext-empty.bin": statustext_with(arming_motors, b"", severity=common.MAV_SEVERITY_EMERGENCY),
+        derived_dir / "statustext-severity-8.bin": statustext_with(arming_motors, ARMING_MOTORS.encode(), OUTSIDE_SEVERITY),
+        statustext_dir / "session.tsv": statustext_table(session).encode(),
+        statustext_dir / "mission-planner.tsv": statustext_table(args.out / "tlog" / "mission-planner.tlog").encode(),
         derived_dir / "session-mavlink2-stream.bin": session_mavlink2_stream(session),
         derived_dir / "heartbeat-corrupted-len-raised.bin": with_length(source, CORRUPTED_LEN_RAISED),
         derived_dir / "heartbeat-corrupted-len-lowered.bin": with_length(source, CORRUPTED_LEN_LOWERED),
@@ -968,6 +1057,47 @@ def main() -> None:
         assert all(same(getattr(derived, field), value) for field, value in fields.items()), name
         unchanged = [field for field in real_home.get_fieldnames() if field not in fields]
         assert all(same(getattr(derived, field), getattr(real_home, field)) for field in unchanged), name
+    real_text = decode(arming_motors)
+    assert arming_motors[1] == len(ARMING_MOTORS) + 1 and (real_text.id, real_text.chunk_seq) == (0, 0)
+    for name, text, severity, text_id, chunk_seq, length in (
+        ("statustext-prearm.bin", PREARM_TEXT, common.MAV_SEVERITY_CRITICAL, 0, 0, len(PREARM_TEXT) + 1),
+        ("statustext-arm.bin", ARM_TEXT, common.MAV_SEVERITY_CRITICAL, 0, 0, len(ARM_TEXT) + 1),
+        (
+            "statustext-full.bin",
+            FULL_TEXT,
+            common.MAV_SEVERITY_WARNING,
+            FULL_TEXT_ID,
+            FULL_TEXT_CHUNK_SEQ,
+            FULL_STATUSTEXT_LENGTH,
+        ),
+        ("statustext-chunk-1.bin", CHUNKED_TEXT[:TEXT_LENGTH], real_text.severity, CHUNK_ID, 0, FIRST_CHUNK_LENGTH),
+        (
+            "statustext-chunk-2.bin",
+            CHUNKED_TEXT[TEXT_LENGTH:],
+            real_text.severity,
+            CHUNK_ID,
+            1,
+            FULL_STATUSTEXT_LENGTH,
+        ),
+        ("statustext-nul-inside.bin", NUL_INSIDE_TEXT[:2], real_text.severity, 0, 0, len(NUL_INSIDE_TEXT) + 1),
+        ("statustext-empty.bin", b"", common.MAV_SEVERITY_EMERGENCY, 0, 0, 1),
+        ("statustext-severity-8.bin", ARMING_MOTORS.encode(), OUTSIDE_SEVERITY, 0, 0, len(ARMING_MOTORS) + 1),
+    ):
+        frame = outputs[derived_dir / name]
+        assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
+        assert frame[2:7] == arming_motors[2:7], f"{name}: header fields must stay the real frame's"
+        derived = decode(frame)
+        assert (derived.severity, derived.text, derived.id, derived.chunk_seq) == (
+            severity,
+            text.decode("ascii"),
+            text_id,
+            chunk_seq,
+        ), name
+    # pymavlink does not decode the text as UTF-8 (U+00E9 comes out as two replacement characters), so the
+    # payload is checked as bytes; the expected text follows common.xml ("UTF-8 encoded").
+    utf8 = outputs[derived_dir / "statustext-utf8.bin"]
+    assert utf8[HEADER_LENGTH + 1:HEADER_LENGTH + utf8[1]] == UTF8_TEXT
+    assert UTF8_TEXT.decode("utf-8", "replace") == UTF8_DECODED, "CPython's UTF-8 codec is the reference"
     mavlink2 = outputs[derived_dir / "session-mavlink2-stream.bin"]
     mav = common.MAVLink(io.BytesIO())
     mav.robust_parsing = True
@@ -1030,6 +1160,16 @@ def main() -> None:
         derived_dir / "home-position-lat-past-90.bin",
         derived_dir / "home-position-lat-int32-min.bin",
         derived_dir / "home-position-null-island.bin",
+        statustext_dir / "arming-motors.bin",
+        derived_dir / "statustext-prearm.bin",
+        derived_dir / "statustext-arm.bin",
+        derived_dir / "statustext-full.bin",
+        derived_dir / "statustext-chunk-1.bin",
+        derived_dir / "statustext-chunk-2.bin",
+        derived_dir / "statustext-nul-inside.bin",
+        derived_dir / "statustext-utf8.bin",
+        derived_dir / "statustext-empty.bin",
+        derived_dir / "statustext-severity-8.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")

@@ -67,7 +67,7 @@ class MavlinkParserRawSessionTest {
 
         // Counts printed by tools/fixtures/derive_fixtures.py (pymavlink).
         const val SESSION_MAVLINK2_FRAMES = 5_522
-        const val SESSION_UNKNOWN = 3_609L
+        const val SESSION_UNKNOWN = 3_607L
         const val SESSION_MAVLINK1_BYTES = 82L
         const val SEED = 8
         const val MAX_DATAGRAM = 300
