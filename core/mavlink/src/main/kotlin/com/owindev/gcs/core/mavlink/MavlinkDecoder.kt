@@ -6,6 +6,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
+import com.owindev.gcs.core.mavlink.MavlinkMessage.StatusText
 import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
@@ -147,6 +148,16 @@ object MavlinkDecoder {
     private const val HOME_APPROACH_Z_OFFSET = 48
     private const val HOME_TIME_USEC_OFFSET = 52
 
+    private const val STATUSTEXT_ID = 253
+
+    // STATUSTEXT: every base field is 1 byte, so XML order is wire order; the extensions id (uint16) and
+    // chunk_seq follow.
+    private const val TEXT_SEVERITY_OFFSET = 0
+    private const val TEXT_OFFSET = 1
+    private const val TEXT_LENGTH = 50
+    private const val TEXT_ID_OFFSET = 51
+    private const val TEXT_CHUNK_SEQ_OFFSET = 53
+
     fun decode(frame: MavlinkFrame): MavlinkMessage {
         val fullLength = MavlinkMessages.fullLengthOf(frame.messageId)
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
@@ -159,6 +170,7 @@ object MavlinkDecoder {
             VFR_HUD_ID -> vfrHud(frame.payload)
             COMMAND_ACK_ID -> commandAck(frame.payload)
             HOME_POSITION_ID -> homePosition(frame.payload)
+            STATUSTEXT_ID -> statusText(frame.payload)
             else -> Undecoded(frame.messageId, frame.payload.copyOf(fullLength))
         }
     }
@@ -265,5 +277,12 @@ object MavlinkDecoder {
         approachY = payload.float(HOME_APPROACH_Y_OFFSET),
         approachZ = payload.float(HOME_APPROACH_Z_OFFSET),
         timeUsec = payload.uint64(HOME_TIME_USEC_OFFSET),
+    )
+
+    private fun statusText(payload: ByteArray) = StatusText(
+        severity = payload.uint8(TEXT_SEVERITY_OFFSET),
+        text = payload.text(TEXT_OFFSET, TEXT_LENGTH),
+        id = payload.uint16(TEXT_ID_OFFSET),
+        chunkSeq = payload.uint8(TEXT_CHUNK_SEQ_OFFSET),
     )
 }

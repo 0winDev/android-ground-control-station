@@ -8,6 +8,7 @@ private const val INT32_BYTES = 4
 private const val UINT32_BYTES = 4
 private const val BYTE_MASK = 0xFF
 private const val UINT32_MASK = 0xFFFF_FFFFL
+private const val NUL: Byte = 0
 
 /** A byte past the end of a truncated payload reads as zero, which restores it without copying. */
 internal fun ByteArray.uint8(offset: Int): Int = if (offset < size) this[offset].toInt() and BYTE_MASK else 0
@@ -34,6 +35,19 @@ internal fun ByteArray.uint64(offset: Int): Long = (uint32(offset + UINT32_BYTES
 
 /** Little-endian IEEE-754 single-precision float: its 32 bits read as an int32, then reinterpreted. */
 internal fun ByteArray.float(offset: Int): Float = Float.fromBits(int32(offset))
+
+/**
+ * A `char[length]` field at [offset] as UTF-8 text, ending at the first NUL, the end of the field or the end of a
+ * truncated payload; each invalid sequence becomes U+FFFD, so it never throws.
+ */
+internal fun ByteArray.text(offset: Int, length: Int): String {
+    val fieldEnd = minOf(offset + length, size)
+    var end = offset
+    while (end < fieldEnd && this[end] != NUL) {
+        end++
+    }
+    return if (end > offset) decodeToString(offset, end) else ""
+}
 
 /** The [bytes] bytes at [offset], least significant first, as the low bits of an [Int]. */
 private fun ByteArray.littleEndian(offset: Int, bytes: Int): Int {
