@@ -8,8 +8,8 @@ package com.owindev.gcs.core.mavlink
  * (GLOBAL_POSITION_INT) and `common.xml` (the others), which includes both, in
  * https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked against
  * `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK (#35), ATTITUDE, GLOBAL_POSITION_INT and
- * VFR_HUD (#37), SYS_STATUS and GPS_RAW_INT (#38), HOME_POSITION (#66) and STATUSTEXT (#96) computed with
- * pymavlink's `mavparse` from both; PARAM_REQUEST_READ and PARAM_VALUE (#97) from pymavlink 2.4.50's `common.xml`.
+ * VFR_HUD (#37), SYS_STATUS and GPS_RAW_INT (#38), HOME_POSITION (#66), STATUSTEXT (#96), PARAM_REQUEST_READ and
+ * PARAM_VALUE (#97) computed with pymavlink's `mavparse` from both.
  * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG and PARAM_REQUEST_READ are
  * only sent by the codec, so a received one stays undecoded.
  */

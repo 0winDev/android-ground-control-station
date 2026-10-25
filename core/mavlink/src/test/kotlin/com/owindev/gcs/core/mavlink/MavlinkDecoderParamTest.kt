@@ -130,6 +130,23 @@ class MavlinkDecoderParamTest {
         )
     }
 
+    @Tag("REQ-013")
+    @Tag("REQ-041")
+    @Test
+    fun `GIVEN a PARAM_VALUE truncated before its id WHEN decoding THEN the id is empty and the counters are kept`() {
+        val frame = parsedFrame(PARAM_VALUE_EMPTY_ID)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo ParamValue(
+            paramId = "",
+            value = SITL_THST_HOVER,
+            type = 0,
+            count = SITL_PARAM_COUNT,
+            index = UINT16_MAX,
+        )
+    }
+
     private fun parsedFrame(fixture: String): MavlinkFrame =
         MavlinkParser(MavlinkMessages).parse(readFixture(fixture)).single()
 
@@ -150,6 +167,7 @@ class MavlinkDecoderParamTest {
         const val PARAM_VALUE_FIELDS = "derived/param-value-fields.bin"
         const val PARAM_VALUE_NUL_INSIDE = "derived/param-value-nul-inside.bin"
         const val PARAM_VALUE_TYPE_0 = "derived/param-value-type-0.bin"
+        const val PARAM_VALUE_EMPTY_ID = "derived/param-value-empty-id.bin"
         const val PARAM_ID_COLUMN = 0
         const val PARAM_VALUE_COLUMN = 1
         const val PARAM_TYPE_COLUMN = 2
@@ -162,6 +180,6 @@ class MavlinkDecoderParamTest {
         const val MAV_PARAM_TYPE_UINT32 = 5
         const val MAV_PARAM_TYPE_REAL32 = 9
         const val UINT16_MAX = 65_535
-        const val TAB = "	"
+        const val TAB = "\t"
     }
 }

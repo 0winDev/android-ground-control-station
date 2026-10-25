@@ -218,17 +218,13 @@ object MavlinkDecoder {
         onboardControlSensorsHealthExtended = payload.uint32(SYS_SENSORS_HEALTH_EXTENDED_OFFSET),
     )
 
-    private fun paramValue(payload: ByteArray): ParamValue {
-        val idEnd = payload.textEnd(PARAM_ID_OFFSET, PARAM_ID_LENGTH)
-        return ParamValue(
-            // Each invalid UTF-8 sequence becomes U+FFFD: decodeToString never throws on content.
-            paramId = if (idEnd > PARAM_ID_OFFSET) payload.decodeToString(PARAM_ID_OFFSET, idEnd) else "",
-            value = payload.float(PARAM_VALUE_OFFSET),
-            type = payload.uint8(PARAM_TYPE_OFFSET),
-            count = payload.uint16(PARAM_COUNT_OFFSET),
-            index = payload.uint16(PARAM_INDEX_OFFSET),
-        )
-    }
+    private fun paramValue(payload: ByteArray) = ParamValue(
+        paramId = payload.utf8(PARAM_ID_OFFSET, payload.textEnd(PARAM_ID_OFFSET, PARAM_ID_LENGTH)),
+        value = payload.float(PARAM_VALUE_OFFSET),
+        type = payload.uint8(PARAM_TYPE_OFFSET),
+        count = payload.uint16(PARAM_COUNT_OFFSET),
+        index = payload.uint16(PARAM_INDEX_OFFSET),
+    )
 
     private fun gpsRawInt(payload: ByteArray) = GpsRawInt(
         timeUsec = payload.uint64(GPS_TIME_USEC_OFFSET),
@@ -310,8 +306,7 @@ object MavlinkDecoder {
         val textEnd = payload.textEnd(TEXT_OFFSET, TEXT_LENGTH)
         return StatusText(
             severity = payload.uint8(TEXT_SEVERITY_OFFSET),
-            // Each invalid UTF-8 sequence becomes U+FFFD: decodeToString never throws on content.
-            text = if (textEnd > TEXT_OFFSET) payload.decodeToString(TEXT_OFFSET, textEnd) else "",
+            text = payload.utf8(TEXT_OFFSET, textEnd),
             id = payload.uint16(TEXT_ID_OFFSET),
             chunkSeq = payload.uint8(TEXT_CHUNK_SEQ_OFFSET),
             endsInField = textEnd < TEXT_OFFSET + TEXT_LENGTH,

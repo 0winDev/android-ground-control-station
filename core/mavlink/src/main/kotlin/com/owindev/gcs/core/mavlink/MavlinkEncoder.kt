@@ -86,8 +86,9 @@ object MavlinkEncoder {
     private const val PARAM_TARGET_COMPONENT_OFFSET = 3
     private const val PARAM_ID_OFFSET = 4
 
-    /** "Send -1 to use the param ID field as identifier (else the param id will be ignored)" (`common.xml`). */
+    // "Send -1 to use the param ID field as identifier (else the param id will be ignored)" (`common.xml`).
     private const val PARAM_INDEX_BY_NAME = -1
+    private const val INT16_BYTES = 2
 
     /**
      * Encodes [heartbeat] as one frame from [systemId]/[componentId] with sequence number [sequence].
@@ -169,7 +170,7 @@ object MavlinkEncoder {
 
     private fun paramRequestReadPayload(request: ParamRequestRead): ByteArray {
         val payload = ByteArray(PARAM_REQUEST_READ_LENGTH)
-        payload.putLittleEndian(PARAM_INDEX_OFFSET, PARAM_INDEX_BY_NAME.toLong(), UINT16_BYTES)
+        payload.putLittleEndian(PARAM_INDEX_OFFSET, PARAM_INDEX_BY_NAME.toLong(), INT16_BYTES)
         payload.putUint8(PARAM_TARGET_SYSTEM_OFFSET, request.targetSystem, "target_system")
         payload.putUint8(PARAM_TARGET_COMPONENT_OFFSET, request.targetComponent, "target_component")
         // ParamRequestRead holds only ASCII, so each character is one byte; the zeroed array is the NUL padding.

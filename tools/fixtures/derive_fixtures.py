@@ -185,6 +185,8 @@ Writes:
   <out>/derived/param-value-nul-inside.bin      the same with id bytes after a NUL: the id ends at the NUL
   <out>/derived/param-value-type-0.bin          the same with param_type 0: it and the id's NUL padding are
                                                 truncated
+  <out>/derived/param-value-empty-id.bin        the same with no id and param_type 0: LEN 8, the id starts past the
+                                                payload
   <out>/derived/param-request-read-batt-low-volt.bin
                                                 a PARAM_REQUEST_READ from the GCS (255/190) to 1/1 for
                                                 BATT_LOW_VOLT, param_index -1, built by pymavlink: LEN 17
@@ -453,6 +455,7 @@ PARAM_VALUE_FIELDS = {
 }
 PARAM_VALUE_NUL_INSIDE = {"param_id": b"AB\x00CD"}
 PARAM_VALUE_TYPE_0 = {"param_id": b"BATT_LOW_VOLT", "param_type": 0}  # 0 is outside MAV_PARAM_TYPE
+PARAM_VALUE_EMPTY_ID = {"param_id": b"", "param_type": 0}
 PARAM_REQUEST_SEQ = 42
 SIXTEEN_CHAR_NAME = b"INS_GYR1_CALTEMP"
 ONE_CHAR_NAME = b"A"
@@ -999,6 +1002,7 @@ def main() -> None:
         derived_dir / "param-value-fields.bin": with_message_fields(hover, **PARAM_VALUE_FIELDS),
         derived_dir / "param-value-nul-inside.bin": with_message_fields(hover, **PARAM_VALUE_NUL_INSIDE),
         derived_dir / "param-value-type-0.bin": with_message_fields(hover, **PARAM_VALUE_TYPE_0),
+        derived_dir / "param-value-empty-id.bin": with_message_fields(hover, **PARAM_VALUE_EMPTY_ID),
         derived_dir / "param-request-read-batt-low-volt.bin": param_request_read(BATT_LOW_VOLT["param_id"]),
         derived_dir / "param-request-read-16-chars.bin": param_request_read(SIXTEEN_CHAR_NAME),
         derived_dir / "param-request-read-1-char.bin": param_request_read(ONE_CHAR_NAME),
@@ -1197,6 +1201,7 @@ def main() -> None:
             PARAM_VALUE_TYPE_0,
             PARAM_VALUE_ID_OFFSET + len(PARAM_VALUE_TYPE_0["param_id"]),
         ),
+        ("param-value-empty-id.bin", PARAM_VALUE_EMPTY_ID, PARAM_VALUE_ID_OFFSET),
     ):
         frame = outputs[derived_dir / name]
         assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
@@ -1296,6 +1301,7 @@ def main() -> None:
         derived_dir / "param-value-fields.bin",
         derived_dir / "param-value-nul-inside.bin",
         derived_dir / "param-value-type-0.bin",
+        derived_dir / "param-value-empty-id.bin",
         derived_dir / "param-request-read-batt-low-volt.bin",
         derived_dir / "param-request-read-16-chars.bin",
         derived_dir / "param-request-read-1-char.bin",
