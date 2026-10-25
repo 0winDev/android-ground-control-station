@@ -46,6 +46,7 @@ pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and m
 | GLOBAL_POSITION_INT (33) | `standard.xml` | 104 |
 | VFR_HUD (74) | `common.xml` | 20 |
 | GPS_RAW_INT (24) | `common.xml` | 24 |
+| STATUSTEXT (253) | `common.xml` | 83 |
 
 ATTITUDE, GLOBAL_POSITION_INT and VFR_HUD were also computed with `mavparse` from `common.xml` and
 `standard.xml` on `mavlink/mavlink` master (#37), and SYS_STATUS and GPS_RAW_INT from `common.xml` on master
@@ -176,9 +177,10 @@ unknown/scaled-pressure.bin             fd 0e 00 00 3b 01 01 1d 00 00 e9 0f 06 0
 `derived/session-stream.bin` as a parser input (counts from pymavlink, printed by `derive_fixtures.py`): 5,524 frames, 5,522 MAVLink 2 frames (all incompat `0x00`, 39 message
 IDs including ArduPilot-dialect ones), 133 of them HEARTBEAT, plus 2 MAVLink 1 frames (`0xFE`, COMMAND_LONG, 41 bytes each, no `0xFD` inside). With a
 lookup that knows only HEARTBEAT, the other 5,389 MAVLink 2 frames are unknown message IDs.
-With the full message table (#10, #35, #37, #38, #66): 133 HEARTBEAT, 325 SYS_STATUS, 325 GPS_RAW_INT, 260
+With the full message table (#10, #35, #37, #38, #66, #96): 133 HEARTBEAT, 325 SYS_STATUS, 325 GPS_RAW_INT, 260
 ATTITUDE, 130 GLOBAL_POSITION_INT, 130 SERVO_OUTPUT_RAW, 260 VFR_HUD, 325 POWER_STATUS, 11 COMMAND_LONG, 13
-COMMAND_ACK and 1 HOME_POSITION frames are known, and the other 3,609 MAVLink 2 frames are unknown message IDs.
+COMMAND_ACK, 1 HOME_POSITION and 2 STATUSTEXT frames are known, and the other 3,607 MAVLink 2 frames are unknown
+message IDs.
 
 ## `command/` and the COMMAND fixtures in `derived/` (#35)
 
@@ -483,6 +485,51 @@ derived/home-position-null-island.bin   fd 38 00 00 72 01 01 f2 00 00 00 00 00 0
                                         82 62 36 3c 06 bc 14 bc 0a d7 a3 3c 00 00 c0 7f 00 00 c0 7f 00 00
                                         c0 7f 00 00 c0 7f 00 00 00 00 00 00 00 00 00 00 00 00 3d 98 76 1a
                                         ee 06
+```
+
+## STATUSTEXT (#96)
+
+Extracted from `heartbeat/session.tlog` and re-packed by `py tools/fixtures/derive_fixtures.py` (pymavlink 2.4.50);
+`mavparse` (`common.xml` master `eec8824`): CRC_EXTRA 83, LEN 51, 54 with `id` at 51 and `chunk_seq` at 53. Every real
+STATUSTEXT in `heartbeat/session.tlog` (2) and `tlog/mission-planner.tlog` (23) is truncated with no extension, and
+none is a `PreArm:` or `Arm:`, so those two are derived with ArduCopter 4.7.2's texts (tag `Copter-4.7.2`:
+`AP_Arming::check_failed` in `AP_Arming.cpp`, `AP_Arming_Copter.cpp`, `ModeRTL::name()` in `mode.h`).
+
+| File | Origin | What it proves |
+|---|---|---|
+| `statustext/arming-motors.bin` | the real frame (seq 115, ArduCopter V4.7.2-beta1), INFO, LEN 14 | a real frame, text and extensions truncated (REQ-013, REQ-040) |
+| `derived/statustext-prearm.bin` | `PreArm: RC not found`, CRITICAL, LEN 21 | a failed pre-arm check as ArduCopter sends it (REQ-040) |
+| `derived/statustext-arm.bin` | `Arm: RTL mode not armable`, CRITICAL, LEN 26 | a refused arm as ArduCopter sends it (REQ-040) |
+| `derived/statustext-full.bin` | 50 distinct text bytes, no NUL, WARNING, `id` 0x1234, `chunk_seq` 7, LEN 54 | every offset, the uint16 byte order, a text without NUL (REQ-040) |
+| `derived/statustext-chunk-1.bin` | the first 50 bytes of a longer text, `id` 1, `chunk_seq` 0, LEN 52 | a first chunk as ArduPilot splits it (`GCS_Common.cpp`) (REQ-040) |
+| `derived/statustext-chunk-2.bin` | the rest, NUL-padded, `id` 1, `chunk_seq` 1, LEN 54 | the text ends at the NUL before the extensions (REQ-040) |
+| `derived/statustext-nul-inside.bin` | `ab`, NUL, `cd`, LEN 6 | the bytes after a NUL are not text (REQ-040) |
+| `derived/statustext-utf8.bin` | `caf`, U+00E9 as `c3 a9`, ` `, `ff`, ` ok`, LEN 11 | UTF-8 decoding, an invalid byte as U+FFFD (REQ-012, REQ-040) |
+
+pymavlink reads the text byte by byte, not as UTF-8 (`statustext-utf8.bin` comes out as `caf�� � ok`), so for
+that fixture the expected text is `café � ok`, from `common.xml` ("UTF-8 encoded"), and the script checks its bytes.
+
+Raw bytes:
+
+```
+statustext/arming-motors.bin      fd 0e 00 00 73 01 01 fd 00 00 06 41 72 6d 69 6e 67 20 6d 6f 74 6f
+                                  72 73 83 50
+derived/statustext-prearm.bin     fd 15 00 00 73 01 01 fd 00 00 02 50 72 65 41 72 6d 3a 20 52 43 20
+                                  6e 6f 74 20 66 6f 75 6e 64 af d7
+derived/statustext-arm.bin        fd 1a 00 00 73 01 01 fd 00 00 02 41 72 6d 3a 20 52 54 4c 20 6d 6f
+                                  64 65 20 6e 6f 74 20 61 72 6d 61 62 6c 65 08 fa
+derived/statustext-full.bin       fd 36 00 00 73 01 01 fd 00 00 04 41 42 43 44 45 46 47 48 49 4a 4b
+                                  4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 61 62 63 64 65 66 67
+                                  68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76 77 78 34 12 07 b8 26
+derived/statustext-chunk-1.bin    fd 34 00 00 73 01 01 fd 00 00 06 41 20 53 54 41 54 55 53 54 45 58
+                                  54 20 6c 6f 6e 67 65 72 20 74 68 61 6e 20 66 69 66 74 79 20 62 79
+                                  74 65 73 20 67 6f 65 73 20 6f 75 74 20 69 6e 20 63 01 e6 7f
+derived/statustext-chunk-2.bin    fd 36 00 00 73 01 01 fd 00 00 06 68 75 6e 6b 73 20 6f 66 20 66 69
+                                  66 74 79 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                                  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 01 27 a9
+derived/statustext-nul-inside.bin fd 06 00 00 73 01 01 fd 00 00 06 61 62 00 63 64 81 a2
+derived/statustext-utf8.bin       fd 0b 00 00 73 01 01 fd 00 00 06 63 61 66 c3 a9 20 ff 20 6f 6b a3
+                                  26
 ```
 
 ## Raw frames for the flight log (#67)
