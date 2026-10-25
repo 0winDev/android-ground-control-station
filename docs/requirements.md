@@ -76,6 +76,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | ID | Requirement | Method |
 |---|---|---|
 | REQ-040 | The codec shall decode STATUSTEXT, including its `id` and `chunk_seq` extension fields, as defined in the MAVLink `common` dialect. | T |
+| REQ-041 | The codec shall encode PARAM_REQUEST_READ and decode PARAM_VALUE as defined in the MAVLink `common` dialect. | T |
 
 ## Requirement → verification matrix
 
@@ -119,6 +120,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-038 | `ImportRuleTest`, `RecordingRuleTest`, `RecordingScanTest`, `RecordingsFolderTest`, `DefaultRecordingRepositoryTest`, `FlightRecorderTest`, `ClosingOnCancelTest`, `RecordingsViewModelTest`, `ContentImportSourceTest`, `ContentExportTargetTest`, `SizeTextTest`. **S:** #74 (a QGroundControl log imported and replayed; random bytes and a 257 MiB file refused without a crash; shared and saved byte for byte) | Verified |
 | REQ-039 | `RecordingRuleTest`, `FlightRecorderTest`, `LastClosedMarkerTest` | Verified |
 | REQ-040 | `MavlinkDecoderTest`, `MavlinkMessagesTest`, `MavlinkCrcTest` (ArduCopter's real STATUSTEXT and ArduCopter 4.7.2's arming texts, against pymavlink and `mavlink/mavlink` master) | Verified |
+| REQ-041 | `MavlinkEncoderTest`, `ParamRequestReadTest`, `MavlinkDecoderParamTest`, `MavlinkDecoderTest`, `MavlinkMessagesTest`, `MavlinkCrcTest` (ArduCopter's real PARAM_VALUE and pymavlink's PARAM_REQUEST_READ) | Verified |
 
 ## Known limits
 
@@ -144,3 +146,4 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-039: an open recording grows past the limit, about 1.1 kB/s from ArduCopter SITL (256 MiB in some 65 h).
 - REQ-040: a UTF-8 character split between two chunks decodes as U+FFFD in each; ArduPilot's texts are ASCII.
 - REQ-040: the `PreArm:` and `Arm:` frames are derived from ArduCopter's code, not captured (a capture comes with #100 or #102).
+- REQ-041: PARAM_REQUEST_READ is checked against pymavlink only; ArduCopter's answer to it is checked with SITL in #101.
