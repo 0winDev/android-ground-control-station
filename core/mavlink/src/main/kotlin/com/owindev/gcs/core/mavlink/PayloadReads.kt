@@ -37,16 +37,16 @@ internal fun ByteArray.uint64(offset: Int): Long = (uint32(offset + UINT32_BYTES
 internal fun ByteArray.float(offset: Int): Float = Float.fromBits(int32(offset))
 
 /**
- * A `char[length]` field at [offset] as UTF-8 text, ending at the first NUL, the end of the field or the end of a
- * truncated payload; each invalid sequence becomes U+FFFD, so it never throws.
+ * Where the text of a `char[length]` field at [offset] ends: at the first NUL, the end of the field or the end of a
+ * truncated payload, whichever comes first.
  */
-internal fun ByteArray.text(offset: Int, length: Int): String {
+internal fun ByteArray.textEnd(offset: Int, length: Int): Int {
     val fieldEnd = minOf(offset + length, size)
     var end = offset
     while (end < fieldEnd && this[end] != NUL) {
         end++
     }
-    return if (end > offset) decodeToString(offset, end) else ""
+    return end
 }
 
 /** The [bytes] bytes at [offset], least significant first, as the low bits of an [Int]. */

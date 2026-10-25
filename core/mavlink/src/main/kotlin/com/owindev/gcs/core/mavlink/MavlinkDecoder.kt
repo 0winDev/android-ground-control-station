@@ -279,10 +279,15 @@ object MavlinkDecoder {
         timeUsec = payload.uint64(HOME_TIME_USEC_OFFSET),
     )
 
-    private fun statusText(payload: ByteArray) = StatusText(
-        severity = payload.uint8(TEXT_SEVERITY_OFFSET),
-        text = payload.text(TEXT_OFFSET, TEXT_LENGTH),
-        id = payload.uint16(TEXT_ID_OFFSET),
-        chunkSeq = payload.uint8(TEXT_CHUNK_SEQ_OFFSET),
-    )
+    private fun statusText(payload: ByteArray): StatusText {
+        val textEnd = payload.textEnd(TEXT_OFFSET, TEXT_LENGTH)
+        return StatusText(
+            severity = payload.uint8(TEXT_SEVERITY_OFFSET),
+            // Each invalid UTF-8 sequence becomes U+FFFD: decodeToString never throws on content.
+            text = if (textEnd > TEXT_OFFSET) payload.decodeToString(TEXT_OFFSET, textEnd) else "",
+            id = payload.uint16(TEXT_ID_OFFSET),
+            chunkSeq = payload.uint8(TEXT_CHUNK_SEQ_OFFSET),
+            endsInField = textEnd < TEXT_OFFSET + TEXT_LENGTH,
+        )
+    }
 }

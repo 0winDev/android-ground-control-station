@@ -505,9 +505,15 @@ none is a `PreArm:` or `Arm:`, so those two are derived with ArduCopter 4.7.2's 
 | `derived/statustext-chunk-2.bin` | the rest, NUL-padded, `id` 1, `chunk_seq` 1, LEN 54 | the text ends at the NUL before the extensions (REQ-040) |
 | `derived/statustext-nul-inside.bin` | `ab`, NUL, `cd`, LEN 6 | the bytes after a NUL are not text (REQ-040) |
 | `derived/statustext-utf8.bin` | `caf`, U+00E9 as `c3 a9`, ` `, `ff`, ` ok`, LEN 11 | UTF-8 decoding, an invalid byte as U+FFFD (REQ-012, REQ-040) |
+| `derived/statustext-empty.bin` | no text, EMERGENCY, LEN 1 | the shortest frame: the text starts past the payload (REQ-013, REQ-040) |
+| `derived/statustext-severity-8.bin` | `Arming motors`, severity 8, LEN 14 | a severity outside `MAV_SEVERITY` is kept as sent (REQ-040) |
+| `statustext/session.tsv` | the 2 STATUSTEXT of `heartbeat/session.tlog` (`derived/session-stream.bin`) as pymavlink decodes them | every real frame decoded, not only counted (REQ-013, REQ-040) |
+| `statustext/mission-planner.tsv` | the 23 of `tlog/mission-planner.tlog` (`tlog/mission-planner.frames.bin`), 3 from Mission Planner, texts of 15 to 45 bytes | the same over a boot, the longest the closest to 50 bytes (REQ-013, REQ-040) |
 
 pymavlink reads the text byte by byte, not as UTF-8 (`statustext-utf8.bin` comes out as `caf�� � ok`), so for
-that fixture the expected text is `café � ok`, from `common.xml` ("UTF-8 encoded"), and the script checks its bytes.
+that fixture the expected text is `café � ok`, as CPython's UTF-8 codec decodes the bytes with `errors="replace"`
+(`common.xml`: "UTF-8 encoded"); the script checks both. The `ends_in_field` column of the tables comes from the wire
+bytes (a NUL in the text field, or a payload cut before its 50 text bytes), since pymavlink does not expose it.
 
 Raw bytes:
 
@@ -530,6 +536,9 @@ derived/statustext-chunk-2.bin    fd 36 00 00 73 01 01 fd 00 00 06 68 75 6e 6b 7
 derived/statustext-nul-inside.bin fd 06 00 00 73 01 01 fd 00 00 06 61 62 00 63 64 81 a2
 derived/statustext-utf8.bin       fd 0b 00 00 73 01 01 fd 00 00 06 63 61 66 c3 a9 20 ff 20 6f 6b a3
                                   26
+derived/statustext-empty.bin      fd 01 00 00 73 01 01 fd 00 00 00 21 bf
+derived/statustext-severity-8.bin fd 0e 00 00 73 01 01 fd 00 00 08 41 72 6d 69 6e 67 20 6d 6f 74 6f
+                                  72 73 1c b9
 ```
 
 ## Raw frames for the flight log (#67)

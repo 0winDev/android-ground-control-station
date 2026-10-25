@@ -170,6 +170,11 @@ Writes:
                                                 chunk_seq 1 with the rest, NUL-padded before the extensions
   <out>/derived/statustext-nul-inside.bin       the same with text bytes after a NUL: the text ends at the NUL
   <out>/derived/statustext-utf8.bin             the same with a two-byte UTF-8 character and an invalid byte
+  <out>/derived/statustext-empty.bin            the same with no text and severity EMERGENCY: LEN 1, the first
+                                                payload byte is never truncated
+  <out>/derived/statustext-severity-8.bin       the same with severity 8, outside MAV_SEVERITY
+  <out>/statustext/session.tsv                  every MAVLink 2 STATUSTEXT of heartbeat/session.tlog and of
+  <out>/statustext/mission-planner.tsv          tlog/mission-planner.tlog as pymavlink decodes it, in order
   <out>/derived/session-mavlink2-stream.bin     heartbeat/session.tlog's MAVLink 2 frames only, in order, as on
                                                 the wire: what the parser hands out of session-stream.bin
   <out>/derived/heartbeat-corrupted-len-raised.bin
@@ -402,6 +407,8 @@ CHUNK_ID = 1
 FULL_TEXT_ID = 0x1234
 FULL_TEXT_CHUNK_SEQ = 7
 FULL_STATUSTEXT_LENGTH = 54
+UTF8_DECODED = "caf\u00e9 \ufffd ok"
+OUTSIDE_SEVERITY = 8
 FIRST_CHUNK_LENGTH = 52  # id 1 is 01 00: its zero high byte goes with the zero chunk_seq
 # A corrupted LEN, the checksum left as it was: the largest LEN makes a receiver wait for a maximum frame, the
 # smallest valid one cuts the frame short.
@@ -528,6 +535,24 @@ def statustext_with(frame: bytes, text: bytes, severity: int = None, text_id: in
         msg.severity if severity is None else severity, text, text_id, chunk_seq
     )
     return bytes(copy.pack(mav))
+
+
+def statustext_table(log_path: Path) -> str:
+    """Every MAVLink 2 STATUSTEXT of the log as pymavlink decodes it, one per line (tab-separated, header first).
+    ends_in_field comes from the wire bytes: a NUL in the text field, or a payload cut before its end."""
+    log = mavutil.mavlink_connection(str(log_path), dialect="common", robust_parsing=True)
+    lines = ["severity\ttext\tid\tchunk_seq\tends_in_field"]
+    while True:
+        msg = log.recv_match(type="STATUSTEXT", blocking=False)
+        if msg is None:
+            return "\n".join(lines) + "\n"
+        frame = bytes(msg.get_msgbuf())
+        if frame[0] != START_MARKER:
+            continue
+        field = frame[HEADER_LENGTH + 1:HEADER_LENGTH + min(frame[1], 1 + TEXT_LENGTH)]
+        ends_in_field = len(field) < TEXT_LENGTH or 0 in field
+        assert "\t" not in msg.text and msg.text.isascii(), "the table holds plain ASCII texts only"
+        lines.append(f"{msg.severity}\t{msg.text}\t{msg.id}\t{msg.chunk_seq}\t{str(ends_in_field).lower()}")
 
 
 def session_frame(session: Path, message_type: str, matches) -> bytes:
@@ -890,6 +915,10 @@ def main() -> None:
         ),
         derived_dir / "statustext-nul-inside.bin": statustext_with(arming_motors, NUL_INSIDE_TEXT),
         derived_dir / "statustext-utf8.bin": statustext_with(arming_motors, UTF8_TEXT),
+        derived_dir / "statustext-empty.bin": statustext_with(arming_motors, b"", severity=common.MAV_SEVERITY_EMERGENCY),
+        derived_dir / "statustext-severity-8.bin": statustext_with(arming_motors, ARMING_MOTORS.encode(), OUTSIDE_SEVERITY),
+        statustext_dir / "session.tsv": statustext_table(session).encode(),
+        statustext_dir / "mission-planner.tsv": statustext_table(args.out / "tlog" / "mission-planner.tlog").encode(),
         derived_dir / "session-mavlink2-stream.bin": session_mavlink2_stream(session),
         derived_dir / "heartbeat-corrupted-len-raised.bin": with_length(source, CORRUPTED_LEN_RAISED),
         derived_dir / "heartbeat-corrupted-len-lowered.bin": with_length(source, CORRUPTED_LEN_LOWERED),
@@ -1051,6 +1080,8 @@ def main() -> None:
             FULL_STATUSTEXT_LENGTH,
         ),
         ("statustext-nul-inside.bin", NUL_INSIDE_TEXT[:2], real_text.severity, 0, 0, len(NUL_INSIDE_TEXT) + 1),
+        ("statustext-empty.bin", b"", common.MAV_SEVERITY_EMERGENCY, 0, 0, 1),
+        ("statustext-severity-8.bin", ARMING_MOTORS.encode(), OUTSIDE_SEVERITY, 0, 0, len(ARMING_MOTORS) + 1),
     ):
         frame = outputs[derived_dir / name]
         assert frame[1] == length, f"{name}: expected LEN {length}, got {frame[1]}"
@@ -1066,6 +1097,7 @@ def main() -> None:
     # payload is checked as bytes; the expected text follows common.xml ("UTF-8 encoded").
     utf8 = outputs[derived_dir / "statustext-utf8.bin"]
     assert utf8[HEADER_LENGTH + 1:HEADER_LENGTH + utf8[1]] == UTF8_TEXT
+    assert UTF8_TEXT.decode("utf-8", "replace") == UTF8_DECODED, "CPython's UTF-8 codec is the reference"
     mavlink2 = outputs[derived_dir / "session-mavlink2-stream.bin"]
     mav = common.MAVLink(io.BytesIO())
     mav.robust_parsing = True
@@ -1136,6 +1168,8 @@ def main() -> None:
         derived_dir / "statustext-chunk-2.bin",
         derived_dir / "statustext-nul-inside.bin",
         derived_dir / "statustext-utf8.bin",
+        derived_dir / "statustext-empty.bin",
+        derived_dir / "statustext-severity-8.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")

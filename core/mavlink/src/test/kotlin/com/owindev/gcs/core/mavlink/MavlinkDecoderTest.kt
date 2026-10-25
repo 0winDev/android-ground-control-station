@@ -506,7 +506,31 @@ class MavlinkDecoderTest {
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo StatusText(severity = INFO, text = "Arming motors", id = 0, chunkSeq = 0)
+        result shouldBeEqualTo StatusText(
+            severity = INFO,
+            text = "Arming motors",
+            id = 0,
+            chunkSeq = 0,
+            endsInField = true,
+        )
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-040")
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(
+        "derived/session-stream.bin, statustext/session.tsv",
+        "tlog/mission-planner.frames.bin, statustext/mission-planner.tsv",
+    )
+    fun `GIVEN every real STATUSTEXT of a SITL log WHEN decoding THEN each is what pymavlink decodes`(
+        frames: String,
+        expected: String,
+    ) {
+        val parsed = MavlinkParser(MavlinkMessages).parse(readFixture(frames))
+
+        val result = parsed.map { decoder.decode(it) }.filterIsInstance<StatusText>()
+
+        result shouldBeEqualTo statusTextsOf(expected)
     }
 
     @Tag("REQ-040")
@@ -523,7 +547,7 @@ class MavlinkDecoderTest {
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo StatusText(severity = CRITICAL, text = text, id = 0, chunkSeq = 0)
+        result shouldBeEqualTo StatusText(severity = CRITICAL, text = text, id = 0, chunkSeq = 0, endsInField = true)
     }
 
     @Tag("REQ-040")
@@ -538,25 +562,33 @@ class MavlinkDecoderTest {
             text = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx",
             id = 0x1234,
             chunkSeq = 7,
+            endsInField = false,
         )
     }
 
     @Tag("REQ-040")
     @ParameterizedTest(name = "chunk {2}")
     @CsvSource(
-        "derived/statustext-chunk-1.bin, A STATUSTEXT longer than fifty bytes goes out in c, 0",
-        "derived/statustext-chunk-2.bin, hunks of fifty, 1",
+        "derived/statustext-chunk-1.bin, A STATUSTEXT longer than fifty bytes goes out in c, 0, false",
+        "derived/statustext-chunk-2.bin, hunks of fifty, 1, true",
     )
-    fun `GIVEN a chunk of a long STATUSTEXT WHEN decoding THEN has its part of the text, id and chunk_seq`(
+    fun `GIVEN a chunk of a long STATUSTEXT WHEN decoding THEN has its part of the text and whether it is the last`(
         fixture: String,
         text: String,
         chunkSeq: Int,
+        endsInField: Boolean,
     ) {
         val frame = parsedFrame(fixture)
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo StatusText(severity = INFO, text = text, id = CHUNK_ID, chunkSeq = chunkSeq)
+        result shouldBeEqualTo StatusText(
+            severity = INFO,
+            text = text,
+            id = CHUNK_ID,
+            chunkSeq = chunkSeq,
+            endsInField = endsInField,
+        )
     }
 
     @Tag("REQ-040")
@@ -566,7 +598,34 @@ class MavlinkDecoderTest {
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo StatusText(severity = INFO, text = "ab", id = 0, chunkSeq = 0)
+        result shouldBeEqualTo StatusText(severity = INFO, text = "ab", id = 0, chunkSeq = 0, endsInField = true)
+    }
+
+    @Tag("REQ-013")
+    @Tag("REQ-040")
+    @Test
+    fun `GIVEN a STATUSTEXT with no text, truncated to its severity WHEN decoding THEN the text is empty`() {
+        val frame = parsedFrame(STATUSTEXT_EMPTY)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(severity = EMERGENCY, text = "", id = 0, chunkSeq = 0, endsInField = true)
+    }
+
+    @Tag("REQ-040")
+    @Test
+    fun `GIVEN a STATUSTEXT with a severity outside MAV_SEVERITY WHEN decoding THEN it is kept as sent`() {
+        val frame = parsedFrame(STATUSTEXT_SEVERITY_8)
+
+        val result = decoder.decode(frame)
+
+        result shouldBeEqualTo StatusText(
+            severity = OUTSIDE_SEVERITY,
+            text = "Arming motors",
+            id = 0,
+            chunkSeq = 0,
+            endsInField = true,
+        )
     }
 
     @Tag("REQ-012")
@@ -577,7 +636,13 @@ class MavlinkDecoderTest {
 
         val result = decoder.decode(frame)
 
-        result shouldBeEqualTo StatusText(severity = INFO, text = "café � ok", id = 0, chunkSeq = 0)
+        result shouldBeEqualTo StatusText(
+            severity = INFO,
+            text = "caf\u00e9 \ufffd ok",
+            id = 0,
+            chunkSeq = 0,
+            endsInField = true,
+        )
     }
 
     @Tag("REQ-012")
@@ -630,6 +695,18 @@ class MavlinkDecoderTest {
 
     private fun parsedFrame(fixture: String): MavlinkFrame =
         MavlinkParser(MavlinkMessages).parse(readFixture(fixture)).single()
+
+    private fun statusTextsOf(table: String): List<StatusText> =
+        readFixture(table).decodeToString().lines().drop(1).filter { it.isNotEmpty() }.map { line ->
+            val columns = line.split(TAB)
+            StatusText(
+                severity = columns[SEVERITY_COLUMN].toInt(),
+                text = columns[TEXT_COLUMN],
+                id = columns[ID_COLUMN].toInt(),
+                chunkSeq = columns[CHUNK_SEQ_COLUMN].toInt(),
+                endsInField = columns[ENDS_IN_FIELD_COLUMN].toBooleanStrict(),
+            )
+        }
 
     private fun wirePayload(frame: ByteArray): ByteArray =
         frame.copyOfRange(HEADER_LENGTH, HEADER_LENGTH + (frame[LEN_INDEX].toInt() and BYTE_MASK))
@@ -695,10 +772,20 @@ class MavlinkDecoderTest {
         const val STATUSTEXT_FULL = "derived/statustext-full.bin"
         const val STATUSTEXT_NUL_INSIDE = "derived/statustext-nul-inside.bin"
         const val STATUSTEXT_UTF8 = "derived/statustext-utf8.bin"
+        const val STATUSTEXT_EMPTY = "derived/statustext-empty.bin"
+        const val STATUSTEXT_SEVERITY_8 = "derived/statustext-severity-8.bin"
+        const val TAB = "\t"
+        const val EMERGENCY = 0
         const val CRITICAL = 2
         const val WARNING = 4
         const val INFO = 6
         const val CHUNK_ID = 1
+        const val OUTSIDE_SEVERITY = 8
+        const val SEVERITY_COLUMN = 0
+        const val TEXT_COLUMN = 1
+        const val ID_COLUMN = 2
+        const val CHUNK_SEQ_COLUMN = 3
+        const val ENDS_IN_FIELD_COLUMN = 4
 
         // Field values of the COMMAND_ACK fixtures as pymavlink decodes them (see the fixtures README).
         const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
