@@ -2,6 +2,7 @@ package com.owindev.gcs.core.mavlink
 
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamRequestRead
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
 import com.owindev.gcs.core.testing.readFixture
 import org.amshove.kluent.invoking
@@ -280,6 +281,64 @@ class MavlinkEncoderTest {
         result shouldBeEqualTo readFixture(BROADCAST_FRAME)
     }
 
+    @Tag("REQ-041")
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(
+        "BATT_LOW_VOLT, derived/param-request-read-batt-low-volt.bin",
+        "INS_GYR1_CALTEMP, derived/param-request-read-16-chars.bin",
+        "A, derived/param-request-read-1-char.bin",
+    )
+    fun `GIVEN a parameter name WHEN encoding a PARAM_REQUEST_READ THEN the bytes match the pymavlink frame`(
+        paramId: String,
+        fixture: String,
+    ) {
+        val request = paramRequestRead(paramId)
+
+        val result = encoder.encode(PARAM_REQUEST_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, request)
+
+        result shouldBeEqualTo readFixture(fixture)
+    }
+
+    @Tag("REQ-041")
+    @ParameterizedTest(name = "target {0}/{1}")
+    @CsvSource(
+        "-1, 1",
+        "256, 1",
+        "1, -1",
+        "1, 256",
+    )
+    fun `GIVEN a PARAM_REQUEST_READ target out of range WHEN encoding THEN it throws IllegalArgumentException`(
+        targetSystem: Int,
+        targetComponent: Int,
+    ) {
+        val request = ParamRequestRead(targetSystem, targetComponent, BATT_LOW_VOLT)
+
+        val result = invoking { encoder.encode(0, GCS_SYSTEM_ID, GCS_COMPONENT_ID, request) }
+
+        result shouldThrow IllegalArgumentException::class
+    }
+
+    @Tag("REQ-041")
+    @Test
+    fun `GIVEN an encoded PARAM_REQUEST_READ WHEN parsing and decoding it THEN it stays undecoded and zero-filled`() {
+        val request = paramRequestRead(BATT_LOW_VOLT)
+        val pymavlinkPayload = wirePayload(readFixture(PARAM_REQUEST_BATT_LOW_VOLT))
+            .copyOf(PARAM_REQUEST_READ_FULL_LENGTH)
+
+        val result = MavlinkParser(MavlinkMessages)
+            .parse(encoder.encode(PARAM_REQUEST_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, request))
+            .map { frame -> Decoded(frame.sequence, frame.systemId, frame.componentId, MavlinkDecoder.decode(frame)) }
+
+        result shouldBeEqualTo listOf(
+            Decoded(
+                PARAM_REQUEST_SEQUENCE,
+                GCS_SYSTEM_ID,
+                GCS_COMPONENT_ID,
+                Undecoded(PARAM_REQUEST_READ_ID, pymavlinkPayload),
+            ),
+        )
+    }
+
     private fun wirePayload(frame: ByteArray): ByteArray =
         frame.copyOfRange(HEADER_LENGTH, HEADER_LENGTH + (frame[LEN_INDEX].toInt() and BYTE_MASK))
 
@@ -343,6 +402,19 @@ class MavlinkEncoderTest {
         // pymavlink-derived frame: not a real command, every byte distinct.
         const val ARBITRARY_COMMAND = 0x1234
         const val ARBITRARY_CONFIRMATION = 7
+
+        // pymavlink-built PARAM_REQUEST_READs (see the fixtures README): seq 42, from 255/190 to 1/1, by name.
+        const val PARAM_REQUEST_BATT_LOW_VOLT = "derived/param-request-read-batt-low-volt.bin"
+        const val PARAM_REQUEST_SEQUENCE = 42
+        const val PARAM_REQUEST_READ_ID = 20
+        const val PARAM_REQUEST_READ_FULL_LENGTH = 20
+        const val BATT_LOW_VOLT = "BATT_LOW_VOLT"
+
+        fun paramRequestRead(paramId: String) = ParamRequestRead(
+            targetSystem = VEHICLE_SYSTEM_ID,
+            targetComponent = VEHICLE_COMPONENT_ID,
+            paramId = paramId,
+        )
 
         fun setMessageInterval() = commandLong(
             command = MAV_CMD_SET_MESSAGE_INTERVAL,
