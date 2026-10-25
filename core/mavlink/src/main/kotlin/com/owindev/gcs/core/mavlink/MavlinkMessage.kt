@@ -54,6 +54,28 @@ sealed interface MavlinkMessage {
     ) : MavlinkMessage
 
     /**
+     * PARAM_REQUEST_READ (id 20, https://mavlink.io/en/messages/common.html#PARAM_REQUEST_READ): asks a component for
+     * one parameter by name, answered with a [ParamValue]. The codec only encodes it, always with `param_index` -1, so
+     * the name is the identifier.
+     *
+     * @property paramId 1 to 16 ASCII characters without NUL, checked on construction: `param_id` is `char[16]`, sent
+     * "WITHOUT null termination (NULL) byte if the length is exactly 16 chars" (`common.xml`).
+     */
+    data class ParamRequestRead(val targetSystem: Int, val targetComponent: Int, val paramId: String) :
+        MavlinkMessage {
+
+        init {
+            require(paramId.length in PARAM_ID_LENGTHS) { "param_id \"$paramId\" is not 1 to 16 characters" }
+            require(paramId.all { it in PARAM_ID_CHARACTERS }) { "param_id \"$paramId\" is not ASCII without NUL" }
+        }
+
+        private companion object {
+            val PARAM_ID_LENGTHS = 1..16
+            val PARAM_ID_CHARACTERS = '\u0001'..'\u007F'
+        }
+    }
+
+    /**
      * COMMAND_ACK (id 77), as defined in https://mavlink.io/en/messages/common.html#COMMAND_ACK: the
      * answer to a command.
      *

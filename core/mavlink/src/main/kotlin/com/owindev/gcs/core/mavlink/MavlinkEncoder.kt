@@ -2,6 +2,7 @@ package com.owindev.gcs.core.mavlink
 
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamRequestRead
 
 /**
  * Turns messages into unsigned MAVLink 2 frames ready to send (https://mavlink.io/en/guide/serialization.html).
@@ -18,6 +19,8 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
  * and masking them would send a frame nobody asked for. A message without CRC_EXTRA in [MavlinkMessages]
  * throws [IllegalStateException]; it cannot happen for the messages [encode] accepts.
  */
+// One encode and one payload builder per message, so each wire layout can be reviewed on its own.
+@Suppress("TooManyFunctions")
 object MavlinkEncoder {
 
     private const val START_MARKER = 0xFD.toByte()
@@ -73,6 +76,19 @@ object MavlinkEncoder {
     private const val UINT16_BYTES = 2
     private val UINT16_RANGE = 0..0xFFFF
 
+    private const val PARAM_REQUEST_READ_ID = 20
+
+    // PARAM_REQUEST_READ wire layout: param_index (int16) first, then the two uint8 targets, then param_id
+    // (char[16]). No extensions.
+    private const val PARAM_REQUEST_READ_LENGTH = 20
+    private const val PARAM_INDEX_OFFSET = 0
+    private const val PARAM_TARGET_SYSTEM_OFFSET = 2
+    private const val PARAM_TARGET_COMPONENT_OFFSET = 3
+    private const val PARAM_ID_OFFSET = 4
+
+    /** "Send -1 to use the param ID field as identifier (else the param id will be ignored)" (`common.xml`). */
+    private const val PARAM_INDEX_BY_NAME = -1
+
     /**
      * Encodes [heartbeat] as one frame from [systemId]/[componentId] with sequence number [sequence].
      *
@@ -104,6 +120,20 @@ object MavlinkEncoder {
     fun encode(sequence: Int, systemId: Int, componentId: Int, commandLong: CommandLong): ByteArray =
         frame(sequence, systemId, componentId, COMMAND_LONG_ID, commandLongPayload(commandLong))
 
+    /**
+     * Encodes [request] as one frame from [systemId]/[componentId] with sequence number [sequence], with
+     * `param_index` -1 so that the vehicle reads the parameter by name.
+     *
+     * The name's ASCII bytes are NUL-padded to 16; a 16-character name has no NUL. The padding is truncated like any
+     * trailing zero byte.
+     *
+     * @param sequence 0..255, as for HEARTBEAT.
+     * @param systemId 1..255.
+     * @param componentId 1..255.
+     */
+    fun encode(sequence: Int, systemId: Int, componentId: Int, request: ParamRequestRead): ByteArray =
+        frame(sequence, systemId, componentId, PARAM_REQUEST_READ_ID, paramRequestReadPayload(request))
+
     private fun heartbeatPayload(heartbeat: Heartbeat): ByteArray {
         val payload = ByteArray(HEARTBEAT_LENGTH)
         payload.putUint32(CUSTOM_MODE_OFFSET, heartbeat.customMode, "custom_mode")
@@ -134,6 +164,18 @@ object MavlinkEncoder {
         payload.putUint8(TARGET_SYSTEM_OFFSET, command.targetSystem, "target_system")
         payload.putUint8(TARGET_COMPONENT_OFFSET, command.targetComponent, "target_component")
         payload.putUint8(CONFIRMATION_OFFSET, command.confirmation, "confirmation")
+        return payload
+    }
+
+    private fun paramRequestReadPayload(request: ParamRequestRead): ByteArray {
+        val payload = ByteArray(PARAM_REQUEST_READ_LENGTH)
+        payload.putLittleEndian(PARAM_INDEX_OFFSET, PARAM_INDEX_BY_NAME.toLong(), UINT16_BYTES)
+        payload.putUint8(PARAM_TARGET_SYSTEM_OFFSET, request.targetSystem, "target_system")
+        payload.putUint8(PARAM_TARGET_COMPONENT_OFFSET, request.targetComponent, "target_component")
+        // ParamRequestRead holds only ASCII, so each character is one byte; the zeroed array is the NUL padding.
+        request.paramId.forEachIndexed { index, character ->
+            payload[PARAM_ID_OFFSET + index] = character.code.toByte()
+        }
         return payload
     }
 

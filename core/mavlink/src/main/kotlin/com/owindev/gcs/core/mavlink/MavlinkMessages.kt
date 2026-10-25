@@ -9,14 +9,15 @@ package com.owindev.gcs.core.mavlink
  * https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked against
  * `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK (#35), ATTITUDE, GLOBAL_POSITION_INT and
  * VFR_HUD (#37), SYS_STATUS and GPS_RAW_INT (#38), HOME_POSITION (#66) and STATUSTEXT (#96) computed with
- * pymavlink's `mavparse` from both.
- * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG is only sent by the
- * codec, so a received one stays undecoded.
+ * pymavlink's `mavparse` from both; PARAM_REQUEST_READ (#97) from pymavlink 2.4.50's `common.xml`.
+ * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG and PARAM_REQUEST_READ are
+ * only sent by the codec, so a received one stays undecoded.
  */
 object MavlinkMessages : CrcExtraLookup {
 
     private const val HEARTBEAT_ID = 0
     private const val SYS_STATUS_ID = 1
+    private const val PARAM_REQUEST_READ_ID = 20
     private const val GPS_RAW_INT_ID = 24
     private const val ATTITUDE_ID = 30
     private const val GLOBAL_POSITION_INT_ID = 33
@@ -29,6 +30,7 @@ object MavlinkMessages : CrcExtraLookup {
     private const val STATUSTEXT_ID = 253
 
     private val heartbeat = Definition(crcExtra = 50, fullLength = 9)
+    private val paramRequestRead = Definition(crcExtra = 214, fullLength = 20)
 
     // 31 bytes without its extensions (onboard_control_sensors_present/enabled/health_extended).
     private val sysStatus = Definition(crcExtra = 124, fullLength = 43)
@@ -57,10 +59,13 @@ object MavlinkMessages : CrcExtraLookup {
     /** Full payload length of [msgId] in bytes, extension fields included, or `null` if not supported. */
     fun fullLengthOf(msgId: Int): Int? = definitionOf(msgId)?.fullLength
 
-    // A `when` over constants, not a map: the parser calls this for every frame and it must not box.
+    // A `when` over constants, not a map: the parser calls this for every frame and it must not box. One flat branch
+    // per message, so its complexity grows with the table, not with any logic.
+    @Suppress("CyclomaticComplexMethod")
     private fun definitionOf(msgId: Int): Definition? = when (msgId) {
         HEARTBEAT_ID -> heartbeat
         SYS_STATUS_ID -> sysStatus
+        PARAM_REQUEST_READ_ID -> paramRequestRead
         GPS_RAW_INT_ID -> gpsRawInt
         ATTITUDE_ID -> attitude
         GLOBAL_POSITION_INT_ID -> globalPositionInt
