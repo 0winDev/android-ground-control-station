@@ -407,6 +407,21 @@ sealed interface MavlinkMessage {
     ) : MavlinkMessage
 
     /**
+     * PARAM_VALUE (id 22, https://mavlink.io/en/messages/common.html#PARAM_VALUE): one parameter's value, the answer to
+     * a [ParamRequestRead] and sent unsolicited when the parameter changes.
+     *
+     * @property paramId from up to 16 bytes, ending at the first NUL, the end of the field or the end of a truncated
+     * payload, decoded as UTF-8 with each invalid sequence replaced by U+FFFD.
+     * @property value the float on the wire, unconverted: how an integer [type] is carried in it depends on the
+     * autopilot (ArduPilot casts it).
+     * @property type `MAV_PARAM_TYPE`, as sent.
+     * @property count "Total number of onboard parameters".
+     * @property index "Index of this onboard parameter".
+     */
+    data class ParamValue(val paramId: String, val value: Float, val type: Int, val count: Int, val index: Int) :
+        MavlinkMessage
+
+    /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.
      *

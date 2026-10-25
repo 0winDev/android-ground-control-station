@@ -6,6 +6,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamValue
 import com.owindev.gcs.core.mavlink.MavlinkMessage.StatusText
 import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Undecoded
@@ -28,6 +29,8 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.VfrHud
  * Fields are little-endian and on the wire ordered by type size, not XML order; extension fields follow
  * them in XML order, never re-sorted by size.
  */
+// One reader per message, so each wire layout can be reviewed on its own.
+@Suppress("TooManyFunctions")
 object MavlinkDecoder {
 
     private const val HEARTBEAT_ID = 0
@@ -60,6 +63,17 @@ object MavlinkDecoder {
     private const val SYS_SENSORS_PRESENT_EXTENDED_OFFSET = 31
     private const val SYS_SENSORS_ENABLED_EXTENDED_OFFSET = 35
     private const val SYS_SENSORS_HEALTH_EXTENDED_OFFSET = 39
+
+    private const val PARAM_VALUE_ID = 22
+
+    // PARAM_VALUE wire layout: param_value (float), param_count and param_index (uint16), param_id (char[16]), then
+    // param_type (uint8). The size sort moves param_id after the counters.
+    private const val PARAM_VALUE_OFFSET = 0
+    private const val PARAM_COUNT_OFFSET = 4
+    private const val PARAM_INDEX_OFFSET = 6
+    private const val PARAM_ID_OFFSET = 8
+    private const val PARAM_ID_LENGTH = 16
+    private const val PARAM_TYPE_OFFSET = 24
 
     private const val GPS_RAW_INT_ID = 24
 
@@ -164,6 +178,7 @@ object MavlinkDecoder {
         return when (frame.messageId) {
             HEARTBEAT_ID -> heartbeat(frame.payload)
             SYS_STATUS_ID -> sysStatus(frame.payload)
+            PARAM_VALUE_ID -> paramValue(frame.payload)
             GPS_RAW_INT_ID -> gpsRawInt(frame.payload)
             ATTITUDE_ID -> attitude(frame.payload)
             GLOBAL_POSITION_INT_ID -> globalPositionInt(frame.payload)
@@ -202,6 +217,18 @@ object MavlinkDecoder {
         onboardControlSensorsEnabledExtended = payload.uint32(SYS_SENSORS_ENABLED_EXTENDED_OFFSET),
         onboardControlSensorsHealthExtended = payload.uint32(SYS_SENSORS_HEALTH_EXTENDED_OFFSET),
     )
+
+    private fun paramValue(payload: ByteArray): ParamValue {
+        val idEnd = payload.textEnd(PARAM_ID_OFFSET, PARAM_ID_LENGTH)
+        return ParamValue(
+            // Each invalid UTF-8 sequence becomes U+FFFD: decodeToString never throws on content.
+            paramId = if (idEnd > PARAM_ID_OFFSET) payload.decodeToString(PARAM_ID_OFFSET, idEnd) else "",
+            value = payload.float(PARAM_VALUE_OFFSET),
+            type = payload.uint8(PARAM_TYPE_OFFSET),
+            count = payload.uint16(PARAM_COUNT_OFFSET),
+            index = payload.uint16(PARAM_INDEX_OFFSET),
+        )
+    }
 
     private fun gpsRawInt(payload: ByteArray) = GpsRawInt(
         timeUsec = payload.uint64(GPS_TIME_USEC_OFFSET),
