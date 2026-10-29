@@ -88,7 +88,8 @@ internal class DefaultCommandRepository @Inject constructor(
         try {
             exchange.run(
                 systemId = request.systemId,
-                command = request.command,
+                label = request.command.name,
+                command = request.command.mavCommand,
                 onState = { state -> publish(request, state) },
                 onResult = { result -> finish(request, result) },
             )

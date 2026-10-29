@@ -6,7 +6,6 @@ import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingState
-import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
@@ -41,7 +40,8 @@ internal class CommandExchange @Inject constructor(
     /** After no answer, returns only after the late window, dropping any answer meanwhile (ADR 0008). */
     suspend fun run(
         systemId: SystemId,
-        command: VehicleCommand,
+        label: String,
+        command: MavCommand,
         onState: (PendingState) -> Unit,
         onResult: (CommandResult) -> Unit,
     ) {
@@ -50,7 +50,7 @@ internal class CommandExchange @Inject constructor(
             is CommandRoute.Closed -> onResult(CommandResult.NotSent(route.reason))
 
             is CommandRoute.Open -> coroutineScope {
-                val request = Request(systemId, command, onState)
+                val request = Request(systemId, label, command, onState)
                 val acks = answersTo(request, route.address, current)
                 val result = attempts(request, acks)
                 onResult(result)
@@ -154,15 +154,19 @@ internal class CommandExchange @Inject constructor(
         if (session.session.value.origin == DataOrigin.REPLAY) NotSentReason.REPLAY else NotSentReason.LINK_LOST
 
     private suspend fun dropLateAnswers(request: Request, acks: ReceiveChannel<CommandAck>) {
-        val window = if (request.command == VehicleCommand.ARM) ARM_LATE_WINDOW else LATE_WINDOW
-        withTimeoutOrNull(window) {
+        withTimeoutOrNull(request.command.lateWindow) {
             for (ack in acks) {
-                Log.w(TAG, "${request.command} to system ${request.systemId.value}: late answer ${ack.result} dropped")
+                Log.w(TAG, "${request.label} to system ${request.systemId.value}: late answer ${ack.result} dropped")
             }
         }
     }
 
-    private class Request(val systemId: SystemId, val command: VehicleCommand, val onState: (PendingState) -> Unit)
+    private class Request(
+        val systemId: SystemId,
+        val label: String,
+        val command: MavCommand,
+        val onState: (PendingState) -> Unit,
+    )
 
     companion object {
         /** Per attempt (ADR 0008): SITL answered in 6–27 ms (#36), with room for a radio link's round trip. */
