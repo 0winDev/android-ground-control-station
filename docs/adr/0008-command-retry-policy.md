@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-28
-- Issue: #98
+- Issue: #98, #99 (take off)
 
 ## Context
 
@@ -38,10 +38,17 @@ cannot be told from the answer to a newer command with the same ID. Until signin
   return or a landing; only arm is never superseded.
 - **A late window of 1.5 s** after a command ends without answer: its ACK is dropped and logged, and only the same
   command is refused meanwhile, as busy; any other is sent at once.
-- **Arm's late window is 10 s** (`ARM_LATE_WINDOW`), 11.5 s from the send. An earlier arm's late FAILED taken as a
-  new arm's answer would read "rejected" while the new arm arms the vehicle; refusing a new arm meanwhile covers round
-  trips up to 11.5 s. The ACK has no sequence number, so no rule closes it for any latency: past that, the HEARTBEAT's
+- **Arm's and take off's late window is 10 s** (`DANGEROUS_LATE_WINDOW`), 11.5 s from the send. An earlier arm's
+  late FAILED taken as a new arm's answer would read "rejected" while the new arm arms the vehicle; refusing a new arm
+  meanwhile covers round trips up to 11.5 s. The same holds for a take off. The ACK has no sequence number, so no rule closes it for any latency: past that, the HEARTBEAT's
   armed state is the truth, and the screen shows it over any ACK (#104).
+- **Take off is a sequence (#99).** ArduCopter takes off only in a mode that allows it, GUIDED here
+  (`handle_MAV_CMD_NAV_TAKEOFF`, Copter-4.7.2). When the HEARTBEAT does not show GUIDED, `MAV_CMD_DO_SET_MODE` with
+  GUIDED's custom mode is sent once; NAV_TAKEOFF follows only after its ACCEPTED **and** a HEARTBEAT showing GUIDED
+  within 2.5 s (`GUIDED_CONFIRM_TIMEOUT`: two 1 Hz HEARTBEATs and margin), since an accepted mode change is not yet
+  the mode. Otherwise the take off ends as mode not changed, with the mode change's result. Each step is sent only
+  while the HEARTBEAT shows the vehicle armed, checked with the route under the sender's lock. The mode change's late
+  window is 1.5 s, and a new take off is refused meanwhile.
 - **No answer may still have worked.** Once an attempt has left, a command ends as no answer, never as not sent, with
   the reason when the app stopped retrying early (link lost, route changed, replay).
 - **One route.** Commands go to the active vehicle's autopilot (component 1) at the address of its first HEARTBEAT in
@@ -70,6 +77,7 @@ cannot be told from the answer to a newer command with the same ID. Until signin
   than the late window, or one for an RTL superseded by another RTL, can be taken as the next same command's answer;
   a forged unsigned ACK from the pinned address can fake an answer until signing (v0.6); a command sent before the
   link is lost ends as no answer, never as not sent; until #105 a change of the vehicle's address (a router restart,
-  a second route) blocks every command for the rest of the session, which #105 must fix before any real flight.
-- Follow-ups: take off reuses this policy (#99); the operator accepts a new route (#105); signing authenticates the
-  ACK (v0.6).
+  a second route) blocks every command for the rest of the session, which #105 must fix before any real flight; a
+  take off stopped after an accepted mode change leaves the vehicle in GUIDED, armed on the ground, until it
+  disarms by itself after `DISARM_DELAY`.
+- Follow-ups: the operator accepts a new route (#105); signing authenticates the ACK (v0.6).
