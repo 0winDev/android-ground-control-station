@@ -277,6 +277,7 @@ the issue number to an existing one.
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
 - On Windows `@TempDir` cannot delete a file left open: close what the SUT opened in `@AfterEach` (#70).
 - CI calls each module's `koverVerify` by name, never `check`: a module with a new minimum is added there (#63).
+- Logic-free types in `:core:domain` sink its Kover ratio: exclude them by name, and drop one that gains logic (#98).
 - On Windows `File.canonicalFile` does not resolve symbolic links: check a path's folder with `toRealPath()` (#71).
 - Never reflow KDoc by script: it merges lists and rewraps untouched paragraphs (#71).
 - MapLibre ignores the system proxy: test no network with a build pointing the style at an unreachable host (#73).
