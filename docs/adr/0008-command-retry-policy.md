@@ -1,6 +1,6 @@
 # 0008. Retry only RTL and land; send arm once
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-28
 - Issue: #98
 
