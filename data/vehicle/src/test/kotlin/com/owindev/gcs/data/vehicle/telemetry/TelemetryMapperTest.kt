@@ -504,6 +504,19 @@ class TelemetryMapperTest {
         result shouldBeEqualTo Telemetry(landed = Timed(expected, RECEIVED_AT), origin = DataOrigin.LIVE)
     }
 
+    @Tag("REQ-052")
+    @Test
+    fun `GIVEN an ON_GROUND EXTENDED_SYS_STATE from another component WHEN mapping it THEN is not kept`() {
+        val received = received(
+            MavlinkMessage.ExtendedSysState(MAV_VTOL_STATE_MC, landedState = MAV_LANDED_STATE_ON_GROUND),
+        )
+            .copy(componentId = MAV_COMP_ID_GIMBAL)
+
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
+
+        result.shouldBeNull()
+    }
+
     @Test
     fun `GIVEN telemetry from another component of the vehicle WHEN mapping it THEN is not the vehicle's`() {
         val received = receivedFixture(ATTITUDE).copy(componentId = MAV_COMP_ID_GIMBAL)
@@ -583,6 +596,7 @@ private val CLOCK = TestTimeSource()
 private val EARLIER = CLOCK.markNow()
 private val RECEIVED_AT = CLOCK.markNow()
 private const val MAV_VTOL_STATE_MC = 3
+private const val MAV_LANDED_STATE_ON_GROUND = 1
 
 /** `telemetry/global-position-int.bin` as pymavlink decodes it, converted by hand. */
 private val REAL_POSITION = GlobalPosition(

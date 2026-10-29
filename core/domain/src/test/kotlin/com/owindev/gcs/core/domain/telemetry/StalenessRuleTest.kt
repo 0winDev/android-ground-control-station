@@ -40,7 +40,7 @@ class StalenessRuleTest {
             TelemetryKind.AIR_DATA to 1.seconds,
             TelemetryKind.BATTERY to 3.seconds,
             TelemetryKind.GPS to 2.seconds,
-            TelemetryKind.LANDED to 3.seconds,
+            TelemetryKind.LANDED to 1.seconds,
         )
     }
 

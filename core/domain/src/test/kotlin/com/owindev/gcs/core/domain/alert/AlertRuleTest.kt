@@ -745,7 +745,7 @@ class AlertRuleTest {
 }
 
 private val NONE = emptyList<ActiveAlert>()
-private val LANDED_STALE_AFTER = 3.seconds
+private val LANDED_STALE_AFTER = 1.seconds
 private val LOW = Alert.BatteryLow
 private val CRITICAL = Alert.BatteryCritical
 private val UNHEALTHY = Alert.BatteryUnhealthy

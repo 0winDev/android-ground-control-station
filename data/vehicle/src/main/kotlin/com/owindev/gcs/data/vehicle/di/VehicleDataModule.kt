@@ -117,9 +117,9 @@ abstract class VehicleDataModule {
         @Provides
         fun provideStalenessRule(): StalenessRule = StalenessRule()
 
-        /** On the ground only on a fresh ON_GROUND (REQ-052), judging its age as the rest of the app does. */
+        /** On the ground only on an ON_GROUND younger than 0.5 s (REQ-052, #112); change it here. */
         @Provides
-        fun provideLandedRule(staleness: StalenessRule): LandedRule = LandedRule(staleness)
+        fun provideLandedRule(): LandedRule = LandedRule()
 
         /** The battery thresholds decided in #41 (REQ-028), judging staleness as the rest of the app does. */
         @Provides

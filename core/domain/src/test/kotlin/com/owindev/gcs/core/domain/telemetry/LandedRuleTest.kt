@@ -2,9 +2,10 @@ package com.owindev.gcs.core.domain.telemetry
 
 import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
+import org.amshove.kluent.invoking
 import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldThrow
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -20,13 +21,13 @@ class LandedRuleTest {
 
     @BeforeEach
     fun setUp() {
-        rule = LandedRule(StalenessRule())
+        rule = LandedRule()
     }
 
     @Test
-    fun `GIVEN on the ground just under 3 s ago WHEN checking THEN is on the ground`() {
+    fun `GIVEN on the ground just under 0,5 s ago WHEN checking THEN is on the ground`() {
         val telemetry = landed(LandedState.ON_GROUND)
-        clock += LANDED_STALE_AFTER - 1.milliseconds
+        clock += MAX_AGE - 1.milliseconds
 
         val result = rule.isOnGround(telemetry)
 
@@ -34,9 +35,9 @@ class LandedRuleTest {
     }
 
     @Test
-    fun `GIVEN on the ground exactly 3 s ago WHEN checking THEN is not on the ground`() {
+    fun `GIVEN on the ground exactly 0,5 s ago WHEN checking THEN is not on the ground`() {
         val telemetry = landed(LandedState.ON_GROUND)
-        clock += LANDED_STALE_AFTER
+        clock += MAX_AGE
 
         val result = rule.isOnGround(telemetry)
 
@@ -73,7 +74,16 @@ class LandedRuleTest {
 
     private fun landed(state: LandedState) = Telemetry(landed = Timed(state, clock.markNow()), origin = DataOrigin.LIVE)
 
+    @Test
+    fun `GIVEN a maximum age of zero WHEN building the rule THEN it is refused`() {
+        val build = { LandedRule(maxAge = 0.milliseconds) }
+
+        val result = invoking(build)
+
+        result shouldThrow IllegalArgumentException::class
+    }
+
     private companion object {
-        val LANDED_STALE_AFTER = 3.seconds
+        val MAX_AGE = 500.milliseconds
     }
 }

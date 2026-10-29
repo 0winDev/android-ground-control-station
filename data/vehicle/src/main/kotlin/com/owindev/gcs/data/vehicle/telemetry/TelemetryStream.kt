@@ -26,10 +26,10 @@ internal data class TelemetryStream(val messageId: Int, val interval: Duration, 
  * | GPS_RAW_INT (24) | 2 Hz | 64 B | 128 |
  * | SYS_STATUS (1) | 1 Hz | 55 B | 55 |
  * | HOME_POSITION (242), once home is set | 1 Hz | 72 B | 72 |
- * | EXTENDED_SYS_STATE (245) | 1 Hz | 14 B | 14 |
+ * | EXTENDED_SYS_STATE (245) | 4 Hz | 14 B | 56 |
  * | HEARTBEAT (0), sent by the vehicle anyway | 1 Hz | 21 B | 21 |
  *
- * About 1018 B/s in all: ≈18 % of a 57600-baud 8N1 radio link (about 5760 B/s), and ≈35 % of a SiK radio
+ * About 1060 B/s in all: ≈18 % of a 57600-baud 8N1 radio link (about 5760 B/s), and ≈37 % of a SiK radio
  * with ECC on, which halves its throughput (about 2900 B/s). The rest is margin for everything else the
  * vehicle sends.
  *
@@ -43,8 +43,8 @@ internal val TELEMETRY_STREAMS: List<TelemetryStream> = listOf(
     TelemetryStream(messageId = GPS_RAW_INT_ID, interval = 500.milliseconds, kind = TelemetryKind.GPS),
     TelemetryStream(messageId = SYS_STATUS_ID, interval = 1.seconds, kind = TelemetryKind.BATTERY),
     TelemetryStream(messageId = HOME_POSITION_ID, interval = 1.seconds, kind = null),
-    // ArduCopter 4.7.2 sends it on a channel only once asked there (#112): take off needs it fresh (#99).
-    TelemetryStream(messageId = EXTENDED_SYS_STATE_ID, interval = 1.seconds, kind = TelemetryKind.LANDED),
+    // ArduCopter 4.7.2 sends it on a channel only once asked there (#112); 4 Hz keeps a take off's window short (#99).
+    TelemetryStream(messageId = EXTENDED_SYS_STATE_ID, interval = 250.milliseconds, kind = TelemetryKind.LANDED),
 )
 
 private const val ATTITUDE_ID = 30

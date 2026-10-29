@@ -93,7 +93,7 @@ class TelemetryRequesterTest {
                 setMessageInterval(messageId = 24, intervalMicros = 500_000f),
                 setMessageInterval(messageId = 1, intervalMicros = 1_000_000f),
                 setMessageInterval(messageId = 242, intervalMicros = 1_000_000f),
-                setMessageInterval(messageId = 245, intervalMicros = 1_000_000f),
+                setMessageInterval(messageId = 245, intervalMicros = 250_000f),
             )
         }
 

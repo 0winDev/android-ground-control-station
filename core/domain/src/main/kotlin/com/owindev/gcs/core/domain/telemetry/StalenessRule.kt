@@ -12,6 +12,12 @@ enum class TelemetryKind {
     BATTERY,
     GPS,
     LANDED,
+    ;
+
+    companion object {
+        /** The kinds shown to the operator and alerted on when stale; the landed state only gates a take off (#99). */
+        val DISPLAYED: List<TelemetryKind> = entries - LANDED
+    }
 }
 
 /**
@@ -42,11 +48,11 @@ class StalenessRule(thresholds: Map<TelemetryKind, Duration> = DEFAULT_THRESHOLD
     fun isStale(kind: TelemetryKind, age: Duration): Boolean = age >= thresholdOf(kind)
 
     /**
-     * How long until the next fresh value of [telemetry] goes stale: a consumer must judge it again then, even if
-     * nothing new arrives, or a value that stopped arriving would never go stale. `null` when no value is fresh,
-     * so nothing will change until something arrives.
+     * How long until the next fresh value of [telemetry] the operator sees ([TelemetryKind.DISPLAYED]) goes stale: a
+     * consumer must judge it again then, even if nothing new arrives, or a value that stopped arriving would never go
+     * stale. `null` when no such value is fresh, so nothing will change until something arrives.
      */
-    fun untilNextStale(telemetry: Telemetry): Duration? = TelemetryKind.entries
+    fun untilNextStale(telemetry: Telemetry): Duration? = TelemetryKind.DISPLAYED
         .mapNotNull { kind -> telemetry[kind]?.let { thresholdOf(kind) - it.receivedAt.elapsedNow() } }
         .filter { it > Duration.ZERO }
         .minOrNull()
@@ -55,8 +61,9 @@ class StalenessRule(thresholds: Map<TelemetryKind, Duration> = DEFAULT_THRESHOLD
         /**
          * About four or five intervals of the rate each value is requested at (10, 5, 4, 2 Hz), so one or two
          * lost messages never grey a value out, and below the 3 s link-loss timeout so that a stream that stops
-         * while the vehicle is still heard shows. The battery and the landed state (1 Hz) get three intervals, the
-         * timeout itself.
+         * while the vehicle is still heard shows. The battery (1 Hz) gets three intervals, the timeout itself. The
+         * landed state (4 Hz) is only requested again after it, like the air data; a take off judges it on its own,
+         * tighter bound ([LandedRule]).
          */
         val DEFAULT_THRESHOLDS: Map<TelemetryKind, Duration> = mapOf(
             TelemetryKind.ATTITUDE to 500.milliseconds,
@@ -64,7 +71,7 @@ class StalenessRule(thresholds: Map<TelemetryKind, Duration> = DEFAULT_THRESHOLD
             TelemetryKind.AIR_DATA to 1.seconds,
             TelemetryKind.GPS to 2.seconds,
             TelemetryKind.BATTERY to 3.seconds,
-            TelemetryKind.LANDED to 3.seconds,
+            TelemetryKind.LANDED to 1.seconds,
         )
     }
 }
