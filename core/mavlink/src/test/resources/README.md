@@ -49,6 +49,7 @@ pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and m
 | STATUSTEXT (253) | `common.xml` | 83 |
 | PARAM_REQUEST_READ (20) | `common.xml` | 214 |
 | PARAM_VALUE (22) | `common.xml` | 220 |
+| EXTENDED_SYS_STATE (245) | `common.xml` | 130 |
 
 ATTITUDE, GLOBAL_POSITION_INT and VFR_HUD were also computed with `mavparse` from `common.xml` and
 `standard.xml` on `mavlink/mavlink` master (#37), and SYS_STATUS and GPS_RAW_INT from `common.xml` on master
@@ -591,6 +592,35 @@ derived/param-request-read-batt-low-volt.bin fd 11 00 00 2a ff be 14 00 00 ff ff
 derived/param-request-read-16-chars.bin      fd 14 00 00 2a ff be 14 00 00 ff ff 01 01 49 4e 53 5f 47 59 52 31
                                              5f 43 41 4c 54 45 4d 50 5e 8b
 derived/param-request-read-1-char.bin        fd 05 00 00 2a ff be 14 00 00 ff ff 01 01 41 12 6f
+```
+
+## EXTENDED_SYS_STATE (#112)
+
+`landed/session.tlog`: a take off to 10 m in GUIDED and a LAND in Mission Planner's SITL, ArduCopter 4.7.2 (official
+build, AUTOPILOT_VERSION type 255, git `fbd0a316`), recorded by pymavlink on SITL's TCP 5763 with EXTENDED_SYS_STATE
+requested at 1 Hz; ArduCopter sent none on that channel before the request. Extracted and built by
+`py tools/fixtures/derive_fixtures.py` (pymavlink 2.4.50): CRC_EXTRA 130, LEN 2, `vtol_state` at 0, `landed_state` at 1,
+no extensions. ArduCopter reports `vtol_state` 3 (MC) always (`GCS_MAVLink_Copter.h`), so only an UNDEFINED
+`landed_state` is truncated.
+
+| File | Origin | What it proves |
+|---|---|---|
+| `landed/on-ground.bin` | the real frame (seq 189), disarmed before the take off, `landed_state` 1 (ON_GROUND) | on the ground (REQ-052) |
+| `landed/takeoff.bin` | the real frame (seq 127), GUIDED armed at 0.1 m, `landed_state` 3 (TAKEOFF) | taking off (REQ-052) |
+| `landed/in-air.bin` | the real frame (seq 172), GUIDED at 10 m, `landed_state` 2 (IN_AIR) | in the air (REQ-052) |
+| `landed/landing.bin` | the real frame (seq 209), LAND at 9.8 m, `landed_state` 4 (LANDING) | landing (REQ-052) |
+| `derived/extended-sys-state-undefined.bin` | `on-ground.bin` with `landed_state` 0 (UNDEFINED), LEN 1 | the truncated state reads as zero, unknown (REQ-013, REQ-052) |
+| `derived/extended-sys-state-landed-5.bin` | `on-ground.bin` with `landed_state` 5, past `MAV_LANDED_STATE` | a value the GCS does not know is unknown (REQ-052) |
+
+Raw bytes:
+
+```
+landed/on-ground.bin                         fd 02 00 00 bd 01 01 f5 00 00 03 01 da c7
+landed/takeoff.bin                           fd 02 00 00 7f 01 01 f5 00 00 03 03 24 4d
+landed/in-air.bin                            fd 02 00 00 ac 01 01 f5 00 00 03 02 db 5f
+landed/landing.bin                           fd 02 00 00 d1 01 01 f5 00 00 03 04 17 e8
+derived/extended-sys-state-undefined.bin     fd 01 00 00 bd 01 01 f5 00 00 03 73 96
+derived/extended-sys-state-landed-5.bin      fd 02 00 00 bd 01 01 f5 00 00 03 05 ba a0
 ```
 
 ## Raw frames for the flight log (#67)
