@@ -18,6 +18,7 @@ import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
+import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
@@ -108,6 +109,10 @@ abstract class VehicleDataModule {
         /** REQ-017's default timeout (3 s); change it here to configure the link-loss watchdog. */
         @Provides
         fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
+
+        /** REQ-044's take off range (2–30 m) and default (10 m); change them here. */
+        @Provides
+        fun provideTakeOffAltitudeRule(): TakeOffAltitudeRule = TakeOffAltitudeRule()
 
         @Provides
         fun provideFlightAttentionRule(linkLossRule: LinkLossRule): FlightAttentionRule =

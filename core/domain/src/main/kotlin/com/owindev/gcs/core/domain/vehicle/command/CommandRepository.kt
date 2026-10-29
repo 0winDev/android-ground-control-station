@@ -20,12 +20,19 @@ interface CommandRepository {
 
     /** Supersedes a pending RTL or land. */
     suspend fun land(systemId: SystemId): CommandResult
+
+    /**
+     * Puts the vehicle in GUIDED first when it is not, then takes off to [altitudeMetres] above home (REQ-044), only
+     * while armed; neither step is re-sent, and RTL or land supersedes it at any step.
+     */
+    suspend fun takeOff(systemId: SystemId, altitudeMetres: Float): CommandResult
 }
 
 enum class VehicleCommand {
     ARM,
     RETURN_TO_LAUNCH,
     LAND,
+    TAKE_OFF,
 }
 
 data class PendingCommand(val systemId: SystemId, val command: VehicleCommand, val state: PendingState)

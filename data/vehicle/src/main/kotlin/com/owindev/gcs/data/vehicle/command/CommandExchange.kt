@@ -37,20 +37,26 @@ internal class CommandExchange @Inject constructor(
     private val routes: CommandRoutes,
 ) {
 
-    /** After no answer, returns only after the late window, dropping any answer meanwhile (ADR 0008). */
+    /**
+     * After no answer, returns only after the late window, dropping any answer meanwhile (ADR 0008). [routing] is
+     * checked before the command and under the sender's lock before every attempt.
+     */
+    // Each parameter is one part of the exchange; grouping them would only rename them.
+    @Suppress("LongParameterList")
     suspend fun run(
         systemId: SystemId,
         label: String,
         command: MavCommand,
         onState: (PendingState) -> Unit,
+        routing: CommandRoutes = routes,
         onResult: (CommandResult) -> Unit,
     ) {
         val current = session.session.value
-        when (val route = routes.routeTo(systemId)) {
+        when (val route = routing.routeTo(systemId)) {
             is CommandRoute.Closed -> onResult(CommandResult.NotSent(route.reason))
 
             is CommandRoute.Open -> coroutineScope {
-                val request = Request(systemId, label, command, onState)
+                val request = Request(systemId, label, command, routing, onState)
                 val acks = answersTo(request, route.address, current)
                 val result = attempts(request, acks)
                 onResult(result)
@@ -102,7 +108,7 @@ internal class CommandExchange @Inject constructor(
     /** Sends the [attempt]th time and waits [ACK_TIMEOUT]: `null` when no answer came in time. */
     private suspend fun attempt(request: Request, attempt: Int, acks: ReceiveChannel<CommandAck>): CommandResult? {
         val sent = sender.send(commandLongOf(request.systemId, request.command, confirmation = attempt - 1)) {
-            routes.routeTo(request.systemId)
+            request.routing.routeTo(request.systemId)
         }
         val received = if (sent == CommandSendResult.Sent) {
             withTimeoutOrNull(ACK_TIMEOUT) { acks.receiveCatching() }
@@ -165,6 +171,7 @@ internal class CommandExchange @Inject constructor(
         val systemId: SystemId,
         val label: String,
         val command: MavCommand,
+        val routing: CommandRoutes,
         val onState: (PendingState) -> Unit,
     )
 
@@ -179,10 +186,11 @@ internal class CommandExchange @Inject constructor(
         val LATE_WINDOW: Duration = 1.5.seconds
 
         /**
-         * Arm's late window (ADR 0008): an earlier arm's late FAILED taken as a new arm's answer would read "rejected"
-         * while the new one arms the vehicle. Refusing a new arm for 10 s covers round trips up to 11.5 s.
+         * Arm's and take off's late window (ADR 0008): an earlier one's late FAILED taken as a new one's answer would
+         * read "rejected" while the new one arms the vehicle or takes off. Refusing it for 10 s covers round trips up to
+         * 11.5 s.
          */
-        val ARM_LATE_WINDOW: Duration = 10.seconds
+        val DANGEROUS_LATE_WINDOW: Duration = 10.seconds
 
         private const val TAG = "CommandExchange"
     }

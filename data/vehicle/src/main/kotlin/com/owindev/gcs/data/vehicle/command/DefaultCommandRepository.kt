@@ -7,6 +7,7 @@ import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingCommand
 import com.owindev.gcs.core.domain.vehicle.command.PendingState
+import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import javax.inject.Inject
@@ -27,6 +28,8 @@ import kotlinx.coroutines.launch
 @Singleton
 internal class DefaultCommandRepository @Inject constructor(
     private val exchange: CommandExchange,
+    private val takeOff: TakeOffSequence,
+    private val altitudeRule: TakeOffAltitudeRule,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : CommandRepository {
 
@@ -41,21 +44,39 @@ internal class DefaultCommandRepository @Inject constructor(
     private val mutablePending = MutableStateFlow<PendingCommand?>(null)
     override val pending: StateFlow<PendingCommand?> = mutablePending.asStateFlow()
 
-    override suspend fun arm(systemId: SystemId): CommandResult = submit(systemId, VehicleCommand.ARM)
+    override suspend fun arm(systemId: SystemId): CommandResult = submit(systemId, VehicleCommand.ARM, ARM_COMMAND)
 
     override suspend fun returnToLaunch(systemId: SystemId): CommandResult =
-        submit(systemId, VehicleCommand.RETURN_TO_LAUNCH)
+        submit(systemId, VehicleCommand.RETURN_TO_LAUNCH, RETURN_TO_LAUNCH_COMMAND)
 
-    override suspend fun land(systemId: SystemId): CommandResult = submit(systemId, VehicleCommand.LAND)
+    override suspend fun land(systemId: SystemId): CommandResult = submit(systemId, VehicleCommand.LAND, LAND_COMMAND)
 
-    private suspend fun submit(systemId: SystemId, command: VehicleCommand): CommandResult {
-        val request = Request(systemId, command)
+    override suspend fun takeOff(systemId: SystemId, altitudeMetres: Float): CommandResult {
+        if (!altitudeRule.isValid(altitudeMetres)) {
+            val result = CommandResult.NotSent(NotSentReason.ALTITUDE_OUT_OF_RANGE)
+            report(systemId, VehicleCommand.TAKE_OFF, result)
+            return result
+        }
+        return submit(
+            Request(systemId, VehicleCommand.TAKE_OFF) { onState, onResult ->
+                takeOff.run(systemId, altitudeMetres, onState, onResult)
+            },
+        )
+    }
+
+    private suspend fun submit(systemId: SystemId, command: VehicleCommand, mavCommand: MavCommand) = submit(
+        Request(systemId, command) { onState, onResult ->
+            exchange.run(systemId, command.name, mavCommand, onState, onResult = onResult)
+        },
+    )
+
+    private suspend fun submit(request: Request): CommandResult {
         request.job = scope.launch(start = CoroutineStart.LAZY) { run(request) }
         request.job.invokeOnCompletion { cause -> if (cause != null) request.result.completeExceptionally(cause) }
         when (val admission = synchronized(lock) { admit(request) }) {
             Admission.Refused -> {
                 request.job.cancel()
-                report(request, CommandResult.NotSent(NotSentReason.BUSY))
+                report(request.systemId, request.command, CommandResult.NotSent(NotSentReason.BUSY))
                 return CommandResult.NotSent(NotSentReason.BUSY)
             }
 
@@ -63,7 +84,7 @@ internal class DefaultCommandRepository @Inject constructor(
                 // Completed before the cancel, which would otherwise fail it.
                 superseded.result.complete(CommandResult.Superseded)
                 superseded.job.cancel()
-                report(superseded, CommandResult.Superseded)
+                report(superseded.systemId, superseded.command, CommandResult.Superseded)
             }
         }
         request.job.start()
@@ -73,25 +94,24 @@ internal class DefaultCommandRepository @Inject constructor(
     /** Called holding [lock]. */
     private fun admit(request: Request): Admission {
         val current = active
-        val supersedes = current == null || (current.command.givesWay && request.command.givesWay)
+        val supersedes = current == null || (request.command in INTERRUPTERS && current.command in INTERRUPTIBLE)
         if (request.command in lateWindows || !supersedes) return Admission.Refused
         active = request
         mutablePending.value = null
         return Admission.Admitted(superseded = current)
     }
 
-    /** RTL and land give way to one another; arm never does (ADR 0008). */
-    private val VehicleCommand.givesWay: Boolean
-        get() = this != VehicleCommand.ARM
-
     private suspend fun run(request: Request) {
         try {
-            exchange.run(
-                systemId = request.systemId,
-                label = request.command.name,
-                command = request.command.mavCommand,
-                onState = { state -> publish(request, state) },
-                onResult = { result -> finish(request, result) },
+            request.action(
+                { state ->
+                    synchronized(lock) {
+                        if (active === request) {
+                            mutablePending.value = PendingCommand(request.systemId, request.command, state)
+                        }
+                    }
+                },
+                { result -> finish(request, result) },
             )
         } finally {
             synchronized(lock) {
@@ -105,28 +125,28 @@ internal class DefaultCommandRepository @Inject constructor(
         }
     }
 
-    private fun publish(request: Request, state: PendingState) = synchronized(lock) {
-        if (active === request) mutablePending.value = PendingCommand(request.systemId, request.command, state)
-    }
-
     private fun finish(request: Request, result: CommandResult) {
         synchronized(lock) {
             if (active !== request) return
             active = null
             mutablePending.value = null
-            if (result is CommandResult.NoAnswer) lateWindows[request.command] = request
+            if (result.leftWithoutAnswer) lateWindows[request.command] = request
         }
         request.result.complete(result)
-        report(request, result)
+        report(request.systemId, request.command, result)
     }
 
-    private fun report(request: Request, result: CommandResult) {
-        val line = "${request.command} to system ${request.systemId.value}: $result"
+    private fun report(systemId: SystemId, command: VehicleCommand, result: CommandResult) {
+        val line = "$command to system ${systemId.value}: $result"
         if (result == CommandResult.Accepted) Log.i(TAG, line) else Log.w(TAG, line)
     }
 
     /** One command from [submit] to its result; [job] is set before anyone else sees it. */
-    private class Request(val systemId: SystemId, val command: VehicleCommand) {
+    private class Request(
+        val systemId: SystemId,
+        val command: VehicleCommand,
+        val action: suspend (onState: (PendingState) -> Unit, onResult: (CommandResult) -> Unit) -> Unit,
+    ) {
         lateinit var job: Job
         val result = CompletableDeferred<CommandResult>()
     }
@@ -139,5 +159,14 @@ internal class DefaultCommandRepository @Inject constructor(
 
     private companion object {
         const val TAG = "CommandRepository"
+
+        /** RTL and land supersede RTL, land and take off, even while the vehicle works on it; arm never (ADR 0008). */
+        val INTERRUPTERS = setOf(VehicleCommand.RETURN_TO_LAUNCH, VehicleCommand.LAND)
+        val INTERRUPTIBLE = INTERRUPTERS + VehicleCommand.TAKE_OFF
+
+        /** Ended after an attempt left and before an answer, so its late answer is still listened for (ADR 0008). */
+        val CommandResult.leftWithoutAnswer: Boolean
+            get() = this is CommandResult.NoAnswer ||
+                (this is CommandResult.ModeNotChanged && modeChange is CommandResult.NoAnswer)
     }
 }
