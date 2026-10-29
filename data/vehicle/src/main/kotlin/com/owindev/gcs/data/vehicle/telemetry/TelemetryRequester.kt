@@ -8,10 +8,9 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
-import com.owindev.gcs.data.vehicle.link.GcsMessageSender.Companion.GCS_COMPONENT_ID
-import com.owindev.gcs.data.vehicle.link.GcsMessageSender.Companion.GCS_SYSTEM_ID
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.link.isForThisGcs
 import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -174,14 +173,6 @@ internal class TelemetryRequester @Inject constructor(
             ack.result != MAV_RESULT_IN_PROGRESS &&
             ack.isForThisGcs()
     }
-
-    /**
-     * Addressed to this GCS, or without target: the targets are extension fields, which an older sender
-     * omits and which then read as 0.
-     */
-    private fun CommandAck.isForThisGcs(): Boolean =
-        (targetSystem == GCS_SYSTEM_ID && targetComponent == GCS_COMPONENT_ID) ||
-            (targetSystem == 0 && targetComponent == 0)
 
     private fun resultOf(ack: CommandAck): StreamResult = when (ack.result) {
         MAV_RESULT_ACCEPTED -> StreamResult.Accepted

@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.link
 
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
@@ -8,6 +9,8 @@ import com.owindev.gcs.core.testing.coVerifyNever
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.command.CommandRoute
+import com.owindev.gcs.data.vehicle.command.CommandSendResult
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import io.mockk.Runs as runs
@@ -19,11 +22,15 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.amshove.kluent.shouldBeEqualTo
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -142,6 +149,131 @@ class GcsMessageSenderTest {
         recorded.map { it.asList() } shouldBeEqualTo listOf(sent[1].asList())
     }
 
+    @Tag("REQ-043")
+    @Test
+    fun `GIVEN an open route WHEN sending a command THEN it leaves to that address and is recorded`() = runTest {
+        val recorded = mutableListOf<ByteArray>()
+        every { recorder.sent(capture(recorded)) } just runs
+
+        val result = sender.send(COMMAND) { OPEN_ROUTE }
+
+        result shouldBeEqualTo CommandSendResult.Sent
+        sent.map(::headerOf) shouldBeEqualTo listOf(Header(sequence = 0, messageId = COMMAND_LONG_ID))
+        recorded.map { it.asList() } shouldBeEqualTo listOf(sent.single().asList())
+    }
+
+    @Tag("REQ-043")
+    @Test
+    fun `GIVEN a closed route WHEN sending a command THEN nothing leaves and the route's reason is returned`() =
+        runTest {
+            val closed = CommandRoute.Closed(NotSentReason.ROUTE_CHANGED)
+
+            val result = sender.send(COMMAND) { closed }
+
+            result shouldBeEqualTo CommandSendResult.NotSent(NotSentReason.ROUTE_CHANGED)
+            coVerifyNever {
+                transport.send(any(), any())
+            }
+            verifyNever {
+                recorder.sent(any())
+            }
+        }
+
+    @Tag("REQ-037")
+    @Tag("REQ-043")
+    @Test
+    fun `GIVEN the link plays a replay WHEN sending a command THEN nothing leaves and the route is never read`() =
+        runTest {
+            var routeReads = 0
+            val replaying = GcsMessageSender(transport, recorder, sessionOn(MutableStateFlow(REPLAY_SESSION)))
+
+            val result = replaying.send(COMMAND) {
+                routeReads++
+                OPEN_ROUTE
+            }
+
+            result shouldBeEqualTo CommandSendResult.NotSent(NotSentReason.REPLAY)
+            routeReads shouldBeEqualTo 0
+            coVerifyNever {
+                transport.send(any(), any())
+            }
+        }
+
+    @Tag("REQ-043")
+    @Test
+    fun `GIVEN a HEARTBEAT being sent WHEN a command waits for the lock THEN its route is read after the HEARTBEAT`() =
+        runTest {
+            coEvery { transport.send(any(), PEER) } coAnswers {
+                delay(SEND_TIME)
+                sent += firstArg<ByteArray>()
+                SendResult.Sent
+            }
+            var framesSentWhenRouteRead = -1
+            async(start = CoroutineStart.UNDISPATCHED) { sender.send(HEARTBEAT, PEER) }
+
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) {
+                sender.send(COMMAND) {
+                    framesSentWhenRouteRead = sent.size
+                    OPEN_ROUTE
+                }
+            }
+            val result = deferred.await()
+
+            result shouldBeEqualTo CommandSendResult.Sent
+            framesSentWhenRouteRead shouldBeEqualTo 1
+        }
+
+    @Tag("REQ-043")
+    @Test
+    fun `GIVEN a closed socket and then a failure WHEN sending commands THEN neither is sent and each says why`() =
+        runTest {
+            results = mutableListOf(SendResult.NotOpen, SendResult.Failed(IOException()))
+
+            val result = List(2) { sender.send(COMMAND) { OPEN_ROUTE } }
+
+            result shouldBeEqualTo listOf(
+                CommandSendResult.NotSent(NotSentReason.LINK_LOST),
+                CommandSendResult.NotSent(NotSentReason.SEND_FAILED),
+            )
+        }
+
+    @Tag("REQ-042")
+    @Test
+    fun `GIVEN a sender already cancelled WHEN it sends a command THEN nothing leaves`() = runTest {
+        val cancelled = launch(start = CoroutineStart.UNDISPATCHED) {
+            coroutineContext.job.cancel()
+            sender.send(COMMAND) { OPEN_ROUTE }
+        }
+
+        cancelled.join()
+
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-036")
+    @Test
+    fun `GIVEN a sender cancelled during the socket write WHEN the frame leaves THEN it is recorded and numbered`() =
+        runTest {
+            val recorded = mutableListOf<ByteArray>()
+            every { recorder.sent(capture(recorded)) } just runs
+            lateinit var cancelled: Job
+            coEvery { transport.send(any(), PEER) } coAnswers {
+                cancelled.cancel()
+                sent += firstArg<ByteArray>()
+                // The frame left; the return then throws, as from `UdpTransport.send`'s withContext.
+                yield()
+                SendResult.Sent
+            }
+            cancelled = launch(start = CoroutineStart.LAZY) { sender.send(COMMAND) { OPEN_ROUTE } }
+
+            cancelled.join()
+            val result = sender.send(HEARTBEAT, PEER)
+
+            result shouldBeEqualTo SendResult.Sent
+            recorded.size shouldBeEqualTo 2
+            sent.map { headerOf(it).sequence } shouldBeEqualTo listOf(0, 1)
+        }
+
     /** The header fields this test checks, as the codec's parser reads them. */
     private data class Header(val sequence: Int, val messageId: Int)
 
@@ -159,6 +291,7 @@ class GcsMessageSenderTest {
         const val LAST_SEQUENCE = 255
 
         val PEER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
+        val OPEN_ROUTE = CommandRoute.Open(PEER)
         val HEARTBEAT = GcsHeartbeatSender.GCS_HEARTBEAT
         val COMMAND = CommandLong(
             targetSystem = 1,
