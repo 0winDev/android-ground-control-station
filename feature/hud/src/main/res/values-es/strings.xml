@@ -87,6 +87,7 @@
     <string name="hud_alert_stale_air_data">Datos de velocidad desactualizados</string>
     <string name="hud_alert_stale_battery">Datos de batería desactualizados</string>
     <string name="hud_alert_stale_gps">Datos de GPS desactualizados</string>
+    <string name="hud_alert_stale_landed">Estado en tierra desactualizado</string>
     <string name="hud_alert_acknowledge">Reconocer</string>
     <plurals name="hud_alert_others_description">
         <item quantity="one">%1$d alerta más activa, %2$s</item>

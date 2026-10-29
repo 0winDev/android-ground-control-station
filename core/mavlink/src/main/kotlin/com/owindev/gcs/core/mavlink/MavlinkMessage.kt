@@ -422,6 +422,15 @@ sealed interface MavlinkMessage {
         MavlinkMessage
 
     /**
+     * EXTENDED_SYS_STATE (id 245, https://mavlink.io/en/messages/common.html#EXTENDED_SYS_STATE): the vehicle's landed
+     * and VTOL states, as sent. Both fields are `uint8_t`, so a trailing UNDEFINED (0) is truncated on the wire.
+     *
+     * @property vtolState `MAV_VTOL_STATE`; ArduCopter always reports MC (3).
+     * @property landedState `MAV_LANDED_STATE`: "MAV_LANDED_STATE_UNDEFINED if landed state is unknown".
+     */
+    data class ExtendedSysState(val vtolState: Int, val landedState: Int) : MavlinkMessage
+
+    /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.
      *

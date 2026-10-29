@@ -166,7 +166,7 @@ class AlertRule(
      * their stream is fresh again.
      */
     private fun staleAlerts(telemetry: Telemetry, previous: List<ActiveAlert>): Set<Alert> {
-        val stale = TelemetryKind.entries
+        val stale = TelemetryKind.DISPLAYED
             .filter { kind -> telemetry[kind]?.let { isStale(it, kind) } == true }
             .mapTo(mutableSetOf<Alert>(), Alert::TelemetryStale)
         val held = previous

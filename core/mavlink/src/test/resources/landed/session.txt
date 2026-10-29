@@ -1,0 +1,24 @@
+# What the capture tool printed (pymavlink 2.4.50 on Mission Planner's SITL, TCP 5763, as 255/191), 2026-10-29.
+# landed/session.tlog holds only what the vehicle sent during the second run. The tool printed the first 4 bytes of
+# flight_custom_version as hex: 66 62 64 30 is ASCII "fbd0", the start of git hash fbd0a316.
+
+# First run (no rate set on this channel yet; its .tlog was not written):
+[19:27:35.255] AUTOPILOT_VERSION 4.7.2 type=255 git=66626430
+[19:27:35.256] DISARM_DELAY 10.0
+[19:27:45.764] before request: 0 EXTENDED_SYS_STATE in 10 s
+[19:27:45.765] COMMAND 511 -> 0
+[19:27:55.955] after request at 1 Hz: 10 EXTENDED_SYS_STATE in 10 s
+
+# Second run (landed/session.tlog; the rate set by the first run still held on the channel):
+[19:29:27.796] AUTOPILOT_VERSION 4.7.2 type=255 git=66626430
+[19:29:27.796] DISARM_DELAY 10.0
+[19:29:28.708] landed_state ON_GROUND vtol=3 alt=0.0 m mode=LAND armed=False
+[19:29:37.923] before request: 10 EXTENDED_SYS_STATE in 10 s
+[19:29:37.925] COMMAND 511 -> 0
+[19:29:48.001] after request at 1 Hz: 10 EXTENDED_SYS_STATE in 10 s
+[19:29:50.022] COMMAND 400 -> 0
+[19:29:53.034] COMMAND 22 -> 0
+[19:29:54.716] landed_state TAKEOFF vtol=3 alt=0.1 m mode=GUIDED armed=True
+[19:30:00.722] landed_state IN_AIR vtol=3 alt=10.0 m mode=GUIDED armed=True
+[19:30:05.720] landed_state LANDING vtol=3 alt=9.8 m mode=LAND armed=True
+[19:30:27.728] landed_state ON_GROUND vtol=3 alt=-0.0 m mode=LAND armed=False

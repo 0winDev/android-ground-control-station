@@ -7,9 +7,11 @@ import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.Home
+import com.owindev.gcs.core.domain.telemetry.LandedState
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ExtendedSysState
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
@@ -44,6 +46,15 @@ internal object TelemetryMapper {
     private const val NULL_ISLAND_DEGE7 = 0
 
     // GPS_FIX_TYPE (common.xml).
+
+    /** `MAV_LANDED_STATE` (`common.xml`); 0 (UNDEFINED) and any other value are [LandedState.UNKNOWN]. */
+    private val LANDED_STATES = mapOf(
+        1 to LandedState.ON_GROUND,
+        2 to LandedState.IN_AIR,
+        3 to LandedState.TAKING_OFF,
+        4 to LandedState.LANDING,
+    )
+
     private const val GPS_FIX_TYPE_NO_GPS = 0
     private const val GPS_FIX_TYPE_NO_FIX = 1
     private const val GPS_FIX_TYPE_2D_FIX = 2
@@ -80,11 +91,21 @@ internal object TelemetryMapper {
         if (received.componentId != MAV_COMP_ID_AUTOPILOT1) return null
         return when (val message = received.message) {
             is GlobalPositionInt -> message.toPosition()?.let { telemetry.copy(position = Timed(it, receivedAt)) }
+
             is MavlinkMessage.Attitude -> telemetry.copy(attitude = Timed(message.toAttitude(), receivedAt))
+
             is VfrHud -> telemetry.copy(airData = Timed(message.toAirData(), receivedAt))
+
             is SysStatus -> telemetry.copy(battery = Timed(message.toBattery(), receivedAt))
+
             is GpsRawInt -> telemetry.copy(gps = Timed(message.toGpsStatus(), receivedAt))
+
             is HomePosition -> message.toHome()?.let { telemetry.copy(home = Timed(it, receivedAt)) }
+
+            is ExtendedSysState -> telemetry.copy(
+                landed = Timed(LANDED_STATES[message.landedState] ?: LandedState.UNKNOWN, receivedAt),
+            )
+
             else -> null
         }
     }

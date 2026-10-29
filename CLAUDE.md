@@ -211,6 +211,7 @@ the issue number to an existing one.
 - An ArduPilot reboot never goes LOST: detect it from `time_boot_ms` going back, then request the streams (#69).
 - ArduPilot sends HOME_POSITION only when it sets or moves home: its silence is never a reason to ask (#69).
 - Rejecting a value never erases state: drop the frame; compare ±π as float32 and integers with `in` (#49).
+- A base class default is not the vehicle's: read the override (ArduCopter's `vtol_state` is MC, not UNDEFINED) (#112).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -222,6 +223,7 @@ the issue number to an existing one.
 - pymavlink drops all a corrupted LEN claims, our parser only the marker: it proves a frame invalid, no more (#67).
 - A reader without checksums anchors its plausibility window on two consecutive records, never one (#68).
 - A tolerant reader's test can pass for the wrong reason: check it with a mutation of the rule it guards (#68, #71).
+- A capture's .tlog holds only what the vehicle sent: keep its AUTOPILOT_VERSION and raw counts in a file beside it (#112).
 - A mutation that does not compile looks like a survivor: read the build output before trusting it (#98).
 - MGRS reference points stay 1 cm off a 1 m boundary; GEOTRANS and GeoConvert disagree at exactly 84°N (#40).
 
@@ -251,6 +253,7 @@ the issue number to an existing one.
 - Whatever is kept per system ID grows with made-up IDs: keep history (the trail) for the active vehicle only (#72).
 - An occurrence id fixes the repository's race, not the screen's: a banner swapping under a finger needs a guard (#56).
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
+- A display staleness threshold is no safety gate: give the gate its own bound and the stream the rate it needs (#112).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
@@ -266,6 +269,7 @@ the issue number to an existing one.
 - A SITL TCP port can stay silent for a whole session: count raw bytes on it first (#70).
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
+- pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
 - A receiver's own app passes its permission: prove the guard from another UID or by the installed manifest (#98).
 
 **Emulator, Windows and tooling**
@@ -274,6 +278,7 @@ the issue number to an existing one.
 - The emulator's clock can run seconds behind the host: match logcat to the relay log by events (#39).
 - On Windows `NUL` claims to be a terminal and Python writes CRLF unless `newline="\n"` (#14, #56).
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
+- detekt measures tests too: a `when` over message types that grows with the codec becomes a table (#112).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
 - On Windows `@TempDir` cannot delete a file left open: close what the SUT opened in `@AfterEach` (#70).
 - CI calls each module's `koverVerify` by name, never `check`: a module with a new minimum is added there (#63).

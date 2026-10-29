@@ -192,6 +192,14 @@ Writes:
                                                 BATT_LOW_VOLT, param_index -1, built by pymavlink: LEN 17
   <out>/derived/param-request-read-16-chars.bin the same for a 16-character name: no NUL, LEN 20
   <out>/derived/param-request-read-1-char.bin   the same for a 1-character name: LEN 5
+  <out>/landed/<state>.bin                      the first real EXTENDED_SYS_STATE (not derived) of each landed state in
+                                                landed/session.tlog (ArduCopter 4.7.2 SITL, #112): on-ground,
+                                                takeoff, in-air and landing, vtol_state MC, LEN 2
+  <out>/derived/extended-sys-state-undefined.bin
+                                                landed/on-ground.bin re-packed by pymavlink with landed_state 0
+                                                (UNDEFINED): the zero is truncated, LEN 1
+  <out>/derived/extended-sys-state-landed-5.bin the same with landed_state 5, the first value past MAV_LANDED_STATE
+                                                in common.xml
   <out>/param/session.tsv                       every MAVLink 2 PARAM_VALUE of heartbeat/session.tlog and of
   <out>/param/mission-planner.tsv               tlog/mission-planner.tlog as pymavlink decodes it, in order
   <out>/derived/session-mavlink2-stream.bin     heartbeat/session.tlog's MAVLink 2 frames only, in order, as on
@@ -437,6 +445,15 @@ CORRUPTED_LEN_RAISED = 255
 CORRUPTED_LEN_LOWERED = 1
 SESSION_MAVLINK2_FRAMES = 5522
 MISSION_PLANNER_LOG = "tlog/mission-planner.tlog"
+# A take off to 10 m and a LAND in ArduCopter 4.7.2 SITL, recorded by pymavlink on SITL's TCP 5763 (#112).
+LANDED_SESSION = "landed/session.tlog"
+LANDED_STATES = {
+    common.MAV_LANDED_STATE_ON_GROUND: "on-ground",
+    common.MAV_LANDED_STATE_TAKEOFF: "takeoff",
+    common.MAV_LANDED_STATE_IN_AIR: "in-air",
+    common.MAV_LANDED_STATE_LANDING: "landing",
+}
+OUTSIDE_LANDED_STATE = common.MAV_LANDED_STATE_ENUM_END
 PARAM_ID_LENGTH = 16
 FULL_PARAM_VALUE_LENGTH = 25
 FULL_PARAM_REQUEST_READ_LENGTH = 20
@@ -843,6 +860,12 @@ def main() -> None:
     statustext_dir.mkdir(parents=True, exist_ok=True)
     param_dir = args.out / "param"
     param_dir.mkdir(parents=True, exist_ok=True)
+    landed_dir = args.out / "landed"
+    landed = {
+        state: session_frame(args.out / LANDED_SESSION, "EXTENDED_SYS_STATE", lambda m, s=state: m.landed_state == s)
+        for state in LANDED_STATES
+    }
+    on_ground = landed[common.MAV_LANDED_STATE_ON_GROUND]
     session = args.out / SESSION
     mission_planner_log = args.out / MISSION_PLANNER_LOG
     stat_runtime = session_frame(session, "PARAM_VALUE", lambda m: m.param_id == "STAT_RUNTIME")
@@ -1008,6 +1031,11 @@ def main() -> None:
         derived_dir / "param-request-read-1-char.bin": param_request_read(ONE_CHAR_NAME),
         param_dir / "session.tsv": param_value_table(session).encode(),
         param_dir / "mission-planner.tsv": param_value_table(mission_planner_log).encode(),
+        **{landed_dir / f"{name}.bin": landed[state] for state, name in LANDED_STATES.items()},
+        derived_dir / "extended-sys-state-undefined.bin": with_message_fields(
+            on_ground, landed_state=common.MAV_LANDED_STATE_UNDEFINED
+        ),
+        derived_dir / "extended-sys-state-landed-5.bin": with_message_fields(on_ground, landed_state=OUTSIDE_LANDED_STATE),
         derived_dir / "session-mavlink2-stream.bin": session_mavlink2_stream(session),
         derived_dir / "heartbeat-corrupted-len-raised.bin": with_length(source, CORRUPTED_LEN_RAISED),
         derived_dir / "heartbeat-corrupted-len-lowered.bin": with_length(source, CORRUPTED_LEN_LOWERED),
@@ -1305,6 +1333,9 @@ def main() -> None:
         derived_dir / "param-request-read-batt-low-volt.bin",
         derived_dir / "param-request-read-16-chars.bin",
         derived_dir / "param-request-read-1-char.bin",
+        *[landed_dir / f"{name}.bin" for name in LANDED_STATES.values()],
+        derived_dir / "extended-sys-state-undefined.bin",
+        derived_dir / "extended-sys-state-landed-5.bin",
     ):
         frame = outputs.get(path) or path.read_bytes()
         print(f"{path.relative_to(args.out).as_posix()}: seq {frame[4]}, {fields_text(frame)}")
