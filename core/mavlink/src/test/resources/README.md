@@ -596,9 +596,10 @@ derived/param-request-read-1-char.bin        fd 05 00 00 2a ff be 14 00 00 ff ff
 
 ## EXTENDED_SYS_STATE (#112)
 
-`landed/session.tlog`: a take off to 10 m in GUIDED and a LAND in Mission Planner's SITL, ArduCopter 4.7.2 (official
-build, AUTOPILOT_VERSION type 255, git `fbd0a316`), recorded by pymavlink on SITL's TCP 5763 with EXTENDED_SYS_STATE
-requested at 1 Hz; ArduCopter sent none on that channel before the request. Extracted and built by
+`landed/session.tlog`: a take off to 10 m in GUIDED and a LAND in Mission Planner's SITL, recorded by pymavlink on SITL's
+TCP 5763 with EXTENDED_SYS_STATE requested at 1 Hz. The log holds only what the vehicle sent; the session's
+AUTOPILOT_VERSION (ArduCopter 4.7.2, official build, type 255, git `fbd0a316`) and the raw counts (none in 10 s before
+the first request on the channel, 10 after) are in `landed/session.txt`, as the capture tool printed them. Extracted and built by
 `py tools/fixtures/derive_fixtures.py` (pymavlink 2.4.50): CRC_EXTRA 130, LEN 2, `vtol_state` at 0, `landed_state` at 1,
 no extensions. ArduCopter reports `vtol_state` 3 (MC) always (`GCS_MAVLink_Copter.h`), so only an UNDEFINED
 `landed_state` is truncated.
