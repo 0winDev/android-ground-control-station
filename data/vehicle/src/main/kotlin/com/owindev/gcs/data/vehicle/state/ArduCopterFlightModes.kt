@@ -12,7 +12,7 @@ import com.owindev.gcs.core.domain.vehicle.FlightMode
  */
 internal object ArduCopterFlightModes {
 
-    /** The mode a take off is sent in (#99). */
+    /** The mode a take off is sent in (#99): `Mode::Number::GUIDED` in `ArduCopter/mode.h` (Copter-4.7.2). */
     const val GUIDED = 4L
 
     private val names: Map<Long, String> = mapOf(

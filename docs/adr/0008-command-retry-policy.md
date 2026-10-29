@@ -40,15 +40,18 @@ cannot be told from the answer to a newer command with the same ID. Until signin
   command is refused meanwhile, as busy; any other is sent at once.
 - **Arm's and take off's late window is 10 s** (`DANGEROUS_LATE_WINDOW`), 11.5 s from the send. An earlier arm's
   late FAILED taken as a new arm's answer would read "rejected" while the new arm arms the vehicle; refusing a new arm
-  meanwhile covers round trips up to 11.5 s. The same holds for a take off. The ACK has no sequence number, so no rule closes it for any latency: past that, the HEARTBEAT's
-  armed state is the truth, and the screen shows it over any ACK (#104).
+  meanwhile covers round trips up to 11.5 s. The same holds for a take off, which keeps its window even when RTL or
+  land supersedes it once an attempt was about to leave. The ACK has no sequence number, so no rule closes it for any
+  latency: past that, the HEARTBEAT's armed state is the truth, and the screen shows it over any ACK (#104).
 - **Take off is a sequence (#99).** ArduCopter takes off only in a mode that allows it, GUIDED here
   (`handle_MAV_CMD_NAV_TAKEOFF`, Copter-4.7.2). When the HEARTBEAT does not show GUIDED, `MAV_CMD_DO_SET_MODE` with
   GUIDED's custom mode is sent once; NAV_TAKEOFF follows only after its ACCEPTED **and** a HEARTBEAT showing GUIDED
   within 2.5 s (`GUIDED_CONFIRM_TIMEOUT`: two 1 Hz HEARTBEATs and margin), since an accepted mode change is not yet
   the mode. Otherwise the take off ends as mode not changed, with the mode change's result. Each step is sent only
-  while the HEARTBEAT shows the vehicle armed, checked with the route under the sender's lock. The mode change's late
-  window is 1.5 s, and a new take off is refused meanwhile.
+  while the HEARTBEAT shows the vehicle armed and two independent signs say it is on the ground: an ON_GROUND landed
+  state under 0.5 s old (REQ-052, #112) and a position under 0.5 s old at most 1 m above home and moving at most
+  0.5 m/s vertically; all checked with the route under the sender's lock, since a mode change would abort a flying
+  vehicle's landing or return. The mode change's late window is 1.5 s, and a new take off is refused meanwhile.
 - **No answer may still have worked.** Once an attempt has left, a command ends as no answer, never as not sent, with
   the reason when the app stopped retrying early (link lost, route changed, replay).
 - **One route.** Commands go to the active vehicle's autopilot (component 1) at the address of its first HEARTBEAT in

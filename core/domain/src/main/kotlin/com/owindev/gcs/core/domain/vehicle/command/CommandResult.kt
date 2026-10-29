@@ -62,6 +62,9 @@ enum class NotSentReason {
     /** A take off for a vehicle whose HEARTBEAT does not show it armed. */
     NOT_ARMED,
 
+    /** A take off for a vehicle not known to be on the ground, by its landed state and its position both. */
+    NOT_LANDED,
+
     /** A take off altitude outside [TakeOffAltitudeRule]'s range. */
     ALTITUDE_OUT_OF_RANGE,
 

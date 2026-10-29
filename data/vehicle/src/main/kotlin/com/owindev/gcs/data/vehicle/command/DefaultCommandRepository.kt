@@ -16,6 +16,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,8 +39,11 @@ internal class DefaultCommandRepository @Inject constructor(
     /** The command sent or about to be; guarded by [lock]. */
     private var active: Request? = null
 
-    /** Each command whose late answer is still listened for after no answer, by command; guarded by [lock]. */
-    private val lateWindows = mutableMapOf<VehicleCommand, Request>()
+    /**
+     * Each command whose late answer is still listened for after no answer, or a superseded take off's (ADR 0008), by
+     * command, to its request or that take off's own token; guarded by [lock].
+     */
+    private val lateWindows = mutableMapOf<VehicleCommand, Any>()
 
     private val mutablePending = MutableStateFlow<PendingCommand?>(null)
     override val pending: StateFlow<PendingCommand?> = mutablePending.asStateFlow()
@@ -85,6 +89,12 @@ internal class DefaultCommandRepository @Inject constructor(
                 superseded.result.complete(CommandResult.Superseded)
                 superseded.job.cancel()
                 report(superseded.systemId, superseded.command, CommandResult.Superseded)
+                admission.heldWindow?.let { token ->
+                    scope.launch {
+                        delay(CommandExchange.DANGEROUS_LATE_WINDOW)
+                        synchronized(lock) { lateWindows.remove(superseded.command, token) }
+                    }
+                }
             }
         }
         request.job.start()
@@ -98,7 +108,10 @@ internal class DefaultCommandRepository @Inject constructor(
         if (request.command in lateWindows || !supersedes) return Admission.Refused
         active = request
         mutablePending.value = null
-        return Admission.Admitted(superseded = current)
+        // A take off's late answer could otherwise answer the next take off while it climbs: its window outlives it.
+        val heldWindow = if (current?.command == VehicleCommand.TAKE_OFF && current.attempted) Any() else null
+        heldWindow?.let { lateWindows[VehicleCommand.TAKE_OFF] = it }
+        return Admission.Admitted(superseded = current, heldWindow = heldWindow)
     }
 
     private suspend fun run(request: Request) {
@@ -107,6 +120,7 @@ internal class DefaultCommandRepository @Inject constructor(
                 { state ->
                     synchronized(lock) {
                         if (active === request) {
+                            request.attempted = true
                             mutablePending.value = PendingCommand(request.systemId, request.command, state)
                         }
                     }
@@ -149,12 +163,15 @@ internal class DefaultCommandRepository @Inject constructor(
     ) {
         lateinit var job: Job
         val result = CompletableDeferred<CommandResult>()
+
+        /** An attempt was about to leave, or left; guarded by [lock]. */
+        var attempted = false
     }
 
     private sealed interface Admission {
         data object Refused : Admission
 
-        data class Admitted(val superseded: Request?) : Admission
+        data class Admitted(val superseded: Request?, val heldWindow: Any?) : Admission
     }
 
     private companion object {

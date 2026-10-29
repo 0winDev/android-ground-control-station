@@ -10,6 +10,7 @@ import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayRule
+import com.owindev.gcs.core.domain.telemetry.GroundPositionRule
 import com.owindev.gcs.core.domain.telemetry.LandedRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
@@ -125,6 +126,10 @@ abstract class VehicleDataModule {
         /** On the ground only on an ON_GROUND younger than 0.5 s (REQ-052, #112); change it here. */
         @Provides
         fun provideLandedRule(): LandedRule = LandedRule()
+
+        /** A take off's second ground check (REQ-044): a position under 0.5 s old, 1 m above home, 0.5 m/s at most. */
+        @Provides
+        fun provideGroundPositionRule(): GroundPositionRule = GroundPositionRule()
 
         /** The battery thresholds decided in #41 (REQ-028), judging staleness as the rest of the app does. */
         @Provides
