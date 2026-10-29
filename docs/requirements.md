@@ -77,6 +77,8 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 |---|---|---|
 | REQ-040 | The codec shall decode STATUSTEXT, including its `id` and `chunk_seq` extension fields, as defined in the MAVLink `common` dialect. | T |
 | REQ-041 | The codec shall encode PARAM_REQUEST_READ and decode PARAM_VALUE as defined in the MAVLink `common` dialect. | T |
+| REQ-042 | The GCS shall send arm, RTL and land to the active vehicle's autopilot one at a time, each ending in exactly one result, logged once: the matching COMMAND_ACK's, or no answer after 1.5 s per attempt; RTL and land shall be sent up to three times with `confirmation` 0, 1, 2 and arm once; after IN_PROGRESS it shall wait 10 s more without re-sending; after no answer the same command shall be refused for a late window of 1.5 s, 10 s for arm; a new RTL or land shall supersede a pending RTL or land, and arm shall never supersede nor be superseded (ADR 0008). | T, S |
+| REQ-043 | No command shall be sent during a replay, to a system ID other than the active vehicle's, while the active vehicle is LOST, or while its HEARTBEATs come from an address other than its first one in the session; checked before every attempt under the sender's lock. | T, S |
 
 ## Requirement → verification matrix
 
@@ -121,6 +123,8 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-039 | `RecordingRuleTest`, `FlightRecorderTest`, `LastClosedMarkerTest` | Verified |
 | REQ-040 | `MavlinkDecoderTest`, `MavlinkMessagesTest`, `MavlinkCrcTest` (ArduCopter's real STATUSTEXT and ArduCopter 4.7.2's arming texts, against pymavlink and `mavlink/mavlink` master) | Verified |
 | REQ-041 | `MavlinkEncoderTest`, `ParamRequestReadTest`, `MavlinkDecoderParamTest`, `MavlinkDecoderTest`, `MavlinkMessagesTest`, `MavlinkCrcTest` (ArduCopter's real PARAM_VALUE and pymavlink's PARAM_REQUEST_READ) | Verified |
+| REQ-042 | `DefaultCommandRepositoryTest`, `CommandMessagesTest` (`common.xml` on `mavlink/mavlink` master). **S:** #98 (ArduCopter 4.7.2: arm, RTL and land accepted as QGroundControl shows them; with the relay dropping commands, RTL sent with `confirmation` 0, 1, 2 1.5 s apart and arm once, each logged once as no answer) | Verified |
+| REQ-043 | `CommandRouteTest`, `GcsMessageSenderTest`, `DefaultCommandRepositoryTest`. **S:** #98 (ArduCopter 4.7.2: not sent to system 2, while LOST, or after the relay restarted on another port; sent again once the link came back on its first route) | Verified |
 
 ## Known limits
 
@@ -147,3 +151,10 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-040: a UTF-8 character split between two chunks decodes as U+FFFD in each; ArduPilot's texts are ASCII.
 - REQ-040: the `PreArm:` and `Arm:` frames are derived from ArduCopter's code, not captured (a capture comes with #100 or #102).
 - REQ-041: PARAM_REQUEST_READ is checked against pymavlink only; ArduCopter's answer to it is checked with SITL in #101.
+- REQ-042: the ACK has no sequence number, so one later than its late window, or that of an RTL superseded by another RTL, answers the next same command.
+- REQ-042: a command sent before the link is lost ends as no answer, never as not sent: the vehicle may have executed it.
+- REQ-042: during the late window the same command is refused as busy while `pending` shows nothing.
+- REQ-042: on a round trip over 11.5 s an earlier arm's late FAILED can answer a new arm while it arms the vehicle; the HEARTBEAT's armed state is the truth (#104).
+- REQ-043: until signing (v0.6) whoever sends the first HEARTBEAT owns the route, and a forged ACK from it can fake an answer (`docs/security.md`, N-2).
+- REQ-043: a change of the vehicle's address within a session (a router restart, a second route, a forger with its system ID) blocks every command until the session ends; #105 is mandatory before any real flight.
+- REQ-043: another GCS behind the same forwarder uses this GCS's identity (255/190), so its ACKs pass as answers.
