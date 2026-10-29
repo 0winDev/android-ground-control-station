@@ -166,7 +166,7 @@ class AlertRule(
      * their stream is fresh again.
      */
     private fun staleAlerts(telemetry: Telemetry, previous: List<ActiveAlert>): Set<Alert> {
-        val stale = TelemetryKind.entries
+        val stale = STALE_ALERTED
             .filter { kind -> telemetry[kind]?.let { isStale(it, kind) } == true }
             .mapTo(mutableSetOf<Alert>(), Alert::TelemetryStale)
         val held = previous
@@ -189,6 +189,12 @@ class AlertRule(
          * 6 min of steady SITL streams (#41) one ATTITUDE stream was late once, for about 0.15 s.
          */
         val STALE_MINIMUM_HOLD: Duration = 2.seconds
+
+        /**
+         * The values that raise [Alert.TelemetryStale]: not the landed state, which is no flight alert but a reason to
+         * refuse a take off (#99) or fail a pre-flight check.
+         */
+        private val STALE_ALERTED: List<TelemetryKind> = TelemetryKind.entries - TelemetryKind.LANDED
 
         /** The values that raise an alert when never received, once they are late ([evaluate]). */
         private val NEVER_RECEIVED_ALERTED: Set<TelemetryKind> = setOf(TelemetryKind.BATTERY, TelemetryKind.GPS)

@@ -11,6 +11,7 @@ enum class TelemetryKind {
     AIR_DATA,
     BATTERY,
     GPS,
+    LANDED,
 }
 
 /**
@@ -54,7 +55,8 @@ class StalenessRule(thresholds: Map<TelemetryKind, Duration> = DEFAULT_THRESHOLD
         /**
          * About four or five intervals of the rate each value is requested at (10, 5, 4, 2 Hz), so one or two
          * lost messages never grey a value out, and below the 3 s link-loss timeout so that a stream that stops
-         * while the vehicle is still heard shows. The battery (1 Hz) gets three intervals, the timeout itself.
+         * while the vehicle is still heard shows. The battery and the landed state (1 Hz) get three intervals, the
+         * timeout itself.
          */
         val DEFAULT_THRESHOLDS: Map<TelemetryKind, Duration> = mapOf(
             TelemetryKind.ATTITUDE to 500.milliseconds,
@@ -62,6 +64,7 @@ class StalenessRule(thresholds: Map<TelemetryKind, Duration> = DEFAULT_THRESHOLD
             TelemetryKind.AIR_DATA to 1.seconds,
             TelemetryKind.GPS to 2.seconds,
             TelemetryKind.BATTERY to 3.seconds,
+            TelemetryKind.LANDED to 3.seconds,
         )
     }
 }

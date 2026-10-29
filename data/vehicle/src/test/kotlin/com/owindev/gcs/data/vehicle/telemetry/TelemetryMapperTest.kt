@@ -8,6 +8,7 @@ import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.Home
+import com.owindev.gcs.core.domain.telemetry.LandedState
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.mavlink.MavlinkDecoder
@@ -25,6 +26,8 @@ import org.amshove.kluent.shouldBeNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 
 /**
  * Real and pymavlink-derived frames (`src/test/resources/README.md`). Expected values are the raw values
@@ -486,6 +489,21 @@ class TelemetryMapperTest {
         result?.battery shouldBeEqualTo Timed(UNHEALTHY_WITHOUT_READING, EARLIER)
     }
 
+    @Tag("REQ-052")
+    @ParameterizedTest
+    @CsvSource("1, ON_GROUND", "2, IN_AIR", "3, TAKING_OFF", "4, LANDING", "0, UNKNOWN", "5, UNKNOWN")
+    fun `GIVEN an EXTENDED_SYS_STATE WHEN mapping it THEN is its MAV_LANDED_STATE, unknown when undefined or new`(
+        landedState: Int,
+        expected: LandedState,
+    ) {
+        val received =
+            received(MavlinkMessage.ExtendedSysState(vtolState = MAV_VTOL_STATE_MC, landedState = landedState))
+
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
+
+        result shouldBeEqualTo Telemetry(landed = Timed(expected, RECEIVED_AT), origin = DataOrigin.LIVE)
+    }
+
     @Test
     fun `GIVEN telemetry from another component of the vehicle WHEN mapping it THEN is not the vehicle's`() {
         val received = receivedFixture(ATTITUDE).copy(componentId = MAV_COMP_ID_GIMBAL)
@@ -564,6 +582,7 @@ private val SENDER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_551)
 private val CLOCK = TestTimeSource()
 private val EARLIER = CLOCK.markNow()
 private val RECEIVED_AT = CLOCK.markNow()
+private const val MAV_VTOL_STATE_MC = 3
 
 /** `telemetry/global-position-int.bin` as pymavlink decodes it, converted by hand. */
 private val REAL_POSITION = GlobalPosition(

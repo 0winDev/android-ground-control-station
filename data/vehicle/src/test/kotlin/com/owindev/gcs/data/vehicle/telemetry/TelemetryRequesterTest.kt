@@ -45,8 +45,8 @@ import org.junit.jupiter.params.provider.CsvSource
  * (`command/set-message-interval-ack.bin`: command 511, ACCEPTED, from 1/1 to 255/190).
  *
  * The streams themselves are recorded straight into a real [TelemetryStore] on the scheduler's clock, as the
- * vehicle repository's listener does. A round of six accepted requests takes 300 ms (one 50 ms answer each),
- * so a stream is first allowed again 5.3 s in; the tests check well away from that edge. The vehicle never
+ * vehicle repository's listener does. A round of seven accepted requests takes 350 ms (one 50 ms answer each),
+ * so a stream is first allowed again 5.35 s in; the tests check well away from that edge. The vehicle never
  * streams HOME_POSITION here, as before home is set.
  */
 @Tag("REQ-023")
@@ -93,6 +93,7 @@ class TelemetryRequesterTest {
                 setMessageInterval(messageId = 24, intervalMicros = 500_000f),
                 setMessageInterval(messageId = 1, intervalMicros = 1_000_000f),
                 setMessageInterval(messageId = 242, intervalMicros = 1_000_000f),
+                setMessageInterval(messageId = 245, intervalMicros = 1_000_000f),
             )
         }
 
@@ -109,6 +110,7 @@ class TelemetryRequesterTest {
             StreamResult.Accepted,
             StreamResult.Accepted,
             StreamResult.Rejected(MAV_RESULT_DENIED),
+            StreamResult.Accepted,
             StreamResult.Accepted,
             StreamResult.Accepted,
             StreamResult.Accepted,
@@ -218,6 +220,7 @@ class TelemetryRequesterTest {
             StreamResult.Accepted,
             StreamResult.Accepted,
             StreamResult.Accepted,
+            StreamResult.Accepted,
         )
     }
 
@@ -246,6 +249,7 @@ class TelemetryRequesterTest {
             result shouldBeEqualTo listOf(
                 StreamResult.NotSent,
                 StreamResult.NotSent,
+                StreamResult.Accepted,
                 StreamResult.Accepted,
                 StreamResult.Accepted,
                 StreamResult.Accepted,
@@ -518,7 +522,7 @@ class TelemetryRequesterTest {
         const val GCS_SYSTEM_ID = 255
         const val GCS_COMPONENT_ID = 190
         const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
-        const val STREAMS = 6
+        const val STREAMS = 7
         const val VFR_HUD_ID = 74f
         const val ATTITUDE_ID = 30f
         const val MAV_RESULT_ACCEPTED = 0
@@ -540,16 +544,16 @@ class TelemetryRequesterTest {
         const val SIXTEEN_SECONDS = 16_000L
         const val TWENTY_SECONDS = 20_000L
 
-        // Well before the first request again, which is allowed 5.25 s in.
+        // Well before the first request again, which is allowed 5.35 s in.
         const val BEFORE_REQUESTED_AGAIN = 3_000L
 
         // The first request times out at 1 s, so the second one is in flight when the vehicle is lost.
         const val ONE_AND_A_HALF_TIMEOUTS = 1_500L
 
-        val STREAM_IDS = listOf(30f, 33f, 74f, 24f, 1f, 242f)
-        val WATCHED_IDS = listOf(30f, 33f, 74f, 24f, 1f)
+        val STREAM_IDS = listOf(30f, 33f, 74f, 24f, 1f, 242f, 245f)
+        val WATCHED_IDS = listOf(30f, 33f, 74f, 24f, 1f, 245f)
 
-        // Allowed again at 5.3 s, 10.3 s and 15.3 s.
+        // Allowed again at 5.35 s, 10.35 s and 15.35 s.
         const val REQUESTED_AGAIN_IN_SIXTEEN_SECONDS = 3
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
@@ -620,7 +624,9 @@ class TelemetryRequesterTest {
             onboardControlSensorsEnabledExtended = 0,
             onboardControlSensorsHealthExtended = 0,
         )
-        val STREAMED: List<MavlinkMessage> = listOf(ATTITUDE, GLOBAL_POSITION_INT, VFR_HUD, GPS_RAW_INT, SYS_STATUS)
+        val EXTENDED_SYS_STATE = MavlinkMessage.ExtendedSysState(vtolState = 3, landedState = 1)
+        val STREAMED: List<MavlinkMessage> =
+            listOf(ATTITUDE, GLOBAL_POSITION_INT, VFR_HUD, GPS_RAW_INT, SYS_STATUS, EXTENDED_SYS_STATE)
 
         fun ack(result: Int, targetSystem: Int = GCS_SYSTEM_ID, targetComponent: Int = GCS_COMPONENT_ID) =
             ReceivedMessage(

@@ -5,12 +5,14 @@ import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
+import com.owindev.gcs.core.domain.telemetry.LandedState
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.Timed
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 import kotlin.time.TimeMark
 import org.amshove.kluent.invoking
@@ -422,6 +424,23 @@ class AlertRuleTest {
         result shouldBeEqualTo listOf(GPS_LOST.raised(PREVIOUS), STALE_GPS.raised(1))
     }
 
+    @Tag("REQ-052")
+    @Test
+    fun `GIVEN a stale landed state WHEN evaluating it THEN raises no alert`() {
+        val landed = Timed(LandedState.ON_GROUND, clock.markNow())
+        clock += LANDED_STALE_AFTER
+
+        val result = rule.evaluate(
+            NONE,
+            telemetry(battery(remaining = 100)).copy(landed = landed),
+            ARMED,
+            evaluatingSince,
+            ::nextOccurrence,
+        )
+
+        result shouldBeEqualTo NONE
+    }
+
     @Test
     fun `GIVEN attitude 1 ms under its threshold WHEN evaluating it THEN the telemetry is not stale`() {
         val attitude = Timed(ATTITUDE, clock.markNow())
@@ -726,6 +745,7 @@ class AlertRuleTest {
 }
 
 private val NONE = emptyList<ActiveAlert>()
+private val LANDED_STALE_AFTER = 3.seconds
 private val LOW = Alert.BatteryLow
 private val CRITICAL = Alert.BatteryCritical
 private val UNHEALTHY = Alert.BatteryUnhealthy

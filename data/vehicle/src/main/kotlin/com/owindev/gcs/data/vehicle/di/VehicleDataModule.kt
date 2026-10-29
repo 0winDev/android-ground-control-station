@@ -10,6 +10,7 @@ import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayRule
+import com.owindev.gcs.core.domain.telemetry.LandedRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.telemetry.TrailRule
@@ -115,6 +116,10 @@ abstract class VehicleDataModule {
         /** The staleness thresholds decided in #39 (REQ-026); change them here. */
         @Provides
         fun provideStalenessRule(): StalenessRule = StalenessRule()
+
+        /** On the ground only on a fresh ON_GROUND (REQ-052), judging its age as the rest of the app does. */
+        @Provides
+        fun provideLandedRule(staleness: StalenessRule): LandedRule = LandedRule(staleness)
 
         /** The battery thresholds decided in #41 (REQ-028), judging staleness as the rest of the app does. */
         @Provides
