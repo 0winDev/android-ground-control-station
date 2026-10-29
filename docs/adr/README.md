@@ -12,3 +12,4 @@ Decisions someone will ask "why?" about. Format and rules: the `adr` skill
 | [0005](0005-openfreemap-tiles.md) | Draw the map from OpenFreeMap's public tiles, with MapLibre's own cache | Accepted |
 | [0006](0006-flight-log-is-a-black-box.md) | Record every MAVLink 2 frame as received; validate the log when it is read | Accepted |
 | [0007](0007-navigation-3.md) | Use Navigation 3, with the back stack owned by `:app` | Accepted |
+| [0008](0008-command-retry-policy.md) | Retry only RTL and land; send arm once | Proposed |
