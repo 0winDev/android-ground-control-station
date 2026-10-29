@@ -79,6 +79,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-041 | The codec shall encode PARAM_REQUEST_READ and decode PARAM_VALUE as defined in the MAVLink `common` dialect. | T |
 | REQ-042 | The GCS shall send arm, RTL and land to the active vehicle's autopilot one at a time, each ending in exactly one result, logged once: the matching COMMAND_ACK's, or no answer after 1.5 s per attempt; RTL and land shall be sent up to three times with `confirmation` 0, 1, 2 and arm once; after IN_PROGRESS it shall wait 10 s more without re-sending; after no answer the same command shall be refused for a late window of 1.5 s, 10 s for arm; a new RTL or land shall supersede a pending RTL or land, and arm shall never supersede nor be superseded (ADR 0008). | T, S |
 | REQ-043 | No command shall be sent during a replay, to a system ID other than the active vehicle's, while the active vehicle is LOST, or while its HEARTBEATs come from an address other than its first one in the session; checked before every attempt under the sender's lock. | T, S |
+| REQ-044 | Take off shall put the vehicle in GUIDED first when needed and send NAV_TAKEOFF only after that mode change was accepted and a HEARTBEAT shows GUIDED, to an altitude the operator picks between 2 and 30 m (10 m by default); otherwise it shall stop with its reason. | T, S |
 | REQ-052 | The codec shall decode EXTENDED_SYS_STATE as defined in the MAVLink `common` dialect; the GCS shall request it from the active vehicle at 4 Hz and keep its landed state with its age, and only an ON_GROUND younger than 0.5 s shall count as on the ground, never an unknown, missing or older one. | T, S |
 
 ## Requirement → verification matrix
@@ -126,6 +127,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-041 | `MavlinkEncoderTest`, `ParamRequestReadTest`, `MavlinkDecoderParamTest`, `MavlinkDecoderTest`, `MavlinkMessagesTest`, `MavlinkCrcTest` (ArduCopter's real PARAM_VALUE and pymavlink's PARAM_REQUEST_READ) | Verified |
 | REQ-042 | `DefaultCommandRepositoryTest`, `CommandMessagesTest` (`common.xml` on `mavlink/mavlink` master). **S:** #98 (ArduCopter 4.7.2: arm, RTL and land accepted as QGroundControl shows them; with the relay dropping commands, RTL sent with `confirmation` 0, 1, 2 1.5 s apart and arm once, each logged once as no answer) | Verified |
 | REQ-043 | `CommandRouteTest`, `GcsMessageSenderTest`, `DefaultCommandRepositoryTest`. **S:** #98 (ArduCopter 4.7.2: not sent to system 2, while LOST, or after the relay restarted on another port; sent again once the link came back on its first route) | Verified |
+| REQ-044 | `TakeOffAltitudeRuleTest`, `DefaultCommandRepositoryTest` (`common.xml` on `mavlink/mavlink` master, ArduCopter `FLTMODE1` for GUIDED) | Pending SITL |
 | REQ-052 | `MavlinkDecoderExtendedSysStateTest`, `MavlinkMessagesTest`, `MavlinkCrcTest` (ArduCopter 4.7.2's real frames against pymavlink and `mavlink/mavlink` master), `TelemetryMapperTest`, `LandedRuleTest`, `AlertRuleTest`, `TelemetryRequesterTest`, `StalenessRuleTest`. **S:** #112 (ArduCopter 4.7.2 at 1 Hz: requested by the app and accepted, 384 frames 0.96–1.04 s apart through three take offs and landings, 1, 3, 2, 4, 1 as QGroundControl's MAVLink Inspector showed; at 4 Hz on a freshly started SITL: none before the app's request, then 109 frames 0.24–0.28 s apart, within `LandedRule`'s 0.5 s) | Verified |
 
 ## Known limits
@@ -160,6 +162,8 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-043: until signing (v0.6) whoever sends the first HEARTBEAT owns the route, and a forged ACK from it can fake an answer (`docs/security.md`, N-2).
 - REQ-043: a change of the vehicle's address within a session (a router restart, a second route, a forger with its system ID) blocks every command until the session ends; #105 is mandatory before any real flight.
 - REQ-043: another GCS behind the same forwarder uses this GCS's identity (255/190), so its ACKs pass as answers.
+- REQ-044: a take off stopped after an accepted mode change leaves the vehicle in GUIDED, armed on the ground, until `DISARM_DELAY` disarms it.
+- REQ-044: the vehicle may still refuse a take off (FAILED) when it is not landed or already above the altitude; its reason text comes with #100.
 - REQ-052: ArduCopter sends EXTENDED_SYS_STATE on a channel only once asked there, and its ON_GROUND comes from its land detector, after touchdown: until then nothing counts as on the ground.
 - REQ-052: `vtol_state` is decoded but not used; ArduCopter always reports MC (3).
 - REQ-052: unsigned until v0.6, so a forged ON_GROUND from the vehicle's route reads as on the ground (`docs/security.md`, N-2).
