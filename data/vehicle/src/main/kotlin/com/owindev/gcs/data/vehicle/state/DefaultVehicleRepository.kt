@@ -8,6 +8,9 @@ import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleState
+import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
+import com.owindev.gcs.data.vehicle.command.CommandRoute
+import com.owindev.gcs.data.vehicle.command.CommandRoutes
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
@@ -66,6 +69,10 @@ import kotlinx.coroutines.launch
  * The [activeSystemId] is the [ActiveVehicle] the link pinned with the first vehicle heard, and stays so (REQ-020);
  * the others are kept in the map like any vehicle, never merged into it.
  *
+ * Commands take one route (REQ-043, [routeTo]): the address of the active vehicle's first live HEARTBEAT in the
+ * session. While its HEARTBEATs come from another address, as from a forger with its system ID (`docs/security.md`,
+ * N-2), no command goes anywhere.
+ *
  * The watchdog is the only writer: HEARTBEATs and timeouts reach it as events through one channel and
  * are handled one at a time, so no state is shared between threads. Vehicles are never removed: a lost
  * one keeps its last known state and comes back CONNECTED with its next HEARTBEAT.
@@ -96,7 +103,8 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val telemetryStore: TelemetryStore,
     private val activeVehicle: ActiveVehicle,
     @param:ApplicationScope private val scope: CoroutineScope,
-) : VehicleRepository {
+) : VehicleRepository,
+    CommandRoutes {
 
     private val mutableVehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val events = Channel<Event>(Channel.UNLIMITED)
@@ -111,6 +119,10 @@ internal class DefaultVehicleRepository @Inject constructor(
     /** Where each vehicle's last HEARTBEAT came from; written only by the watchdog. */
     @Volatile
     private var addresses: Map<SystemId, InetSocketAddress> = emptyMap()
+
+    /** Where the active vehicle's first live HEARTBEAT of the session came from; written only by the watchdog. */
+    @Volatile
+    private var commandAddress: InetSocketAddress? = null
 
     /** Whether the listener holds the link open right now; written only by the listener. */
     @Volatile
@@ -181,6 +193,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Normally CONNECTED; LOST only if the watchdog got to this HEARTBEAT after the
                         // timeout had already passed, so a late event never flashes CONNECTED.
                         val link = rule.linkAfter(elapsed)
+                        pinCommandAddress(event)
                         addresses += systemId to event.sender
                         update(systemId, Vehicle(event.state, link, event.at, origin = event.session.origin))
                         if (link == VehicleLink.CONNECTED) {
@@ -222,6 +235,13 @@ internal class DefaultVehicleRepository @Inject constructor(
         }
     }
 
+    /** Keeps the first live address the active vehicle was heard from, the only one commands go to. */
+    private fun pinCommandAddress(heard: Event.Heard) {
+        if (heard.state.systemId == activeVehicle.systemId.value && heard.session.origin == DataOrigin.LIVE) {
+            commandAddress = commandAddress ?: heard.sender
+        }
+    }
+
     /**
      * Forgets every vehicle, timer, address and telemetry of the session [from], if [to] is another one, and returns
      * the session now. Any request target still queued is dropped, so none outlives its session, and the telemetry job
@@ -232,6 +252,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         timers.values.forEach(Job::cancel)
         timers.clear()
         addresses = emptyMap()
+        commandAddress = null
         mutableVehicles.value = emptyMap()
         telemetryStore.startSession(to)
         do {
@@ -296,6 +317,21 @@ internal class DefaultVehicleRepository @Inject constructor(
      * slept away from.
      */
     private fun activeHeardNow(): Boolean = listening && activeAddressWhileConnected() != null
+
+    /**
+     * The command route to [systemId] (REQ-043): open only on the live link, to the active vehicle heard right now,
+     * while its last HEARTBEAT came from the address of its first. Read anywhere; the watchdog writes what it reads.
+     */
+    override fun routeTo(systemId: SystemId): CommandRoute {
+        val pinned = commandAddress
+        return when {
+            session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.REPLAY)
+            systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NOT_ACTIVE_VEHICLE)
+            pinned == null || !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LINK_LOST)
+            addresses[systemId] != pinned -> CommandRoute.Closed(NotSentReason.ROUTE_CHANGED)
+            else -> CommandRoute.Open(pinned)
+        }
+    }
 
     private sealed interface Event {
         data class Heard(
