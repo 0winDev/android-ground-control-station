@@ -14,6 +14,20 @@ dependencies {
 // margin for refactors; `koverVerify` (part of `check`) fails below it.
 kover {
     reports {
+        // Only types without logic, which `:data:vehicle` exercises; a type that gains logic (a function, an `init`
+        // that validates) leaves this list in the same PR.
+        filters {
+            excludes {
+                classes(
+                    "com.owindev.gcs.core.domain.vehicle.command.CommandResult*",
+                    "com.owindev.gcs.core.domain.vehicle.command.NotSentReason",
+                    "com.owindev.gcs.core.domain.vehicle.command.Rejection",
+                    "com.owindev.gcs.core.domain.vehicle.command.PendingCommand",
+                    "com.owindev.gcs.core.domain.vehicle.command.PendingState*",
+                    "com.owindev.gcs.core.domain.vehicle.command.VehicleCommand",
+                )
+            }
+        }
         verify {
             rule {
                 minBound(92, CoverageUnit.LINE)

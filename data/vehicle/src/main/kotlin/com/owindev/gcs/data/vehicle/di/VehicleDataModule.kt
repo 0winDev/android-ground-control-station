@@ -16,9 +16,12 @@ import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
+import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
+import com.owindev.gcs.data.vehicle.command.CommandRoutes
+import com.owindev.gcs.data.vehicle.command.DefaultCommandRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.DefaultRecordingRepository
@@ -55,6 +58,12 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindVehicleRepository(impl: DefaultVehicleRepository): VehicleRepository
+
+    @Binds
+    internal abstract fun bindCommandRepository(impl: DefaultCommandRepository): CommandRepository
+
+    @Binds
+    internal abstract fun bindCommandRoutes(impl: DefaultVehicleRepository): CommandRoutes
 
     @Binds
     internal abstract fun bindTelemetryRepository(impl: DefaultTelemetryRepository): TelemetryRepository

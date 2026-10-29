@@ -222,6 +222,7 @@ the issue number to an existing one.
 - pymavlink drops all a corrupted LEN claims, our parser only the marker: it proves a frame invalid, no more (#67).
 - A reader without checksums anchors its plausibility window on two consecutive records, never one (#68).
 - A tolerant reader's test can pass for the wrong reason: check it with a mutation of the rule it guards (#68, #71).
+- A mutation that does not compile looks like a survivor: read the build output before trusting it (#98).
 - MGRS reference points stay 1 cm off a 1 m boundary; GEOTRANS and GeoConvert disagree at exactly 84°N (#40).
 
 **Flow and time**
@@ -242,6 +243,8 @@ the issue number to an existing one.
 - Ages shown side by side need one clock and one rounding, or the banner says 116 s and the panel 117 s (#73).
 - An activity-scoped `Eagerly` collector keeps the link alive in the background: use `repeatOnLifecycle` (#74).
 - A blocking read ignores cancellation: close its stream on cancel, or a stalled provider holds the lock (#74).
+- A fake transport that never suspends hides `withContext`'s cancellation on return: make it suspend (#98).
+- A cancelled job cleans up late: key shared state by request identity, never by kind (#98).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
@@ -263,6 +266,7 @@ the issue number to an existing one.
 - A SITL TCP port can stay silent for a whole session: count raw bytes on it first (#70).
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
+- A receiver's own app passes its permission: prove the guard from another UID or by the installed manifest (#98).
 
 **Emulator, Windows and tooling**
 - `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first (#13, #14).
@@ -273,6 +277,7 @@ the issue number to an existing one.
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
 - On Windows `@TempDir` cannot delete a file left open: close what the SUT opened in `@AfterEach` (#70).
 - CI calls each module's `koverVerify` by name, never `check`: a module with a new minimum is added there (#63).
+- Logic-free types in `:core:domain` sink its Kover ratio: exclude them by name, and drop one that gains logic (#98).
 - On Windows `File.canonicalFile` does not resolve symbolic links: check a path's folder with `toRealPath()` (#71).
 - Never reflow KDoc by script: it merges lists and rewraps untouched paragraphs (#71).
 - MapLibre ignores the system proxy: test no network with a build pointing the style at an unreachable host (#73).

@@ -16,14 +16,19 @@ Stopping a stream (#39): s = ask the vehicle, on this relay's channel (the app's
 
 Stopping the battery (#41): b = the same for SYS_STATUS, so the app's battery reading goes stale.
 
+Dropping commands (#98): c = toggle dropping the app's COMMAND_LONGs before they reach SITL, so the vehicle never
+answers; they are still logged and recorded in the up .tlog. An RTL or land should then go out with confirmation 0, 1
+and 2, and an arm once. The app's telemetry requests are COMMAND_LONGs too: they are dropped as well meanwhile.
+
 Recording (#70): with --tlog <prefix> it writes, as .tlogs, every frame it forwards to the app (<prefix>.down.tlog) and
 every frame the app sends (<prefix>.up.tlog), so compare_recording.py can check the app's own log against them. Two
 files, because other ground stations also send as system 255 and ArduPilot forwards them to the app.
 
-Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), s = stop ATTITUDE,
-b = stop SYS_STATUS, q = quit. With --background (no terminal; on Windows NUL even claims to be one): create the
-file <log>.downlink-off to cut the downlink and delete it to restore it; create <log>.stop-attitude or
-<log>.stop-sys-status to stop that stream once (the relay deletes it); stop the process to quit.
+Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), c = toggle dropping the
+app's commands, s = stop ATTITUDE, b = stop SYS_STATUS, q = quit. With --background (no terminal; on Windows NUL even
+claims to be one): create the file <log>.downlink-off to cut the downlink and delete it to restore it, the same with
+<log>.drop-commands to drop the app's commands; create <log>.stop-attitude or <log>.stop-sys-status to stop that
+stream once (the relay deletes it); stop the process to quit.
 
 pymavlink is the reference decoder here and only a tool dependency (py -m pip install --user pymavlink).
 
@@ -59,6 +64,7 @@ counts_lock = threading.Lock()
 commands_sent = {}
 downlink_on = threading.Event()
 downlink_on.set()
+commands_dropped = threading.Event()
 stop = threading.Event()
 log_file = None
 tlog_files = {}
@@ -117,7 +123,7 @@ def downlink(sitl, udp: socket.socket, app: tuple) -> None:
 
 
 def uplink(sitl, udp: socket.socket) -> None:
-    """App -> SITL; decodes every frame with pymavlink and logs the app's HEARTBEATs."""
+    """App -> SITL, one frame per datagram; decodes every frame with pymavlink and logs the app's HEARTBEATs."""
     parser = common.MAVLink(None)
     parser.robust_parsing = True
     last_seq = None
@@ -130,8 +136,11 @@ def uplink(sitl, udp: socket.socket) -> None:
         except ConnectionResetError:
             # Windows reports an earlier ICMP "port unreachable" (emulator not up yet) on the next recvfrom (#42).
             continue
-        sitl.write(data)
-        for msg in parser.parse_buffer(data) or []:
+        msgs = parser.parse_buffer(data) or []
+        dropped = commands_dropped.is_set() and any(msg.get_type() == "COMMAND_LONG" for msg in msgs)
+        if not dropped:
+            sitl.write(data)
+        for msg in msgs:
             if msg.get_type() != "BAD_DATA":
                 record("up", bytes(msg.get_msgbuf()))
             if msg.get_type() == "COMMAND_LONG":
@@ -140,7 +149,7 @@ def uplink(sitl, udp: socket.socket) -> None:
                     f"APP COMMAND_LONG seq={msg.get_seq()} sys={msg.get_srcSystem()} comp={msg.get_srcComponent()} "
                     f"to {msg.target_system}/{msg.target_component} command={msg.command} "
                     f"params={[msg.param1, msg.param2, msg.param3, msg.param4, msg.param5, msg.param6, msg.param7]} "
-                    f"confirmation={msg.confirmation}"
+                    f"confirmation={msg.confirmation}{' DROPPED' if dropped else ''}"
                 )
                 continue
             if msg.get_type() != "HEARTBEAT":
@@ -203,6 +212,8 @@ def main() -> None:
             key = line.strip().lower()
             if key == "d":
                 set_downlink(not downlink_on.is_set())
+            elif key == "c":
+                set_commands_dropped(not commands_dropped.is_set())
             elif key == "s":
                 stop_stream(sitl, ATTITUDE_ID)
             elif key == "b":
@@ -211,11 +222,14 @@ def main() -> None:
                 break
     else:
         control = args.log + ".downlink-off"
+        drop_commands = args.log + ".drop-commands"
         stops = {args.log + ".stop-attitude": ATTITUDE_ID, args.log + ".stop-sys-status": SYS_STATUS_ID}
         log(f"background: create {control} to cut the downlink, delete it to restore it")
+        log(f"background: create {drop_commands} to drop the app's commands, delete it to forward them")
         log(f"background: create one of {list(stops)} to stop that stream once")
         while True:
             set_downlink(not os.path.exists(control))
+            set_commands_dropped(os.path.exists(drop_commands))
             for path, message_id in stops.items():
                 if os.path.exists(path):
                     os.remove(path)
@@ -232,6 +246,17 @@ def stop_stream(sitl, message_id: int) -> None:
         message_id, DISABLE_INTERVAL, 0, 0, 0, 0, 0,
     )
     log(f"STREAM {message_id} STOPPED by the relay (the app should request it again once it is stale and at least 5 s after its last request)")
+
+
+def set_commands_dropped(on: bool) -> None:
+    if on == commands_dropped.is_set():
+        return
+    if on:
+        commands_dropped.set()
+        log("COMMANDS DROPPED (the app should re-send an RTL or land with confirmation 0, 1, 2, and an arm never)")
+    else:
+        commands_dropped.clear()
+        log("COMMANDS FORWARDED")
 
 
 def set_downlink(on: bool) -> None:

@@ -1,17 +1,25 @@
 package com.owindev.gcs.data.vehicle.link
 
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.mavlink.MavlinkEncoder
+import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.command.CommandRoute
+import com.owindev.gcs.data.vehicle.command.CommandSendResult
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Sends every message of this GCS's component ([GCS_SYSTEM_ID]/[GCS_COMPONENT_ID]) on the vehicle link,
@@ -23,10 +31,9 @@ import kotlinx.coroutines.sync.withLock
  * coroutines (the HEARTBEAT loop, the telemetry requests), so encoding, sending and advancing happen under
  * one lock: a frame is never sent with a number another frame already used.
  *
- * Known limit: a sender cancelled while the socket write is under way (a telemetry round cut short by a
- * lost link) does not advance the number even if the frame left, so the next frame repeats it. The vehicle
- * then counts one more lost packet than there was; nothing else depends on it. Advancing anyway would do
- * the opposite when the frame did not leave.
+ * A sender cancelled before it holds the lock sends nothing, so a superseded command never leaves after the one that
+ * replaced it. Once the socket write starts it finishes, even if the sender is cancelled meanwhile (a telemetry round
+ * cut short by a lost link, a superseded RTL): a frame that left is always recorded and advances the number.
  *
  * Every frame sent goes to the [recorder] (REQ-036), under the same lock, so the log keeps them in sequence order.
  *
@@ -51,15 +58,45 @@ internal class GcsMessageSender @Inject constructor(
     suspend fun send(commandLong: CommandLong, to: InetSocketAddress): SendResult =
         send(to) { sequence -> MavlinkEncoder.encode(sequence, GCS_SYSTEM_ID, GCS_COMPONENT_ID, commandLong) }
 
+    /**
+     * Sends a vehicle command to the address [route] gives, read under the lock (REQ-043): a frame waiting for the
+     * lock while the link is lost, a replay starts or the route changes never leaves.
+     */
+    suspend fun send(commandLong: CommandLong, route: () -> CommandRoute): CommandSendResult = lock.withLock {
+        if (!isLive()) return@withLock CommandSendResult.NotSent(NotSentReason.REPLAY)
+        when (val current = route()) {
+            is CommandRoute.Closed -> CommandSendResult.NotSent(current.reason)
+            is CommandRoute.Open -> sendCommandHoldingLock(commandLong, current.address)
+        }
+    }
+
     private suspend fun send(to: InetSocketAddress, encode: (sequence: Int) -> ByteArray): SendResult = lock.withLock {
-        if (session.session.value.origin != DataOrigin.LIVE) return@withLock SendResult.NotOpen
+        if (!isLive()) return@withLock SendResult.NotOpen
+        sendHoldingLock(to, encode)
+    }
+
+    private fun isLive(): Boolean = session.session.value.origin == DataOrigin.LIVE
+
+    private suspend fun sendCommandHoldingLock(commandLong: CommandLong, to: InetSocketAddress): CommandSendResult {
+        val result = sendHoldingLock(to) { sequence ->
+            MavlinkEncoder.encode(sequence, GCS_SYSTEM_ID, GCS_COMPONENT_ID, commandLong)
+        }
+        return when (result) {
+            SendResult.Sent -> CommandSendResult.Sent
+            SendResult.NotOpen -> CommandSendResult.NotSent(NotSentReason.LINK_LOST)
+            is SendResult.Failed -> CommandSendResult.NotSent(NotSentReason.SEND_FAILED)
+        }
+    }
+
+    private suspend fun sendHoldingLock(to: InetSocketAddress, encode: (sequence: Int) -> ByteArray): SendResult {
+        currentCoroutineContext().ensureActive()
         val frame = encode(sequence)
-        val result = transport.send(frame, to)
+        val result = withContext(NonCancellable) { transport.send(frame, to) }
         if (result == SendResult.Sent) {
             recorder.sent(frame)
             sequence = (sequence + 1) and SEQUENCE_MASK
         }
-        result
+        return result
     }
 
     companion object {
@@ -75,3 +112,11 @@ internal class GcsMessageSender @Inject constructor(
         private const val SEQUENCE_MASK = 0xFF
     }
 }
+
+/**
+ * Addressed to this GCS, or without target: the targets are extension fields, which an older sender omits and which
+ * then read as 0.
+ */
+internal fun CommandAck.isForThisGcs(): Boolean =
+    (targetSystem == GcsMessageSender.GCS_SYSTEM_ID && targetComponent == GcsMessageSender.GCS_COMPONENT_ID) ||
+        (targetSystem == 0 && targetComponent == 0)

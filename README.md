@@ -55,6 +55,9 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 - **A recording can grow past the 256 MiB limit while it is open.** Old flight logs are deleted only when a
   recording opens or closes, so one very long session keeps growing (about 1.1 kB/s from ArduCopter SITL, so
   256 MiB in some 65 hours).
+- **A vehicle that changes address loses its commands.** If its HEARTBEATs start coming from another address
+  (a router restart, a second route), arm, RTL and land are refused for the rest of the session; letting the
+  operator accept the new route (#105) is mandatory before any real flight.
 - **No link security until v0.6.** MAVLink packets are not signed yet, so anyone who can reach the UDP
   port can forge them (see [`docs/security.md`](docs/security.md)).
 
