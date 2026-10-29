@@ -10,16 +10,13 @@ import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
-import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
-import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
-import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
@@ -31,7 +28,6 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.slot
 import io.mockk.unmockkStatic
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.SocketException
 import kotlin.time.ComparableTimeMark
@@ -48,7 +44,6 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -807,46 +802,8 @@ class DefaultVehicleRepositoryTest {
     }
 }
 
-/** The repository under test on [transport], in this scope's virtual time; each test passes only what it changes. */
-// Mirrors the repository's constructor, one parameter each.
-@Suppress("LongParameterList")
-private fun TestScope.repositoryOn(
-    transport: UdpTransport,
-    telemetryRequester: TelemetryRequester,
-    telemetryStore: TelemetryStore,
-    activeVehicle: ActiveVehicle = ActiveVehicle(),
-    session: LinkSession = sessionOn(transport, activeVehicle),
-    timeSource: TimeSource.WithComparableMarks = testScheduler.timeSource,
-    rule: LinkLossRule = LinkLossRule(),
-    heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session)),
-    scope: CoroutineScope = backgroundScope,
-) = DefaultVehicleRepository(
-    session = session,
-    timeSource = timeSource,
-    rule = rule,
-    heartbeatSender = heartbeatSender,
-    telemetryRequester = telemetryRequester,
-    telemetryStore = telemetryStore,
-    activeVehicle = activeVehicle,
-    scope = scope,
-)
-
-/** A link session on [transport] in this scope's virtual time, recording nothing. */
-private fun TestScope.sessionOn(transport: UdpTransport, activeVehicle: ActiveVehicle) = LinkSession(
-    live = transport,
-    scope = backgroundScope,
-    timeSource = testScheduler.timeSource,
-    pipelineClock = PipelineClock(testScheduler.timeSource),
-    recorder = ignoringRecorder(),
-    activeVehicle = activeVehicle,
-)
-
-private const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
 private const val DISARMED_GUIDED = "heartbeat/disarmed-guided.bin"
-private const val DISARMED_LOITER = "heartbeat/disarmed-loiter.bin"
 private const val ARMED_GUIDED = "heartbeat/armed-guided.bin"
-private const val SYSTEM_2_LOITER = "derived/heartbeat-sysid-2.bin"
-private const val GCS = "gcs/heartbeat-mission-planner.bin"
 private const val GIMBAL = "derived/heartbeat-gimbal-component.bin"
 
 /** `time_boot_ms` 4000000000 and then 397119 (pymavlink): back by far more than the reboot backstep. */
@@ -854,11 +811,8 @@ private const val ATTITUDE_LONG_UP = "derived/attitude-edges.bin"
 private const val ATTITUDE_AFTER_REBOOT = "telemetry/attitude.bin"
 
 // Virtual milliseconds. The default timeout is 3 s (REQ-017).
-private const val GAP = 100L
-private const val AFTER_TWO_GAPS = 300L
 private const val HALF_TIMEOUT = 1_500L
 private const val JUST_UNDER_TIMEOUT = 2_900L
-private const val WELL_PAST_TIMEOUT = 4_000L
 private const val TIMEOUT_MILLIS = 3_000L
 private const val HEARTBEAT_PERIOD = 1_000L
 
@@ -890,10 +844,6 @@ private val SENT_AROUND_THE_OUTAGE = listOf(2_000L, 3_000L, 6_000L, 7_000L)
 private val TIMEOUT = 3.seconds
 private val CUSTOM_TIMEOUT = 500.milliseconds
 
-private val SYSTEM_1_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
-private val SYSTEM_2_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_561)
-private val GCS_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
-
 /** HEARTBEATs sent by this GCS while the vehicle is CONNECTED, at each tick of the sender (virtual ms). */
 private val SENT_WHILE_CONNECTED = listOf(1_000L, 2_000L, 3_000L)
 
@@ -924,8 +874,6 @@ private class FailsOnSecondMark(private val clock: TimeSource.WithComparableMark
     }
 }
 
-private val SYSTEM_1 = SystemId(1)
-private val SYSTEM_2 = SystemId(2)
 private val STABILIZE_DISARMED = copter(SYSTEM_1, "Stabilize", armed = false)
 private val GUIDED_DISARMED = copter(SYSTEM_1, "Guided", armed = false)
 private val LOITER_DISARMED = copter(SYSTEM_1, "Loiter", armed = false)
@@ -961,28 +909,3 @@ private fun heartbeatEverySecond(fixture: String): Flow<Datagram> = flow {
         emit(datagramOf(fixture))
     }
 }
-
-/**
- * One fixture per datagram, each after its gap in virtual milliseconds; then [afterwards] runs. By default
- * the socket stays open with nothing more arriving, as when the vehicle goes silent.
- */
-private fun datagrams(
-    vararg fixtures: Pair<Long, String>,
-    afterwards: suspend FlowCollector<Datagram>.() -> Unit = { awaitCancellation() },
-): Flow<Datagram> = flow {
-    fixtures.forEach { (gap, fixture) ->
-        delay(gap)
-        emit(datagramOf(fixture))
-    }
-    afterwards()
-}
-
-/** [fixture] as the transport delivers it: system 2 and the ground station each send from their own address. */
-private fun datagramOf(fixture: String) = Datagram(
-    payload = readFixture(fixture),
-    sender = when (fixture) {
-        SYSTEM_2_LOITER -> SYSTEM_2_ADDRESS
-        GCS -> GCS_ADDRESS
-        else -> SYSTEM_1_ADDRESS
-    },
-)
