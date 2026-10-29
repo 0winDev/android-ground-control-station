@@ -3,7 +3,6 @@ package com.owindev.gcs.core.domain.vehicle.command
 /** How a command ended: exactly one per command (REQ-042). */
 sealed interface CommandResult {
 
-    /** The vehicle accepted and executed it. */
     data object Accepted : CommandResult
 
     /** The vehicle cannot execute it now and says waiting should fix it (`MAV_RESULT_TEMPORARILY_REJECTED`). */
@@ -37,8 +36,6 @@ enum class Rejection {
     COMMAND_INT_ONLY,
     UNSUPPORTED_FRAME,
     NOT_IN_CONTROL,
-
-    /** A result this GCS does not know. */
     UNKNOWN,
 }
 
@@ -62,6 +59,5 @@ enum class NotSentReason {
      */
     BUSY,
 
-    /** The socket failed to send it. */
     SEND_FAILED,
 }

@@ -235,7 +235,6 @@ internal class DefaultVehicleRepository @Inject constructor(
         }
     }
 
-    /** Keeps the first live address the active vehicle was heard from, the only one commands go to. */
     private fun pinCommandAddress(heard: Event.Heard) {
         if (heard.state.systemId == activeVehicle.systemId.value && heard.session.origin == DataOrigin.LIVE) {
             commandAddress = commandAddress ?: heard.sender
@@ -318,10 +317,7 @@ internal class DefaultVehicleRepository @Inject constructor(
      */
     private fun activeHeardNow(): Boolean = listening && activeAddressWhileConnected() != null
 
-    /**
-     * The command route to [systemId] (REQ-043): open only on the live link, to the active vehicle heard right now,
-     * while its last HEARTBEAT came from the address of its first. Read anywhere; the watchdog writes what it reads.
-     */
+    /** REQ-043. Read from any thread; only the watchdog writes what it reads. */
     override fun routeTo(systemId: SystemId): CommandRoute {
         val pinned = commandAddress
         return when {

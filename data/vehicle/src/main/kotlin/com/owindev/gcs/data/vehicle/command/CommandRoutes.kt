@@ -11,7 +11,6 @@ internal fun interface CommandRoutes {
 
 internal sealed interface CommandRoute {
 
-    /** The address of the vehicle's first HEARTBEAT in this session, the only one commands go to. */
     data class Open(val address: InetSocketAddress) : CommandRoute
 
     data class Closed(val reason: NotSentReason) : CommandRoute

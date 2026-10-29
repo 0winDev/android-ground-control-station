@@ -21,11 +21,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Runs one [CommandExchange] at a time (REQ-042, ADR 0008), each as a job of the application [scope]: its caller only
- * awaits the result. A new RTL or land supersedes a pending RTL or land; arm never supersedes nor is superseded; a
- * command is refused while its own late answer is still listened for, any other is not.
- *
- * Every result is logged once, with the system ID and never the vehicle's address (MASVS-PRIVACY).
+ * Each command runs in the application [scope], so cancelling its caller never stops it or its retries. Results are
+ * logged with the system ID, never the vehicle's address (MASVS-PRIVACY).
  */
 @Singleton
 internal class DefaultCommandRepository @Inject constructor(
@@ -73,10 +70,7 @@ internal class DefaultCommandRepository @Inject constructor(
         return request.result.await()
     }
 
-    /**
-     * Makes [request] the active command unless another is pending that it cannot supersede, or the same command's late
-     * answer is still listened for. Called holding [lock].
-     */
+    /** Called holding [lock]. */
     private fun admit(request: Request): Admission {
         val current = active
         val supersedes = current == null || (current.command.givesWay && request.command.givesWay)

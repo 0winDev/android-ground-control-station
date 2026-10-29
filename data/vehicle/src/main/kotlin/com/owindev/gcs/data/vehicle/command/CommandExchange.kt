@@ -28,16 +28,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * One command's COMMAND_LONG and COMMAND_ACK exchange with the active vehicle's autopilot, with the timeout and retries
- * of ADR 0008 (REQ-042).
- *
- * The route is read from [routes] before the command and again under the sender's lock before every attempt
- * (REQ-043). An ACK is the answer only if it names the command and comes from the vehicle's autopilot, at the route's
- * address, in the session the command started in, addressed to this GCS. The ACK carries no sequence number
- * (https://mavlink.io/en/services/command.html), so a matching ACK to an earlier attempt also answers.
- *
- * Once an attempt has left, the command ends as [CommandResult.NoAnswer], never as not sent: the vehicle may have
- * executed it. A new session (a replay starting, the live link restarting) ends the wait at once.
+ * The ACK carries no sequence number (https://mavlink.io/en/services/command.html), so a matching ACK to an earlier
+ * attempt also answers. Once an attempt has left, the command ends as no answer, never as not sent: the vehicle may
+ * have executed it.
  */
 internal class CommandExchange @Inject constructor(
     private val sender: GcsMessageSender,
@@ -45,11 +38,7 @@ internal class CommandExchange @Inject constructor(
     private val routes: CommandRoutes,
 ) {
 
-    /**
-     * Sends [command] to [systemId], telling [onState] each change while it waits and [onResult] its result once.
-     * After no answer, returns only once its late window has passed ([ARM_LATE_WINDOW] for arm, [LATE_WINDOW] for the
-     * others), logging and dropping any answer meanwhile.
-     */
+    /** After no answer, returns only after the late window, dropping any answer meanwhile (ADR 0008). */
     suspend fun run(
         systemId: SystemId,
         command: VehicleCommand,
@@ -71,10 +60,7 @@ internal class CommandExchange @Inject constructor(
         }
     }
 
-    /**
-     * The ACKs answering [request] in [current], from now until the session changes, when the channel closes. Started
-     * before the first attempt is sent, so an answer faster than the send's return is not missed.
-     */
+    /** Started before the first attempt is sent, so an answer faster than the send's return is not missed. */
     private fun CoroutineScope.answersTo(
         request: Request,
         address: InetSocketAddress,
@@ -139,7 +125,7 @@ internal class CommandExchange @Inject constructor(
         }
     }
 
-    /** Waits [IN_PROGRESS_TIMEOUT] from the first IN_PROGRESS, never extended by the next ones, for the final ACK. */
+    /** [IN_PROGRESS_TIMEOUT] counts from the first IN_PROGRESS, never extended by the next ones. */
     private suspend fun awaitAfterInProgress(
         request: Request,
         first: CommandAck,
@@ -164,7 +150,6 @@ internal class CommandExchange @Inject constructor(
     private fun noAnswer(attempts: Int, retriesStopped: NotSentReason?) =
         CommandResult.NoAnswer(attempts, startedByVehicle = false, retriesStopped)
 
-    /** Why the session the command started in ended: a replay started, or the live link was restarted. */
     private fun sessionEnded(): NotSentReason =
         if (session.session.value.origin == DataOrigin.REPLAY) NotSentReason.REPLAY else NotSentReason.LINK_LOST
 

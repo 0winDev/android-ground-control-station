@@ -7,8 +7,6 @@ import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 
-// The MAVLink side of the vehicle commands (`common.xml`, `minimal.xml`).
-
 /** `MAV_COMP_ID_AUTOPILOT1` (`minimal.xml`): commands go to the autopilot and only its ACKs answer them. */
 internal const val MAV_COMP_ID_AUTOPILOT1 = 1
 

@@ -14,14 +14,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * Debug builds only, for checking commands against SITL before their buttons exist (#98): sends one command from adb
- * through the same [CommandRepository] as the app, with all its vetoes; the repository logs the result.
+ * Sends one command from adb for the SITL check, through the same [CommandRepository] and vetoes as the app; the
+ * repository logs the result.
  *
  * ```
  * adb shell am broadcast -a com.owindev.gcs.debug.SEND_COMMAND --es command rtl --ei systemId 1 -p com.owindev.gcs
  * ```
- *
- * Only a holder of `android.permission.DUMP` (the shell, the system) can send it; no other app can.
  */
 @AndroidEntryPoint
 class SitlCommandReceiver : BroadcastReceiver() {
