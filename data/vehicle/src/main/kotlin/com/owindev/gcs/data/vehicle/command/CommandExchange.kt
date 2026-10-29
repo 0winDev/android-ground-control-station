@@ -6,7 +6,6 @@ import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingState
-import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
@@ -38,19 +37,26 @@ internal class CommandExchange @Inject constructor(
     private val routes: CommandRoutes,
 ) {
 
-    /** After no answer, returns only after the late window, dropping any answer meanwhile (ADR 0008). */
+    /**
+     * After no answer, returns only after the late window, dropping any answer meanwhile (ADR 0008). [routing] is
+     * checked before the command and under the sender's lock before every attempt.
+     */
+    // Each parameter is one part of the exchange; grouping them would only rename them.
+    @Suppress("LongParameterList")
     suspend fun run(
         systemId: SystemId,
-        command: VehicleCommand,
+        label: String,
+        command: MavCommand,
         onState: (PendingState) -> Unit,
+        routing: CommandRoutes = routes,
         onResult: (CommandResult) -> Unit,
     ) {
         val current = session.session.value
-        when (val route = routes.routeTo(systemId)) {
+        when (val route = routing.routeTo(systemId)) {
             is CommandRoute.Closed -> onResult(CommandResult.NotSent(route.reason))
 
             is CommandRoute.Open -> coroutineScope {
-                val request = Request(systemId, command, onState)
+                val request = Request(systemId, label, command, routing, onState)
                 val acks = answersTo(request, route.address, current)
                 val result = attempts(request, acks)
                 onResult(result)
@@ -102,7 +108,7 @@ internal class CommandExchange @Inject constructor(
     /** Sends the [attempt]th time and waits [ACK_TIMEOUT]: `null` when no answer came in time. */
     private suspend fun attempt(request: Request, attempt: Int, acks: ReceiveChannel<CommandAck>): CommandResult? {
         val sent = sender.send(commandLongOf(request.systemId, request.command, confirmation = attempt - 1)) {
-            routes.routeTo(request.systemId)
+            request.routing.routeTo(request.systemId)
         }
         val received = if (sent == CommandSendResult.Sent) {
             withTimeoutOrNull(ACK_TIMEOUT) { acks.receiveCatching() }
@@ -154,15 +160,20 @@ internal class CommandExchange @Inject constructor(
         if (session.session.value.origin == DataOrigin.REPLAY) NotSentReason.REPLAY else NotSentReason.LINK_LOST
 
     private suspend fun dropLateAnswers(request: Request, acks: ReceiveChannel<CommandAck>) {
-        val window = if (request.command == VehicleCommand.ARM) ARM_LATE_WINDOW else LATE_WINDOW
-        withTimeoutOrNull(window) {
+        withTimeoutOrNull(request.command.lateWindow) {
             for (ack in acks) {
-                Log.w(TAG, "${request.command} to system ${request.systemId.value}: late answer ${ack.result} dropped")
+                Log.w(TAG, "${request.label} to system ${request.systemId.value}: late answer ${ack.result} dropped")
             }
         }
     }
 
-    private class Request(val systemId: SystemId, val command: VehicleCommand, val onState: (PendingState) -> Unit)
+    private class Request(
+        val systemId: SystemId,
+        val label: String,
+        val command: MavCommand,
+        val routing: CommandRoutes,
+        val onState: (PendingState) -> Unit,
+    )
 
     companion object {
         /** Per attempt (ADR 0008): SITL answered in 6–27 ms (#36), with room for a radio link's round trip. */
@@ -175,10 +186,11 @@ internal class CommandExchange @Inject constructor(
         val LATE_WINDOW: Duration = 1.5.seconds
 
         /**
-         * Arm's late window (ADR 0008): an earlier arm's late FAILED taken as a new arm's answer would read "rejected"
-         * while the new one arms the vehicle. Refusing a new arm for 10 s covers round trips up to 11.5 s.
+         * Arm's and take off's late window (ADR 0008): an earlier one's late FAILED taken as a new one's answer would
+         * read "rejected" while the new one arms the vehicle or takes off. Refusing it for 10 s covers round trips up to
+         * 11.5 s.
          */
-        val ARM_LATE_WINDOW: Duration = 10.seconds
+        val DANGEROUS_LATE_WINDOW: Duration = 10.seconds
 
         private const val TAG = "CommandExchange"
     }

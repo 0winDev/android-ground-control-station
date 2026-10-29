@@ -10,6 +10,7 @@ import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayRepository
 import com.owindev.gcs.core.domain.replay.ReplayRule
+import com.owindev.gcs.core.domain.telemetry.GroundPositionRule
 import com.owindev.gcs.core.domain.telemetry.LandedRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
@@ -18,6 +19,7 @@ import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
+import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
@@ -109,6 +111,10 @@ abstract class VehicleDataModule {
         @Provides
         fun provideLinkLossRule(): LinkLossRule = LinkLossRule()
 
+        /** REQ-044's take off range (2–30 m) and default (10 m); change them here. */
+        @Provides
+        fun provideTakeOffAltitudeRule(): TakeOffAltitudeRule = TakeOffAltitudeRule()
+
         @Provides
         fun provideFlightAttentionRule(linkLossRule: LinkLossRule): FlightAttentionRule =
             FlightAttentionRule(linkLossRule)
@@ -120,6 +126,10 @@ abstract class VehicleDataModule {
         /** On the ground only on an ON_GROUND younger than 0.5 s (REQ-052, #112); change it here. */
         @Provides
         fun provideLandedRule(): LandedRule = LandedRule()
+
+        /** A take off's second ground check (REQ-044): a position under 0.5 s old, 1 m above home, 0.5 m/s at most. */
+        @Provides
+        fun provideGroundPositionRule(): GroundPositionRule = GroundPositionRule()
 
         /** The battery thresholds decided in #41 (REQ-028), judging staleness as the rest of the app does. */
         @Provides

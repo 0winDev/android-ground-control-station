@@ -254,6 +254,7 @@ the issue number to an existing one.
 - An occurrence id fixes the repository's race, not the screen's: a banner swapping under a finger needs a guard (#56).
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
 - A display staleness threshold is no safety gate: give the gate its own bound and the stream the rate it needs (#112).
+- A gate of two checks needs a test where each fails alone, or one hides the other: mutate them one at a time (#99).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
@@ -267,6 +268,7 @@ the issue number to an existing one.
 - Measure timings in SITL before documenting them: API 36 blocks a background app's network after about 5 s (#14).
 - In airplane mode the emulator's bound UDP socket never fails: a transport failure cannot be reproduced there (#25).
 - A SITL TCP port can stay silent for a whole session: count raw bytes on it first (#70).
+- Restarting the relay changes its port: restart the app too, or every command is refused as a route change (#99).
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
 - pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
@@ -279,6 +281,7 @@ the issue number to an existing one.
 - On Windows `NUL` claims to be a terminal and Python writes CRLF unless `newline="\n"` (#14, #56).
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
 - detekt measures tests too: a `when` over message types that grows with the codec becomes a table (#112).
+- Lint's ExperimentalDetector crashes on a fun-interface lambda held in a property: use a function reference (#99).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
 - On Windows `@TempDir` cannot delete a file left open: close what the SUT opened in `@AfterEach` (#70).
 - CI calls each module's `koverVerify` by name, never `check`: a module with a new minimum is added there (#63).

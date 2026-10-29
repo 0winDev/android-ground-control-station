@@ -12,12 +12,15 @@ import com.owindev.gcs.core.domain.vehicle.FlightMode
  */
 internal object ArduCopterFlightModes {
 
+    /** The mode a take off is sent in (#99): `Mode::Number::GUIDED` in `ArduCopter/mode.h` (Copter-4.7.2). */
+    const val GUIDED = 4L
+
     private val names: Map<Long, String> = mapOf(
         0L to "Stabilize",
         1L to "Acro",
         2L to "AltHold",
         3L to "Auto",
-        4L to "Guided",
+        GUIDED to "Guided",
         5L to "Loiter",
         6L to "RTL",
         7L to "Circle",
