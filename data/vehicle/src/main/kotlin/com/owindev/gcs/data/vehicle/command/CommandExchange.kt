@@ -7,6 +7,7 @@ import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingState
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
@@ -34,6 +35,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal class CommandExchange @Inject constructor(
     private val sender: GcsMessageSender,
     private val session: LinkSession,
+    private val uplink: DefaultUplinkRepository,
     private val routes: CommandRoutes,
 ) {
 
@@ -59,6 +61,8 @@ internal class CommandExchange @Inject constructor(
                 val request = Request(systemId, label, command, routing, onState)
                 val acks = answersTo(request, route.address, current)
                 val result = attempts(request, acks)
+                // Marked before the late window opens, so a late answer is always taken after the mark.
+                if (result.isUplinkEvidence) uplink.commandUnanswered()
                 onResult(result)
                 if (result is CommandResult.NoAnswer) dropLateAnswers(request, acks)
                 coroutineContext.cancelChildren()
@@ -116,6 +120,7 @@ internal class CommandExchange @Inject constructor(
             null
         }
         val ack = received?.getOrNull()
+        if (ack != null) uplink.commandAnswered()
         return when {
             sent is CommandSendResult.NotSent ->
                 if (attempt == 1) CommandResult.NotSent(sent.reason) else noAnswer(attempt - 1, sent.reason)
@@ -146,12 +151,23 @@ internal class CommandExchange @Inject constructor(
                 val next = acks.receiveCatching()
                 closed = next.isClosed
                 ack = next.getOrNull()
+                if (ack != null) uplink.commandAnswered()
             }
             ack
         }
         val retriesStopped = if (closed) sessionEnded() else null
         return final?.toResult() ?: CommandResult.NoAnswer(attempts, startedByVehicle = true, retriesStopped)
     }
+
+    /**
+     * A command left without answer says something of the uplink only when nothing else explains it: not after an
+     * IN_PROGRESS (the vehicle heard it) nor when the app stopped early because the link, the route or the session
+     * ended; a failed later send still does.
+     */
+    private val CommandResult.isUplinkEvidence: Boolean
+        get() = this is CommandResult.NoAnswer &&
+            !startedByVehicle &&
+            (retriesStopped == null || retriesStopped == NotSentReason.SEND_FAILED)
 
     private fun noAnswer(attempts: Int, retriesStopped: NotSentReason?) =
         CommandResult.NoAnswer(attempts, startedByVehicle = false, retriesStopped)
@@ -162,6 +178,7 @@ internal class CommandExchange @Inject constructor(
     private suspend fun dropLateAnswers(request: Request, acks: ReceiveChannel<CommandAck>) {
         withTimeoutOrNull(request.command.lateWindow) {
             for (ack in acks) {
+                uplink.commandAnswered()
                 Log.w(TAG, "${request.label} to system ${request.systemId.value}: late answer ${ack.result} dropped")
             }
         }

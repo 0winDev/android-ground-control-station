@@ -21,6 +21,7 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
@@ -108,7 +109,7 @@ class ReplayPipelineTest {
             session = session,
             timeSource = clock,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(sender),
+            heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
             activeVehicle = activeVehicle,
@@ -357,7 +358,7 @@ class ReplayPipelineTest {
             session = session,
             timeSource = timeSource,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(sender),
+            heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
             activeVehicle = activeVehicle,

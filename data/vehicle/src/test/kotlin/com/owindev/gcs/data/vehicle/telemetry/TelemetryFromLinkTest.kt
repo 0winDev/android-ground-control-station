@@ -13,6 +13,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.liveSession
+import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
@@ -72,7 +73,10 @@ class TelemetryFromLinkTest {
             ),
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession())),
+            heartbeatSender = GcsHeartbeatSender(
+                GcsMessageSender(transport, ignoringRecorder(), liveSession()),
+                uplinkOnTestClock(),
+            ),
             telemetryRequester = telemetryRequester,
             telemetryStore = store,
             activeVehicle = activeVehicle,
@@ -164,7 +168,10 @@ class TelemetryFromLinkTest {
                 ),
                 timeSource = deviceClock,
                 rule = LinkLossRule(),
-                heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession())),
+                heartbeatSender = GcsHeartbeatSender(
+                    GcsMessageSender(transport, ignoringRecorder(), liveSession()),
+                    uplinkOnTestClock(),
+                ),
                 telemetryRequester = telemetryRequester,
                 telemetryStore = store,
                 activeVehicle = activeVehicle,

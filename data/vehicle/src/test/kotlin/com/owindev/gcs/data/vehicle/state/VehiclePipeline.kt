@@ -8,6 +8,7 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
@@ -34,7 +35,8 @@ internal fun TestScope.repositoryOn(
     session: LinkSession = sessionOn(transport, activeVehicle),
     timeSource: TimeSource.WithComparableMarks = testScheduler.timeSource,
     rule: LinkLossRule = LinkLossRule(),
-    heartbeatSender: GcsHeartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session)),
+    heartbeatSender: GcsHeartbeatSender =
+        GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session), uplinkOnTestClock()),
     scope: CoroutineScope = backgroundScope,
 ) = DefaultVehicleRepository(
     session = session,
