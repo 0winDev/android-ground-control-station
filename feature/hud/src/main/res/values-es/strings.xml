@@ -27,6 +27,8 @@
     <string name="hud_local_fault_port_retrying">El puerto UDP %1$d se ocupó en este dispositivo al reconectar. Reintentando.</string>
     <string name="hud_local_fault_failed">El enlace ha fallado en este dispositivo. Reabriéndolo y esperando al vehículo.</string>
     <string name="hud_link_unstable">Enlace inestable en este dispositivo: vuelve a recibir, pero puede fallar de nuevo.</string>
+    <string name="hud_uplink_sends_failing">Puede que el vehículo no esté oyendo esta GCS: este dispositivo no logra enviarle nada.</string>
+    <string name="hud_uplink_command_unanswered">Puede que el vehículo no esté oyendo esta GCS: un comando quedó sin respuesta hace %1$s.</string>
     <string name="hud_local_fault_unstable">El enlace de este dispositivo es inestable: falla y se reabre una y otra vez.</string>
     <string name="hud_label_altitude">Alt. (rel. home)</string>
     <string name="hud_label_ground_speed">Vel. suelo</string>

@@ -123,6 +123,20 @@ internal fun UnstableLinkBanner(linkUnstable: Boolean) {
     if (linkUnstable) CautionBanner(text = stringResource(id = R.string.hud_link_unstable))
 }
 
+/** The vehicle may not be hearing this GCS (REQ-045): "may", since only the device's side can be observed. */
+@Composable
+internal fun UplinkBanner(doubt: UplinkDoubt?) {
+    when (doubt) {
+        UplinkDoubt.SendsFailing -> CautionBanner(text = stringResource(id = R.string.hud_uplink_sends_failing))
+
+        is UplinkDoubt.CommandUnanswered -> CautionBanner(
+            text = stringResource(id = R.string.hud_uplink_command_unanswered, elapsedText(doubt.since)),
+        )
+
+        null -> Unit
+    }
+}
+
 /** A caution with an icon and text, never color alone. */
 @Composable
 private fun CautionBanner(text: String) {

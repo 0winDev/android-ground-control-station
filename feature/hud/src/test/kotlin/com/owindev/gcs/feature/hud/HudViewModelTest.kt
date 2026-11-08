@@ -8,6 +8,7 @@ import com.owindev.gcs.core.domain.geo.Mgrs
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
+import com.owindev.gcs.core.domain.link.UplinkRule
 import com.owindev.gcs.core.domain.telemetry.AirData
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
@@ -80,6 +81,8 @@ class HudViewModelTest {
             vehicleRepository,
             telemetryRepository,
             alertRepository,
+            healthyUplink(),
+            UplinkRule(),
             LinkLossRule(),
             StalenessRule(),
             DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
@@ -397,6 +400,8 @@ class HudViewModelTest {
                     vehicleRepository,
                     telemetryRepository,
                     alertRepository,
+                    healthyUplink(),
+                    UplinkRule(),
                     LinkLossRule(timeout = CUSTOM_TIMEOUT),
                     StalenessRule(),
                     DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),

@@ -7,6 +7,9 @@ import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
+import com.owindev.gcs.core.domain.link.UplinkRepository
+import com.owindev.gcs.core.domain.link.UplinkRule
+import com.owindev.gcs.core.domain.link.UplinkWarning
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
@@ -35,6 +38,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 /**
@@ -66,6 +70,8 @@ class HudViewModel @Inject constructor(
     vehicleRepository: VehicleRepository,
     telemetryRepository: TelemetryRepository,
     private val alertRepository: AlertRepository,
+    uplinkRepository: UplinkRepository,
+    uplinkRule: UplinkRule,
     private val rule: LinkLossRule,
     private val staleness: StalenessRule,
     private val deviceClock: DeviceClock,
@@ -98,6 +104,20 @@ class HudViewModel @Inject constructor(
         }
     }
 
+    /** Why the vehicle may not be hearing this GCS, again at each whole second of a command's age. */
+    private val uplinkTicks: Flow<UplinkWarning?> = uplinkRepository.health
+        .map(uplinkRule::warningOf)
+        .distinctUntilChanged()
+        .flatMapLatest { warning ->
+            if (warning is UplinkWarning.CommandUnanswered) {
+                secondsOf(warning.since).map {
+                    warning
+                }
+            } else {
+                flowOf(warning)
+            }
+        }
+
     val state: StateFlow<HudUiState> = combine(
         linkRepository.traffic,
         vehicleRepository.activeSystemId,
@@ -106,6 +126,10 @@ class HudViewModel @Inject constructor(
         telemetryTicks,
     ) { traffic, activeSystemId, vehicles, _, telemetry -> toUiState(traffic, activeSystemId, vehicles, telemetry) }
         .combine(alertRepository.activeAlerts) { state, alerts -> state.withAlerts(alerts) }
+        .combine(linkRepository.traffic.map { it.origin() == DataOrigin.LIVE }.distinctUntilChanged()) { state, live ->
+            state to live
+        }
+        .combine(uplinkTicks) { (state, live), warning -> state.withUplink(warning.takeIf { live }) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(
@@ -134,9 +158,19 @@ class HudViewModel @Inject constructor(
         }
     }
 
+    private fun secondsOf(since: TimeMark): Flow<Unit> = flow {
+        while (true) {
+            emit(Unit)
+            delay(toNextSecond(since.elapsedNow()).atLeastRecheck())
+        }
+    }
+
+    private fun toNextSecond(age: Duration): Duration =
+        TICK - (age.inWholeNanoseconds % TICK.inWholeNanoseconds).nanoseconds
+
     /** To the next whole second of the age, so the count never skips one, or to the timeout if sooner. */
     private fun untilNextCheck(age: Duration): Duration {
-        val toNextSecond = TICK - (age.inWholeNanoseconds % TICK.inWholeNanoseconds).nanoseconds
+        val toNextSecond = toNextSecond(age)
         val toTimeout = rule.timeout - age
         return if (toTimeout > Duration.ZERO && toTimeout < toNextSecond) toTimeout else toNextSecond
     }
@@ -236,6 +270,19 @@ private fun Vehicle.toStatus() = VehicleStatus(
     flightMode = state.flightMode,
     armed = state.armed,
 )
+
+/**
+ * Only a heard live vehicle can be told not to hear this GCS: a lost one already shows the emergency, and a replay
+ * sends nothing.
+ */
+private fun HudUiState.withUplink(warning: UplinkWarning?): HudUiState =
+    if (this is HudUiState.Connected) copy(uplink = warning?.toDoubt()) else this
+
+/** Whole seconds, as the link-lost age, so both count alike. */
+private fun UplinkWarning.toDoubt(): UplinkDoubt = when (this) {
+    UplinkWarning.SendsFailing -> UplinkDoubt.SendsFailing
+    is UplinkWarning.CommandUnanswered -> UplinkDoubt.CommandUnanswered(since.elapsedNow().inWholeSeconds.seconds)
+}
 
 private fun LinkTraffic.origin(): DataOrigin = when (this) {
     is LinkTraffic.Replaying, LinkTraffic.ReplayFailed -> DataOrigin.REPLAY

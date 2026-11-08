@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.link
 
 import android.util.Log
+import com.owindev.gcs.core.domain.link.UplinkHealth
 import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessages
@@ -18,6 +19,7 @@ import io.mockk.unmockkStatic
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -25,6 +27,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.amshove.kluent.coInvoking
 import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldNotBe
 import org.amshove.kluent.shouldThrow
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -43,6 +46,7 @@ class GcsHeartbeatSenderTest {
     private val transport: UdpTransport = mockk()
     private val sent = mutableListOf<ByteArray>()
     private var results = mutableListOf<SendResult>()
+    private val uplink = DefaultUplinkRepository(TestTimeSource())
 
     private lateinit var sender: GcsHeartbeatSender
 
@@ -52,7 +56,7 @@ class GcsHeartbeatSenderTest {
             sent += firstArg<ByteArray>()
             results.removeFirstOrNull() ?: SendResult.Sent
         }
-        sender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession()))
+        sender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession()), uplink)
     }
 
     @AfterEach
@@ -160,6 +164,97 @@ class GcsHeartbeatSenderTest {
         sent.takeLast(2).map { decoded(it).sequence } shouldBeEqualTo listOf(LAST_SEQUENCE, 0)
     }
 
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN three sends fail in a row WHEN running THEN the uplink counts three failed periods`() = runTest {
+        mockkStatic(Log::class)
+        every { Log.w(any(), any<String>(), any()) } returns 0
+        results = MutableList(3) { SendResult.Failed(IOException()) }
+        backgroundScope.launch { sender.run { PEER } }
+
+        delay(TWO_AND_A_HALF_SECONDS)
+
+        uplink.health.value shouldBeEqualTo UplinkHealth(failedHeartbeatPeriods = 3)
+    }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN three sends failed WHEN the next one is sent THEN the uplink is healthy`() = runTest {
+        mockkStatic(Log::class)
+        every { Log.w(any(), any<String>(), any()) } returns 0
+        results = MutableList(3) { SendResult.Failed(IOException()) }
+        backgroundScope.launch { sender.run { PEER } }
+
+        delay(THREE_AND_A_HALF_SECONDS)
+
+        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+    }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN the link is closed for every send WHEN running THEN no failed period is counted`() = runTest {
+        results = MutableList(3) { SendResult.NotOpen }
+        backgroundScope.launch { sender.run { PEER } }
+
+        delay(TWO_AND_A_HALF_SECONDS)
+
+        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+    }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN failed periods and a command without answer WHEN the vehicle is not connected THEN all is cleared`() =
+        runTest {
+            mockkStatic(Log::class)
+            every { Log.w(any(), any<String>(), any()) } returns 0
+            results = MutableList(2) { SendResult.Failed(IOException()) }
+            var destination: InetSocketAddress? = PEER
+            backgroundScope.launch { sender.run { destination } }
+            delay(ONE_AND_A_HALF_SECONDS)
+            uplink.commandUnanswered()
+            destination = null
+
+            delay(ONE_SECOND)
+
+            uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+        }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a command without answer WHEN the sender stops THEN the uplink is healthy`() = runTest {
+        val job = backgroundScope.launch { sender.run { PEER } }
+        runCurrent()
+        uplink.commandUnanswered()
+
+        job.cancel()
+        runCurrent()
+
+        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+    }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a command without answer before WHEN the sender starts THEN the uplink is healthy`() = runTest {
+        uplink.commandUnanswered()
+
+        backgroundScope.launch { sender.run { PEER } }
+        runCurrent()
+
+        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+    }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a command without answer WHEN HEARTBEATs are sent THEN the command stays unanswered`() = runTest {
+        backgroundScope.launch { sender.run { PEER } }
+        runCurrent()
+        uplink.commandUnanswered()
+
+        delay(TWO_AND_A_HALF_SECONDS)
+
+        uplink.health.value.unansweredSince shouldNotBe null
+    }
+
     /** One sent datagram as the codec reads it back. */
     private data class Decoded(val sequence: Int, val systemId: Int, val componentId: Int, val message: MavlinkMessage)
 
@@ -200,6 +295,7 @@ class GcsHeartbeatSenderTest {
         const val ONE_AND_A_HALF_SECONDS = 1_500L
         const val TWO_SECONDS = 2_000L
         const val TWO_AND_A_HALF_SECONDS = 2_500L
+        const val THREE_AND_A_HALF_SECONDS = 3_500L
         const val UNTIL_SEQUENCE_44 = 44_500L
         const val UNTIL_SEQUENCE_WRAPS = 256_500L
 

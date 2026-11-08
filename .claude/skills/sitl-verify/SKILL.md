@@ -23,12 +23,12 @@ Pick one; the working option is recorded in `CLAUDE.md` → "Lessons learned" on
 
 **A. Mission Planner simulator (Windows) — verified setup, issue #5**
 
-Verified with Mission Planner 1.3.83 and ArduCopter V4.7.2-beta1 (the Spanish UI translates the
-labels; mode names stay in English).
+First verified with Mission Planner 1.3.83 (the Spanish UI translates the labels; mode names stay in
+English). The simulator updates itself (4.7.2-beta1 in #5, 4.7.3 in #29), so no version is fixed here.
 
 1. Mission Planner → *Simulation* → *Multirotor*. It downloads and runs the ArduCopter SITL binary
-   and connects over TCP 5760. Check the version it reports: stable may not be selectable (it loaded
-   V4.8.0-dev first, then V4.7.2-beta1); record the exact version with any capture.
+   and connects over TCP 5760. Stable may not be selectable (#5 got V4.8.0-dev first); read the
+   version from AUTOPILOT_VERSION every session and record it with any capture and SITL report.
 2. **QGroundControl connects to SITL directly**, not through Mission Planner: *Application Settings →
    Comm Links → Add*, type **TCP**, server `127.0.0.1`, port **5762** (SITL also listens on 5763).
 3. **Emulator:** `adb emu redir add udp:14550:14550`, then in Mission Planner press **Ctrl+F** →

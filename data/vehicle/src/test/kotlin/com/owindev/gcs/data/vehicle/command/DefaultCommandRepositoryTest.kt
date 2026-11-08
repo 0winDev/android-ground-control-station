@@ -25,6 +25,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
@@ -98,7 +99,8 @@ class DefaultCommandRepositoryTest {
         every { session.messages } returns messages
         every { session.session } returns sessions
         every { vehicleRepository.vehicles } returns vehicles
-        val exchange = CommandExchange(sender, session) { route }
+        val exchange =
+            CommandExchange(sender, session, DefaultUplinkRepository(testScope.testScheduler.timeSource)) { route }
         repository = DefaultCommandRepository(
             exchange = exchange,
             takeOff = TakeOffSequence(

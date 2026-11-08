@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.state
 
+import com.owindev.gcs.core.domain.link.UplinkHealth
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
@@ -8,9 +9,11 @@ import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.replay.ReplayClock
@@ -51,6 +54,7 @@ class SessionChangeTest {
     private val telemetryRequester: TelemetryRequester = mockk()
     private val targets = mutableListOf<Flow<TelemetryTarget?>>()
     private val activeVehicle = ActiveVehicle()
+    private val uplink = DefaultUplinkRepository(testScope.testScheduler.timeSource)
     private val session = LinkSession(
         live = transport,
         scope = testScope.backgroundScope,
@@ -68,9 +72,13 @@ class SessionChangeTest {
             session = session,
             timeSource = testScope.testScheduler.timeSource,
             rule = LinkLossRule(),
-            heartbeatSender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session)),
+            heartbeatSender = GcsHeartbeatSender(
+                GcsMessageSender(transport, ignoringRecorder(), session),
+                uplinkOnTestClock(),
+            ),
             telemetryRequester = telemetryRequester,
             telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
+            uplink = uplink,
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
         )
@@ -92,6 +100,23 @@ class SessionChangeTest {
             val result = targets.last().first()
 
             result shouldBeEqualTo null
+        }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a command without answer on the live link WHEN a replay starts THEN the uplink is healthy`() =
+        testScope.runTest {
+            coEvery { telemetryRequester.run(capture(targets), any()) } coAnswers { awaitCancellation() }
+            coEvery { transport.send(any(), any()) } returns SendResult.Sent
+            every { transport.datagrams() } returns liveSocketWith(HEARTBEAT)
+            repository.vehicles.launchIn(backgroundScope)
+            delay(HEARD)
+            uplink.commandUnanswered()
+
+            session.replay(emptySource(), ReplayClock(testScheduler.timeSource))
+            runCurrent()
+
+            uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
         }
 }
 

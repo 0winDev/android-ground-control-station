@@ -28,6 +28,8 @@
     <string name="hud_local_fault_port_retrying">UDP port %1$d was taken on this device while reconnecting. Retrying.</string>
     <string name="hud_local_fault_failed">The link failed on this device. Reopening it and waiting for the vehicle.</string>
     <string name="hud_link_unstable">Link unstable on this device: receiving again, but it may fail again.</string>
+    <string name="hud_uplink_sends_failing">The vehicle may not be hearing this GCS: this device fails to send to it.</string>
+    <string name="hud_uplink_command_unanswered">The vehicle may not be hearing this GCS: a command got no answer %1$s ago.</string>
     <string name="hud_local_fault_unstable">The link on this device is unstable: it keeps failing and reopening.</string>
     <string name="hud_label_altitude">Alt (rel. home)</string>
     <string name="hud_label_ground_speed">Ground speed</string>

@@ -5,6 +5,8 @@ import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.attention.FlightAttentionRule
 import com.owindev.gcs.core.domain.link.LinkRepository
+import com.owindev.gcs.core.domain.link.UplinkRepository
+import com.owindev.gcs.core.domain.link.UplinkRule
 import com.owindev.gcs.core.domain.recording.ImportRule
 import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
@@ -26,6 +28,7 @@ import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.command.CommandRoutes
 import com.owindev.gcs.data.vehicle.command.DefaultCommandRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.recording.DefaultRecordingRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
@@ -73,6 +76,9 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindAlertRepository(impl: DefaultAlertRepository): AlertRepository
+
+    @Binds
+    internal abstract fun bindUplinkRepository(impl: DefaultUplinkRepository): UplinkRepository
 
     @Binds
     internal abstract fun bindLiveSource(transport: UdpTransport): DatagramSource
@@ -126,6 +132,10 @@ abstract class VehicleDataModule {
         /** On the ground only on an ON_GROUND younger than 0.5 s (REQ-052, #112); change it here. */
         @Provides
         fun provideLandedRule(): LandedRule = LandedRule()
+
+        /** The vehicle may not be hearing this GCS after 3 failed HEARTBEAT periods (REQ-045); change it here. */
+        @Provides
+        fun provideUplinkRule(): UplinkRule = UplinkRule()
 
         /** A take off's second ground check (REQ-044): a position under 0.5 s old, 1 m above home, 0.5 m/s at most. */
         @Provides

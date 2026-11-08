@@ -16,14 +16,19 @@ import kotlinx.coroutines.delay
  * receives that peer's HEARTBEAT, and its GCS failsafe (`FS_GCS_ENABLE`) watches exactly that.
  *
  * Once per [PERIOD] it asks where to send; it sends only when given an address, so whoever starts it
- * decides when the vehicle may consider this GCS present. The sequence number belongs to this GCS's
- * component, not to HEARTBEAT, so [GcsMessageSender] owns it for every message the component sends.
+ * decides when the vehicle may consider this GCS present. Each period is reported to [uplink] (REQ-045); a period
+ * without address means the vehicle is not CONNECTED, so it resets [uplink], as do starting and stopping. The
+ * sequence number belongs to this GCS's component, not to HEARTBEAT, so [GcsMessageSender] owns it for every message
+ * the component sends.
  *
  * Anything thrown other than an expected I/O failure stops the loop and crashes the app (the application
  * scope has no handler). For the vehicle that is the safe direction: it simply stops hearing this GCS.
  */
 @Singleton
-internal class GcsHeartbeatSender @Inject constructor(private val sender: GcsMessageSender) {
+internal class GcsHeartbeatSender @Inject constructor(
+    private val sender: GcsMessageSender,
+    private val uplink: DefaultUplinkRepository,
+) {
 
     private val running = AtomicBoolean(false)
 
@@ -37,21 +42,27 @@ internal class GcsHeartbeatSender @Inject constructor(private val sender: GcsMes
      */
     suspend fun run(destination: () -> InetSocketAddress?) {
         check(running.compareAndSet(false, true)) { "The GCS HEARTBEAT sender is already running" }
+        uplink.reset()
         try {
             while (true) {
-                destination()?.let { peer -> sendTo(peer) }
+                val peer = destination()
+                if (peer == null) uplink.reset() else sendTo(peer)
                 delay(PERIOD)
             }
         } finally {
+            uplink.reset()
             running.set(false)
         }
     }
 
     private suspend fun sendTo(peer: InetSocketAddress) {
         when (val result = sender.send(GCS_HEARTBEAT, peer)) {
-            SendResult.Sent -> failing = false
+            SendResult.Sent -> {
+                failing = false
+                uplink.heartbeatSent()
+            }
 
-            // The link closed meanwhile; the next period asks again.
+            // The link closed meanwhile, which the HUD already shows: no evidence about the uplink.
             SendResult.NotOpen -> Unit
 
             is SendResult.Failed -> {
@@ -59,6 +70,7 @@ internal class GcsHeartbeatSender @Inject constructor(private val sender: GcsMes
                 // flooding the log once per second.
                 if (!failing) Log.w(TAG, "Sending the GCS HEARTBEAT failed", result.cause)
                 failing = true
+                uplink.heartbeatFailed()
             }
         }
     }

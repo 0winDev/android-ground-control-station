@@ -7,6 +7,7 @@ import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
+import com.owindev.gcs.core.domain.link.UplinkRule
 import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
@@ -65,6 +66,8 @@ class HudViewModelLastDataTest {
             vehicleRepository,
             telemetryRepository,
             alertRepository,
+            healthyUplink(),
+            UplinkRule(),
             LinkLossRule(),
             StalenessRule(),
             DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
