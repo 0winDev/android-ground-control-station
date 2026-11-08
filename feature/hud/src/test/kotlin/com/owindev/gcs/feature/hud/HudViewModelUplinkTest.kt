@@ -145,6 +145,19 @@ class HudViewModelUplinkTest {
     }
 
     @Test
+    fun `GIVEN failing sends WHEN a replayed vehicle is connected THEN there is no warning`() = runTest {
+        turbineScope {
+            traffic.value = LinkTraffic.Replaying(datagrams = DATAGRAMS)
+            heardVehicle(VehicleLink.CONNECTED, origin = DataOrigin.REPLAY)
+            health.value = UplinkHealth(failedHeartbeatPeriods = 3)
+
+            val result = viewModel.state.testIn(backgroundScope)
+
+            result.expectMostRecentItem().uplink().shouldBeNull()
+        }
+    }
+
+    @Test
     fun `GIVEN failing sends WHEN the vehicle is lost THEN link lost shows instead`() = runTest {
         turbineScope {
             heardVehicle(VehicleLink.LOST, heardAgo = TIMEOUT)
@@ -156,7 +169,11 @@ class HudViewModelUplinkTest {
         }
     }
 
-    private fun TestScope.heardVehicle(link: VehicleLink, heardAgo: Duration = Duration.ZERO) {
+    private fun TestScope.heardVehicle(
+        link: VehicleLink,
+        heardAgo: Duration = Duration.ZERO,
+        origin: DataOrigin = DataOrigin.LIVE,
+    ) {
         activeSystemId.value = SYSTEM_ID
         vehicles.value = mapOf(
             SYSTEM_ID to Vehicle(
@@ -168,7 +185,7 @@ class HudViewModelUplinkTest {
                 ),
                 link = link,
                 lastHeartbeat = testScheduler.timeSource.markNow() - heardAgo,
-                origin = DataOrigin.LIVE,
+                origin = origin,
             ),
         )
     }

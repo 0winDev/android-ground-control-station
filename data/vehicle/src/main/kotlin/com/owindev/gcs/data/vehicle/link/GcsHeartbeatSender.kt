@@ -17,8 +17,9 @@ import kotlinx.coroutines.delay
  *
  * Once per [PERIOD] it asks where to send; it sends only when given an address, so whoever starts it
  * decides when the vehicle may consider this GCS present. Each period is reported to [uplink] (REQ-045); a period
- * without address means the vehicle is not CONNECTED, so it resets [uplink], as does stopping. The sequence number belongs to this GCS's
- * component, not to HEARTBEAT, so [GcsMessageSender] owns it for every message the component sends.
+ * without address means the vehicle is not CONNECTED, so it resets [uplink], as do starting and stopping. The
+ * sequence number belongs to this GCS's component, not to HEARTBEAT, so [GcsMessageSender] owns it for every message
+ * the component sends.
  *
  * Anything thrown other than an expected I/O failure stops the loop and crashes the app (the application
  * scope has no handler). For the vehicle that is the safe direction: it simply stops hearing this GCS.

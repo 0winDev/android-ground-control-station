@@ -12,6 +12,7 @@ import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.data.vehicle.command.CommandRoute
 import com.owindev.gcs.data.vehicle.command.CommandRoutes
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
@@ -99,6 +100,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val timeSource: TimeSource.WithComparableMarks,
     private val rule: LinkLossRule,
     private val heartbeatSender: GcsHeartbeatSender,
+    private val uplink: DefaultUplinkRepository,
     private val telemetryRequester: TelemetryRequester,
     private val telemetryStore: TelemetryStore,
     private val activeVehicle: ActiveVehicle,
@@ -252,6 +254,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         timers.clear()
         addresses = emptyMap()
         commandAddress = null
+        uplink.reset()
         mutableVehicles.value = emptyMap()
         telemetryStore.startSession(to)
         do {
@@ -262,8 +265,9 @@ internal class DefaultVehicleRepository @Inject constructor(
     }
 
     /**
-     * Writes [vehicle] and tells the telemetry job if the active vehicle's link changed. Only the watchdog
-     * calls it, after writing the vehicle's address.
+     * Writes [vehicle] and tells the telemetry job if the active vehicle's link changed; a LOST also ends what was
+     * observed of the uplink (REQ-045), however briefly it lasts. Only the watchdog calls it, after writing the
+     * vehicle's address.
      */
     private fun update(systemId: SystemId, vehicle: Vehicle) {
         val before = mutableVehicles.value[systemId]?.link ?: VehicleLink.LOST
@@ -273,6 +277,7 @@ internal class DefaultVehicleRepository @Inject constructor(
             val target = if (vehicle.link == VehicleLink.CONNECTED) {
                 TelemetryTarget(systemId, addresses.getValue(systemId))
             } else {
+                uplink.reset()
                 null
             }
             activeLinkChanges.trySend(target)

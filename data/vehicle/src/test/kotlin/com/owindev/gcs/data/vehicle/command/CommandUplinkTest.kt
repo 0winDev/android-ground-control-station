@@ -175,6 +175,44 @@ class CommandUplinkTest {
             uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
         }
 
+    @Test
+    fun `GIVEN an RTL whose third send finds the route changed WHEN it ends THEN the uplink is healthy`() =
+        testScope.runTest {
+            sendResults = mutableListOf(
+                CommandSendResult.Sent,
+                CommandSendResult.Sent,
+                CommandSendResult.NotSent(NotSentReason.ROUTE_CHANGED),
+            )
+
+            exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
+
+            uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+        }
+
+    @Test
+    fun `GIVEN an RTL whose third send is refused as not landed WHEN it ends THEN the command is unanswered`() =
+        testScope.runTest {
+            sendResults = mutableListOf(
+                CommandSendResult.Sent,
+                CommandSendResult.Sent,
+                CommandSendResult.NotSent(NotSentReason.NOT_LANDED),
+            )
+
+            exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
+
+            uplink.health.value.unansweredSince?.elapsedNow() shouldBeEqualTo RTL_LATE_WINDOW
+        }
+
+    @Test
+    fun `GIVEN a mode change to GUIDED without answer WHEN it ends THEN the command is unanswered`() =
+        testScope.runTest {
+            sendInBackground(GUIDED_MODE_CHANGE)
+
+            delay(WITHIN_MODE_CHANGE_LATE_WINDOW)
+
+            uplink.health.value.unansweredSince?.elapsedNow() shouldBeEqualTo SINCE_MODE_CHANGE_TIMEOUT
+        }
+
     private fun TestScope.sendInBackground(command: MavCommand) {
         backgroundScope.launch { exchange.run(SYSTEM, LABEL, command, onState = {}) {} }
     }
@@ -202,10 +240,12 @@ class CommandUplinkTest {
         const val ANSWER_DELAY = 50L
         const val RIGHT_AFTER_ARM_TIMEOUT = 1_501L
         const val WITHIN_ARM_LATE_WINDOW = 5_000L
+        const val WITHIN_MODE_CHANGE_LATE_WINDOW = 2_000L
 
         val SINCE_ARM_TIMEOUT = 3_500.milliseconds
         val SINCE_ARM_TIMEOUT_AT_ITS_END = 10_000.milliseconds
         val RTL_LATE_WINDOW = 1_500.milliseconds
+        val SINCE_MODE_CHANGE_TIMEOUT = 500.milliseconds
         val SYSTEM = SystemId(VEHICLE_SYSTEM_ID)
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)

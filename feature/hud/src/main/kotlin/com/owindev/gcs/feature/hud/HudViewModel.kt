@@ -126,7 +126,10 @@ class HudViewModel @Inject constructor(
         telemetryTicks,
     ) { traffic, activeSystemId, vehicles, _, telemetry -> toUiState(traffic, activeSystemId, vehicles, telemetry) }
         .combine(alertRepository.activeAlerts) { state, alerts -> state.withAlerts(alerts) }
-        .combine(uplinkTicks) { state, warning -> state.withUplink(warning) }
+        .combine(linkRepository.traffic.map { it.origin() == DataOrigin.LIVE }.distinctUntilChanged()) { state, live ->
+            state to live
+        }
+        .combine(uplinkTicks) { (state, live), warning -> state.withUplink(warning.takeIf { live }) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(
@@ -268,7 +271,10 @@ private fun Vehicle.toStatus() = VehicleStatus(
     armed = state.armed,
 )
 
-/** Only a heard vehicle can be told not to hear this GCS: a lost one already shows the emergency. */
+/**
+ * Only a heard live vehicle can be told not to hear this GCS: a lost one already shows the emergency, and a replay
+ * sends nothing.
+ */
 private fun HudUiState.withUplink(warning: UplinkWarning?): HudUiState =
     if (this is HudUiState.Connected) copy(uplink = warning?.toDoubt()) else this
 

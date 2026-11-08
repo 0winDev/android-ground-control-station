@@ -221,6 +221,30 @@ class GcsHeartbeatSenderTest {
 
     @Tag("REQ-045")
     @Test
+    fun `GIVEN a command without answer WHEN the sender stops THEN the uplink is healthy`() = runTest {
+        val job = backgroundScope.launch { sender.run { PEER } }
+        runCurrent()
+        uplink.commandUnanswered()
+
+        job.cancel()
+        runCurrent()
+
+        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+    }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a command without answer before WHEN the sender starts THEN the uplink is healthy`() = runTest {
+        uplink.commandUnanswered()
+
+        backgroundScope.launch { sender.run { PEER } }
+        runCurrent()
+
+        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+    }
+
+    @Tag("REQ-045")
+    @Test
     fun `GIVEN a command without answer WHEN HEARTBEATs are sent THEN the command stays unanswered`() = runTest {
         backgroundScope.launch { sender.run { PEER } }
         runCurrent()

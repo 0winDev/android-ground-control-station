@@ -24,8 +24,9 @@ class UplinkRule(val failedPeriodsToWarn: Int = DEFAULT_FAILED_PERIODS_TO_WARN) 
 
     companion object {
         /**
-         * Three 1 Hz periods: past one or two lost to a transient error, and still within ArduCopter's default
-         * `FS_GCS_TIMEOUT` of 5 s (`ArduCopter/Parameters.cpp`), so the operator hears of it before the failsafe acts.
+         * Three 1 Hz periods: past one or two lost to a transient error, and within ArduCopter's default
+         * `FS_GCS_TIMEOUT` of 5 s (`ArduCopter/Parameters.cpp`; the failsafe itself, `FS_GCS_ENABLE`, is off by
+         * default), so with that default a failure on this device is reported before the failsafe acts.
          */
         const val DEFAULT_FAILED_PERIODS_TO_WARN: Int = 3
     }

@@ -112,6 +112,7 @@ class ReplayPipelineTest {
             heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
+            uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
         )
@@ -361,6 +362,7 @@ class ReplayPipelineTest {
             heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
+            uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
         )

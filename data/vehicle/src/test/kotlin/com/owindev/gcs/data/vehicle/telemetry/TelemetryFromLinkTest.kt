@@ -79,6 +79,7 @@ class TelemetryFromLinkTest {
             ),
             telemetryRequester = telemetryRequester,
             telemetryStore = store,
+            uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
         )
@@ -174,6 +175,7 @@ class TelemetryFromLinkTest {
                 ),
                 telemetryRequester = telemetryRequester,
                 telemetryStore = store,
+                uplink = uplinkOnTestClock(),
                 activeVehicle = activeVehicle,
                 scope = backgroundScope,
             )

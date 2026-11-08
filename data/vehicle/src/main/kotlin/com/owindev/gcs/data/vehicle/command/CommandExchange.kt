@@ -61,8 +61,9 @@ internal class CommandExchange @Inject constructor(
                 val request = Request(systemId, label, command, routing, onState)
                 val acks = answersTo(request, route.address, current)
                 val result = attempts(request, acks)
-                // Marked before the late window opens, so a late answer is always taken after the mark.
-                if (result.isUplinkEvidence) uplink.commandUnanswered()
+                // Marked before the late window opens, so a late answer is always taken after the mark, and only in
+                // the session the command was sent in: a session that ended has reset the uplink.
+                if (result.isUplinkEvidence && session.session.value == current) uplink.commandUnanswered()
                 onResult(result)
                 if (result is CommandResult.NoAnswer) dropLateAnswers(request, acks)
                 coroutineContext.cancelChildren()
@@ -162,12 +163,12 @@ internal class CommandExchange @Inject constructor(
     /**
      * A command left without answer says something of the uplink only when nothing else explains it: not after an
      * IN_PROGRESS (the vehicle heard it) nor when the app stopped early because the link, the route or the session
-     * ended; a failed later send still does.
+     * ended; any other stop (a failed send, a check refusing a retry) still does.
      */
     private val CommandResult.isUplinkEvidence: Boolean
         get() = this is CommandResult.NoAnswer &&
             !startedByVehicle &&
-            (retriesStopped == null || retriesStopped == NotSentReason.SEND_FAILED)
+            retriesStopped !in SILENCE_EXPLAINED
 
     private fun noAnswer(attempts: Int, retriesStopped: NotSentReason?) =
         CommandResult.NoAnswer(attempts, startedByVehicle = false, retriesStopped)
@@ -208,6 +209,10 @@ internal class CommandExchange @Inject constructor(
          * 11.5 s.
          */
         val DANGEROUS_LATE_WINDOW: Duration = 10.seconds
+
+        /** The app stopped retrying because the link, the session or the route ended: that explains the silence. */
+        private val SILENCE_EXPLAINED =
+            setOf(NotSentReason.LINK_LOST, NotSentReason.REPLAY, NotSentReason.ROUTE_CHANGED)
 
         private const val TAG = "CommandExchange"
     }
