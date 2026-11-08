@@ -45,7 +45,8 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 - **Allow the app's background activity before flying.** A foreground service keeps the link, the GCS
   HEARTBEAT and the recording running with the app hidden or the screen off (#28), but a manufacturer's battery
   manager can still kill it: on ColorOS with its defaults the app was killed 5 min after the screen went off. With
-  the app's background activity allowed it ran 10 min in deep Doze without missing a HEARTBEAT. If the app is killed,
+  the app's background activity allowed it ran 10 min in deep Doze without missing a HEARTBEAT. The HUD says so
+  while the link runs, with a button to the app's settings. If the app is killed,
   stopped from the Task Manager or force-stopped, an armed vehicle with ArduPilot's GCS failsafe enabled
   (`FS_GCS_ENABLE`, off by default in ArduCopter) triggers it after `FS_GCS_TIMEOUT`.
 - **The app can only suspect a failed uplink.** UDP gives no delivery proof: the HUD warns that the vehicle

@@ -212,6 +212,8 @@ the issue number to an existing one.
 - An ArduPilot reboot never goes LOST: detect it from `time_boot_ms` going back, then request the streams (#69).
 - ArduPilot sends HOME_POSITION only when it sets or moves home: its silence is never a reason to ask (#69).
 - An OEM battery manager kills a foreground service holding a wake lock: test on the real device's defaults (#28).
+- Battery optimisation is every stock app's default: a caution on it fires everywhere; measure a signal first (#28).
+- A restricted app's foreground service loses the foreground once hidden: start it again on every app start (#28).
 - Rejecting a value never erases state: drop the frame; compare ±π as float32 and integers with `in` (#49).
 - A base class default is not the vehicle's: read the override (ArduCopter's `vtol_state` is MC, not UNDEFINED) (#112).
 
@@ -281,6 +283,7 @@ the issue number to an existing one.
 - pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
 - A relay bound to 127.0.0.1 never reaches a phone on the LAN: bind the device's side to 0.0.0.0 (#28).
 - ColorOS refuses `pm grant` from adb, and Android 13 never lets a foreground notification be dismissed (#28).
+- ColorOS names battery settings its own way ("allow background activity"): a fix in the UI names both (#28).
 - A receiver's own app passes its permission: prove the guard from another UID or by the installed manifest (#98).
 
 **Emulator, Windows and tooling**

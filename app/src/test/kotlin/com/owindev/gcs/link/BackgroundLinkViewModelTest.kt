@@ -78,14 +78,43 @@ class BackgroundLinkViewModelTest {
     }
 
     @Test
-    fun `GIVEN the service running WHEN the vehicle is heard THEN it is not started again`() = runTest {
-        state.running.value = true
-        viewModel.starts.test {
+    fun `GIVEN the service running WHEN the activity starts THEN it is started again to keep the foreground`() =
+        runTest {
             heard(vehicle(armed = true))
+            state.setRunning(true)
 
+            viewModel.starts.test {
+                val result = awaitItem()
+
+                result shouldBeEqualTo Unit
+            }
+        }
+
+    @Test
+    fun `GIVEN the service running and started WHEN more HEARTBEATs arrive THEN it is not started again`() = runTest {
+        heard(vehicle(armed = true))
+        state.setRunning(true)
+        viewModel.starts.test {
+            skipItems(1)
+
+            heard(vehicle(armed = true))
             val result = cancelAndConsumeRemainingEvents()
 
             result shouldBeEqualTo emptyList()
+        }
+    }
+
+    @Test
+    fun `GIVEN the service running WHEN it stops while it must run THEN it is started again`() = runTest {
+        heard(vehicle(armed = true))
+        state.setRunning(true)
+        viewModel.starts.test {
+            skipItems(1)
+
+            state.setRunning(false)
+            val result = awaitItem()
+
+            result shouldBeEqualTo Unit
         }
     }
 
@@ -137,6 +166,54 @@ class BackgroundLinkViewModelTest {
             val result = cancelAndConsumeRemainingEvents()
 
             result shouldBeEqualTo emptyList()
+        }
+    }
+
+    @Test
+    fun `GIVEN the service running and every vehicle disarmed WHEN observed THEN notifications are asked`() = runTest {
+        heard(vehicle(armed = false))
+        state.setRunning(true)
+
+        viewModel.asksNotifications.test {
+            val result = awaitItem()
+
+            result shouldBeEqualTo Unit
+        }
+    }
+
+    @Test
+    fun `GIVEN every vehicle disarmed but no service WHEN observed THEN notifications are not asked`() = runTest {
+        heard(vehicle(armed = false))
+
+        viewModel.asksNotifications.test {
+            val result = cancelAndConsumeRemainingEvents()
+
+            result shouldBeEqualTo emptyList()
+        }
+    }
+
+    @Test
+    fun `GIVEN the service running over an armed vehicle WHEN observed THEN notifications are not asked`() = runTest {
+        heard(vehicle(armed = true))
+        state.setRunning(true)
+
+        viewModel.asksNotifications.test {
+            val result = cancelAndConsumeRemainingEvents()
+
+            result shouldBeEqualTo emptyList()
+        }
+    }
+
+    @Test
+    fun `GIVEN the service running over an armed vehicle WHEN it disarms THEN notifications are asked`() = runTest {
+        heard(vehicle(armed = true))
+        state.setRunning(true)
+        viewModel.asksNotifications.test {
+            heard(vehicle(armed = false))
+
+            val result = awaitItem()
+
+            result shouldBeEqualTo Unit
         }
     }
 

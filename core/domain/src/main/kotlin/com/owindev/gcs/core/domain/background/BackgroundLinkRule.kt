@@ -30,6 +30,16 @@ class BackgroundLinkRule(private val linkLoss: LinkLossRule, private val recordi
         else -> recording.closesAfter(active.lastHeartbeat.elapsedNow())
     }
 
+    /** Only while it runs; a restriction outranks the optimisation it implies. */
+    fun warningsFor(status: BackgroundLinkStatus): Set<BackgroundLinkWarning> = buildSet {
+        if (!status.running) return@buildSet
+        if (status.notificationHidden) add(BackgroundLinkWarning.NOTIFICATION_HIDDEN)
+        when {
+            status.backgroundRestricted -> add(BackgroundLinkWarning.BACKGROUND_RESTRICTED)
+            status.batteryOptimized -> add(BackgroundLinkWarning.BATTERY_OPTIMIZED)
+        }
+    }
+
     private fun anyLiveArmed(vehicles: Collection<Vehicle>): Boolean = vehicles.any { it.isLive && it.state.armed }
 
     private val Vehicle.isLive: Boolean

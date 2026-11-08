@@ -52,7 +52,7 @@ class VehicleLinkService : Service() {
         lastStartId = startId
         when (intent?.action) {
             LinkNotification.ACTION_DISCONNECT -> apply(LinkRequest.DISCONNECT)
-            LinkNotification.ACTION_DISMISSED -> apply(LinkRequest.NOTIFICATION_DISMISSED)
+            LinkNotification.ACTION_POST_AGAIN -> apply(LinkRequest.POST_AGAIN)
             else -> start()
         }
         return START_NOT_STICKY
@@ -93,7 +93,7 @@ class VehicleLinkService : Service() {
         val action = controller.actionFor(request)
         if (action == LinkAction.STOP) return stop()
         if (action == LinkAction.REFUSE) Log.i(TAG, "$request refused: the vehicle is armed")
-        shown?.let(::show)
+        show(shown)
     }
 
     /** Not if a start is already queued: it is handled next and observes again. */
@@ -101,7 +101,7 @@ class VehicleLinkService : Service() {
         stopSelfResult(lastStartId)
     }
 
-    private fun show(notice: LinkNotice) {
+    private fun show(notice: LinkNotice?) {
         shown = notice
         // Without POST_NOTIFICATIONS the notification is hidden, but the service keeps running.
         if (NotificationManagerCompat.from(this).areNotificationsEnabled()) {

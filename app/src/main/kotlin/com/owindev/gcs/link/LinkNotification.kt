@@ -20,9 +20,9 @@ internal object LinkNotification {
 
     const val ID = 1
     const val ACTION_DISCONNECT = "com.owindev.gcs.link.DISCONNECT"
-    const val ACTION_DISMISSED = "com.owindev.gcs.link.DISMISSED"
+    const val ACTION_POST_AGAIN = "com.owindev.gcs.link.POST_AGAIN"
 
-    private const val CHANNEL = "vehicle_link"
+    const val CHANNEL = "vehicle_link"
     private const val OPEN_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
 
     fun createChannel(context: Context) {
@@ -38,7 +38,7 @@ internal object LinkNotification {
             .setContentTitle(notice?.let { title(context, it) } ?: context.getString(R.string.link_keeping))
             .setContentText(notice?.let { text(context, it) })
             .setContentIntent(activity(context))
-            .setDeleteIntent(service(context, ACTION_DISMISSED))
+            .setDeleteIntent(service(context, ACTION_POST_AGAIN))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

@@ -208,7 +208,7 @@ private fun staleMessageOf(kind: TelemetryKind): Int = when (kind) {
 }
 
 /** How a level looks: an emergency is announced at once and outlined, like the link-lost screen. */
-private data class LevelStyle(
+internal data class LevelStyle(
     val container: Color,
     val content: Color,
     val border: Color?,
@@ -218,7 +218,7 @@ private data class LevelStyle(
 )
 
 @Composable
-private fun styleOf(level: AlertLevel): LevelStyle = when (level) {
+internal fun styleOf(level: AlertLevel): LevelStyle = when (level) {
     AlertLevel.ADVISORY -> LevelStyle(
         container = GcsTheme.colors.advisoryContainer,
         content = GcsTheme.colors.advisory,

@@ -1,14 +1,18 @@
 package com.owindev.gcs
 
+import android.Manifest.permission.POST_NOTIFICATIONS
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -23,13 +27,16 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.link.BackgroundLinkState
 import com.owindev.gcs.link.BackgroundLinkViewModel
+import com.owindev.gcs.link.LinkNotification
 import com.owindev.gcs.link.VehicleLinkService
 import com.owindev.gcs.navigation.FlightGuardViewModel
 import com.owindev.gcs.navigation.GcsNavigation
 import com.owindev.gcs.navigation.shareRecording
 import com.owindev.gcs.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -39,12 +46,20 @@ class MainActivity : ComponentActivity() {
     private val flightGuard: FlightGuardViewModel by viewModels()
     private val backgroundLink: BackgroundLinkViewModel by viewModels()
 
+    @Inject
+    lateinit var backgroundLinkState: BackgroundLinkState
+
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        refreshBackgroundLink()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The stored palette is already read (ThemePreferences), so the bars are right from the first frame.
         enableSystemBars(themeViewModel.palette.value)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { backgroundLink.asksNotifications.collect { askNotificationsOnce() } }
                 backgroundLink.starts.collect { startVehicleLinkService() }
             }
         }
@@ -64,6 +79,38 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    // Not only on start: in split screen the system's settings change beside the app while it stays started.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) refreshBackgroundLink()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        refreshBackgroundLink()
+    }
+
+    private fun refreshBackgroundLink() {
+        if (backgroundLinkState.refresh(this)) postLinkNotificationAgain()
+    }
+
+    /** Asked when the service first starts (REQ-046); denied, the service runs with its notification hidden. */
+    private fun askNotificationsOnce() {
+        if (backgroundLinkState.notificationsAsked || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        backgroundLinkState.notificationsAsked = true
+        if (ContextCompat.checkSelfPermission(this, POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            askNotifications.launch(POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun postLinkNotificationAgain() {
+        try {
+            startService(Intent(this, VehicleLinkService::class.java).setAction(LinkNotification.ACTION_POST_AGAIN))
+        } catch (e: IllegalStateException) {
+            Log.w("MainActivity", "The vehicle link notification could not be posted again", e)
         }
     }
 
