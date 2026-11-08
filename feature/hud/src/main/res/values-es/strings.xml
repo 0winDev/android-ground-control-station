@@ -137,4 +137,8 @@
     <string name="hud_recordings">Grabaciones</string>
     <string name="hud_recordings_open">Abrir las grabaciones</string>
     <string name="hud_menu_open">Abrir el menú</string>
+    <string name="hud_background_notification_hidden">La notificación del enlace en segundo plano está oculta: permite las notificaciones.</string>
+    <string name="hud_background_battery_optimized">Este dispositivo puede detener el enlace en segundo plano: permite la actividad en segundo plano.</string>
+    <string name="hud_background_restricted">La actividad en segundo plano está restringida: el enlace se detendrá en segundo plano.</string>
+    <string name="hud_background_settings">Ajustes</string>
 </resources>

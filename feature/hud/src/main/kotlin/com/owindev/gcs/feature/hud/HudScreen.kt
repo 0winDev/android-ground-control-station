@@ -1,5 +1,8 @@
 package com.owindev.gcs.feature.hud
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,6 +35,7 @@ import com.owindev.gcs.core.designsystem.layout.CompactHeight
 import com.owindev.gcs.core.designsystem.layout.CompactWidth
 import com.owindev.gcs.core.designsystem.theme.GcsCompact
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.core.domain.background.BackgroundLinkWarning
 
 /**
  * The HUD in the theme's palette, with the operator's switch between night and day ([onToggleTheme], REQ-030), laid
@@ -45,9 +50,12 @@ fun HudScreen(
     map: @Composable (insets: PaddingValues) -> Unit = {},
     viewModel: HudViewModel = hiltViewModel(),
     replayViewModel: ReplayViewModel = hiltViewModel(),
+    backgroundViewModel: BackgroundWarningsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val replay by replayViewModel.banner.collectAsStateWithLifecycle()
+    val backgroundWarnings by backgroundViewModel.warnings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     HudContent(
         state = state,
         onAcknowledgeAlert = viewModel::onAlertAcknowledged,
@@ -61,8 +69,25 @@ fun HudScreen(
         ),
         onOpenRecordings = onOpenRecordings,
         map = map,
+        background = BackgroundWarnings(
+            warnings = backgroundWarnings,
+            onOpenSettings = {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null),
+                    ),
+                )
+            },
+        ),
     )
 }
+
+/** The background link's warnings and the way to the settings that fix them. */
+internal data class BackgroundWarnings(
+    val warnings: Set<BackgroundLinkWarning> = emptySet(),
+    val onOpenSettings: () -> Unit = {},
+)
 
 @Composable
 internal fun HudContent(
@@ -74,6 +99,7 @@ internal fun HudContent(
     replayControls: ReplayControls = ReplayControls(onPause = {}, onResume = {}, onStop = {}),
     onOpenRecordings: (() -> Unit)? = null,
     map: @Composable (insets: PaddingValues) -> Unit = {},
+    background: BackgroundWarnings = BackgroundWarnings(),
 ) {
     var licencesOpen by rememberSaveable { mutableStateOf(false) }
     // Arming closes them: nothing may stand between the operator and an armed vehicle.
@@ -109,7 +135,9 @@ internal fun HudContent(
                     // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
                     header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
                     start = { StartColumn(state = state) },
-                    side = { SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert) },
+                    side = {
+                        SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert, background = background)
+                    },
                 )
                 Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
                     Box(
@@ -139,12 +167,17 @@ private fun StartColumn(state: HudUiState) {
 }
 
 @Composable
-private fun SideColumn(state: HudUiState, onAcknowledgeAlert: (occurrence: Long) -> Unit) {
+private fun SideColumn(
+    state: HudUiState,
+    onAcknowledgeAlert: (occurrence: Long) -> Unit,
+    background: BackgroundWarnings,
+) {
     when (state) {
         is HudUiState.Connected -> {
             // The vehicle's own alerts first: the banners below are about this device and the link.
             AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
             UplinkBanner(doubt = state.uplink)
+            BackgroundLinkBanners(background.warnings, background.onOpenSettings)
             UnstableLinkBanner(linkUnstable = state.linkUnstable)
             OtherVehiclesBanner(systemIds = state.otherVehicles)
         }
