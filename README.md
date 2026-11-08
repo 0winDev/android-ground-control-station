@@ -42,12 +42,12 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 
 ## Known limitations
 
-- **Keep the app in the foreground while flying.** A few seconds after the app goes to the background
-  or the screen locks, it stops sending its own HEARTBEAT: on the Android 16 (API 36) emulator the
-  system blocks the app's network after about 5 s (`sendto` fails with `EPERM`), and in any case the
-  app closes the link about 10 s after the HUD is hidden. An armed vehicle with ArduPilot's GCS failsafe
-  enabled (`FS_GCS_ENABLE`, off by default in ArduCopter) then triggers it after `FS_GCS_TIMEOUT`. A
-  foreground service that keeps the link open is planned before any real hardware (#28, v0.4).
+- **Allow the app's background activity before flying.** A foreground service keeps the link, the GCS
+  HEARTBEAT and the recording running with the app hidden or the screen off (#28), but a manufacturer's battery
+  manager can still kill it: on ColorOS with its defaults the app was killed 5 min after the screen went off. With
+  the app's background activity allowed it ran 10 min in deep Doze without missing a HEARTBEAT. If the app is killed,
+  stopped from the Task Manager or force-stopped, an armed vehicle with ArduPilot's GCS failsafe enabled
+  (`FS_GCS_ENABLE`, off by default in ArduCopter) triggers it after `FS_GCS_TIMEOUT`.
 - **The app can only suspect a failed uplink.** UDP gives no delivery proof: the HUD warns that the vehicle
   may not be hearing this GCS when this device fails to send its HEARTBEAT or a command gets no answer, but an
   uplink cut beyond the device shows nothing until a command is sent (#29).

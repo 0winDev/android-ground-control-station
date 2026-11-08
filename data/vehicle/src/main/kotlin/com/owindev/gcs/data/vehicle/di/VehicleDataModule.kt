@@ -4,6 +4,7 @@ import android.content.Context
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.attention.FlightAttentionRule
+import com.owindev.gcs.core.domain.background.BackgroundLinkRule
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRule
@@ -153,6 +154,11 @@ abstract class VehicleDataModule {
         /** The recording thresholds decided for v0.3 (REQ-036, REQ-039: 10 min, 256 MiB); change them here. */
         @Provides
         fun provideRecordingRule(): RecordingRule = RecordingRule()
+
+        /** The background link ends with the recording, 10 min after the link is lost (REQ-046, REQ-036). */
+        @Provides
+        fun provideBackgroundLinkRule(linkLossRule: LinkLossRule, recordingRule: RecordingRule): BackgroundLinkRule =
+            BackgroundLinkRule(linkLossRule, recordingRule)
 
         /** Flight logs in the app's private files (S-5), one folder for the recorder, the replay and the list. */
         @Provides

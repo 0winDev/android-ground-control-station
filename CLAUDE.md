@@ -211,6 +211,7 @@ the issue number to an existing one.
 - ArduPilot keeps rates per channel, streams only to a TCP channel it hears and forgets them on reboot (#36, #41).
 - An ArduPilot reboot never goes LOST: detect it from `time_boot_ms` going back, then request the streams (#69).
 - ArduPilot sends HOME_POSITION only when it sets or moves home: its silence is never a reason to ask (#69).
+- An OEM battery manager kills a foreground service holding a wake lock: test on the real device's defaults (#28).
 - Rejecting a value never erases state: drop the frame; compare ±π as float32 and integers with `in` (#49).
 - A base class default is not the vehicle's: read the override (ArduCopter's `vtol_state` is MC, not UNDEFINED) (#112).
 
@@ -223,6 +224,7 @@ the issue number to an existing one.
 - Kluent compares maps in iteration order: sort both sides (#10).
 - pymavlink drops all a corrupted LEN claims, our parser only the marker: it proves a frame invalid, no more (#67).
 - A reader without checksums anchors its plausibility window on two consecutive records, never one (#68).
+- Count a stream's messages, not only its gaps: one that stops leaves no gap between those counted (#28).
 - A tolerant reader's test can pass for the wrong reason: check it with a mutation of the rule it guards (#68, #71).
 - A capture's .tlog holds only what the vehicle sent: keep its AUTOPILOT_VERSION and raw counts in a file beside it (#112).
 - A mutation that does not compile looks like a survivor: read the build output before trusting it (#98).
@@ -250,6 +252,7 @@ the issue number to an existing one.
 - A blocking read ignores cancellation: close its stream on cancel, or a stalled provider holds the lock (#74).
 - A fake transport that never suspends hides `withContext`'s cancellation on return: make it suspend (#98).
 - A cancelled job cleans up late: key shared state by request identity, never by kind (#98).
+- A start on a transition misses the stop that comes after it: start a service by level, not by edge (#28).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
@@ -276,6 +279,8 @@ the issue number to an existing one.
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
 - pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
+- A relay bound to 127.0.0.1 never reaches a phone on the LAN: bind the device's side to 0.0.0.0 (#28).
+- ColorOS refuses `pm grant` from adb, and Android 13 never lets a foreground notification be dismissed (#28).
 - A receiver's own app passes its permission: prove the guard from another UID or by the installed manifest (#98).
 
 **Emulator, Windows and tooling**

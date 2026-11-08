@@ -2,4 +2,14 @@
     <string name="app_name">Estación de control terrestre</string>
     <string name="app_share_recording">Exportar la grabación</string>
     <string name="app_share_recording_failed">No se pudo exportar la grabación.</string>
+    <string name="link_channel">Enlace con el vehículo</string>
+    <string name="link_keeping">Manteniendo el enlace con el vehículo</string>
+    <string name="link_disconnect">Desconectar</string>
+    <string name="link_connected">Conectado</string>
+    <string name="link_lost">Enlace perdido</string>
+    <string name="link_title">SYS %1$d · %2$s</string>
+    <string name="link_armed">Armado</string>
+    <string name="link_disarmed">Desarmado</string>
+    <string name="link_text">%1$s · %2$s</string>
+    <string name="link_text_last_known">Último conocido: %1$s · %2$s</string>
 </resources>
