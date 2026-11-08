@@ -207,6 +207,7 @@ the issue number to an existing one.
 - Truncation cuts bytes, not fields, and never HEARTBEAT: CRC over the wire bytes, then zero-fill (#5, #10, #37).
 - A uint64 extension below 2⁵⁶ always truncates: a full-length fixture needs its top byte non-zero (#66).
 - Read ArduPilot's code, not only the XML: a fresh message is not a fresh value (#39, #41, #42).
+- A UDP send that succeeds proves nothing reached the vehicle: only an answer does (#29).
 - ArduPilot keeps rates per channel, streams only to a TCP channel it hears and forgets them on reboot (#36, #41).
 - An ArduPilot reboot never goes LOST: detect it from `time_boot_ms` going back, then request the streams (#69).
 - ArduPilot sends HOME_POSITION only when it sets or moves home: its silence is never a reason to ask (#69).
@@ -236,6 +237,8 @@ the issue number to an existing one.
 - `shareIn` does not hand upstream crashes to subscribers: such a test needs its own scope with a handler (#25).
 - One event can show on several messages: detect a reboot once per system (#69).
 - Anything waiting for an answer reopens a closed socket: gate background sends on "the link is listened to" (#39).
+- A 1 Hz loop misses a LOST shorter than its period: reset on the watchdog's transition, not on a poll (#29).
+- Set a mark and clear it in the same coroutine, or an answer applied first leaves the mark forever (#29).
 - Two sessions of one kind look alike in a conflated `StateFlow`: tell them apart by an epoch (#71).
 - A consumer started lazily starts from the producer's first state, never its current one (#71).
 - A clock followed after it started running is anchored on its position, or time jumps ahead then freezes (#71).
@@ -250,6 +253,7 @@ the issue number to an existing one.
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
+- No warning is no evidence: a gate (pre-flight) needs a positive sign, never the absence of a doubt (#29).
 - Whatever is kept per system ID grows with made-up IDs: keep history (the trail) for the active vehicle only (#72).
 - An occurrence id fixes the repository's race, not the screen's: a banner swapping under a finger needs a guard (#56).
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
@@ -261,7 +265,7 @@ the issue number to an existing one.
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).
-- The simulator updates itself: query AUTOPILOT_VERSION every session and record it with every capture (#5, #39, #41).
+- The simulator updates itself: query AUTOPILOT_VERSION each session, record it with every capture (#5, #39, #41, #29).
 - SITL tools send their own HEARTBEAT and stream requests; pass pymavlink `retries` across a reboot (#41, #42).
 - Changing `BATT_CAPACITY` does not recharge the battery: relaunch the simulator (#56).
 - Check QGroundControl's UI in the installed version's docs and compare values with its MAVLink Inspector (#42).

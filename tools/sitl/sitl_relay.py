@@ -20,14 +20,18 @@ Dropping commands (#98): c = toggle dropping the app's COMMAND_LONGs before they
 answers; they are still logged and recorded in the up .tlog. An RTL or land should then go out with confirmation 0, 1
 and 2, and an arm once. The app's telemetry requests are COMMAND_LONGs too: they are dropped as well meanwhile.
 
+Cutting the uplink (#29): u = toggle dropping everything the app sends before it reaches SITL, while the downlink keeps
+flowing (an uplink-only loss beyond the device). The app's sends still succeed locally, so only a command without
+answer can show it: the HUD should then warn that the vehicle may not be hearing this GCS.
+
 Recording (#70): with --tlog <prefix> it writes, as .tlogs, every frame it forwards to the app (<prefix>.down.tlog) and
 every frame the app sends (<prefix>.up.tlog), so compare_recording.py can check the app's own log against them. Two
 files, because other ground stations also send as system 255 and ArduPilot forwards them to the app.
 
 Control, from a terminal (key then Enter): d = toggle the downlink (a downlink-only loss), c = toggle dropping the
-app's commands, s = stop ATTITUDE, b = stop SYS_STATUS, q = quit. With --background (no terminal; on Windows NUL even
+app's commands, u = toggle cutting the uplink, s = stop ATTITUDE, b = stop SYS_STATUS, q = quit. With --background (no terminal; on Windows NUL even
 claims to be one): create the file <log>.downlink-off to cut the downlink and delete it to restore it, the same with
-<log>.drop-commands to drop the app's commands; create <log>.stop-attitude or <log>.stop-sys-status to stop that
+<log>.drop-commands to drop the app's commands and <log>.uplink-off to cut the uplink; create <log>.stop-attitude or <log>.stop-sys-status to stop that
 stream once (the relay deletes it); stop the process to quit.
 
 pymavlink is the reference decoder here and only a tool dependency (py -m pip install --user pymavlink).
@@ -65,6 +69,7 @@ commands_sent = {}
 downlink_on = threading.Event()
 downlink_on.set()
 commands_dropped = threading.Event()
+uplink_cut = threading.Event()
 stop = threading.Event()
 log_file = None
 tlog_files = {}
@@ -137,7 +142,9 @@ def uplink(sitl, udp: socket.socket) -> None:
             # Windows reports an earlier ICMP "port unreachable" (emulator not up yet) on the next recvfrom (#42).
             continue
         msgs = parser.parse_buffer(data) or []
-        dropped = commands_dropped.is_set() and any(msg.get_type() == "COMMAND_LONG" for msg in msgs)
+        dropped = uplink_cut.is_set() or (
+            commands_dropped.is_set() and any(msg.get_type() == "COMMAND_LONG" for msg in msgs)
+        )
         if not dropped:
             sitl.write(data)
         for msg in msgs:
@@ -214,6 +221,8 @@ def main() -> None:
                 set_downlink(not downlink_on.is_set())
             elif key == "c":
                 set_commands_dropped(not commands_dropped.is_set())
+            elif key == "u":
+                set_uplink_cut(not uplink_cut.is_set())
             elif key == "s":
                 stop_stream(sitl, ATTITUDE_ID)
             elif key == "b":
@@ -223,13 +232,16 @@ def main() -> None:
     else:
         control = args.log + ".downlink-off"
         drop_commands = args.log + ".drop-commands"
+        cut_uplink = args.log + ".uplink-off"
         stops = {args.log + ".stop-attitude": ATTITUDE_ID, args.log + ".stop-sys-status": SYS_STATUS_ID}
         log(f"background: create {control} to cut the downlink, delete it to restore it")
         log(f"background: create {drop_commands} to drop the app's commands, delete it to forward them")
+        log(f"background: create {cut_uplink} to cut the uplink, delete it to restore it")
         log(f"background: create one of {list(stops)} to stop that stream once")
         while True:
             set_downlink(not os.path.exists(control))
             set_commands_dropped(os.path.exists(drop_commands))
+            set_uplink_cut(os.path.exists(cut_uplink))
             for path, message_id in stops.items():
                 if os.path.exists(path):
                     os.remove(path)
@@ -257,6 +269,17 @@ def set_commands_dropped(on: bool) -> None:
     else:
         commands_dropped.clear()
         log("COMMANDS FORWARDED")
+
+
+def set_uplink_cut(on: bool) -> None:
+    if on == uplink_cut.is_set():
+        return
+    if on:
+        uplink_cut.set()
+        log("UPLINK CUT (the app's sends still succeed; a command without answer should raise the uplink warning)")
+    else:
+        uplink_cut.clear()
+        log("UPLINK RESTORED")
 
 
 def set_downlink(on: bool) -> None:

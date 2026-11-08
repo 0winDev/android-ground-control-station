@@ -48,8 +48,9 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
   app closes the link about 10 s after the HUD is hidden. An armed vehicle with ArduPilot's GCS failsafe
   enabled (`FS_GCS_ENABLE`, off by default in ArduCopter) then triggers it after `FS_GCS_TIMEOUT`. A
   foreground service that keeps the link open is planned before any real hardware (#28, v0.4).
-- **The app does not yet warn when only its uplink fails.** If its HEARTBEATs stop reaching the vehicle
-  while telemetry still arrives, the HUD stays connected; this is planned for v0.4 (#29).
+- **The app can only suspect a failed uplink.** UDP gives no delivery proof: the HUD warns that the vehicle
+  may not be hearing this GCS when this device fails to send its HEARTBEAT or a command gets no answer, but an
+  uplink cut beyond the device shows nothing until a command is sent (#29).
 - **A flight just ended cannot be replayed yet.** Its recording closes 10 min after the link is lost, or
   when another replay starts; closing it after landing is planned for v0.4 (#89).
 - **A recording can grow past the 256 MiB limit while it is open.** Old flight logs are deleted only when a
