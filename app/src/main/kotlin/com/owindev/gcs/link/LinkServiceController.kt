@@ -32,6 +32,7 @@ internal class LinkServiceController(
     private val vehicles: VehicleRepository,
     private val rule: BackgroundLinkRule,
     private val wakeHold: WakeHold,
+    private val state: BackgroundLinkState,
 ) {
 
     /**
@@ -39,7 +40,7 @@ internal class LinkServiceController(
      * the rule ends the service, checked again every [RECHECK] since a silent vehicle changes nothing.
      */
     val notices: Flow<LinkNotice> = combine(vehicles.activeSystemId, vehicles.vehicles) { systemId, all ->
-        systemId?.let(all::get)
+        all.values to systemId?.let(all::get)
     }
         .transformLatest { active ->
             while (true) {
@@ -47,31 +48,38 @@ internal class LinkServiceController(
                 delay(RECHECK)
             }
         }
-        .transformWhile { active ->
-            val goesOn = active != null && !rule.endsFor(active)
-            if (goesOn) emit(noticeOf(checkNotNull(active)))
+        .transformWhile { (all, active) ->
+            if (!rule.operatorMayStop(all)) state.disconnectedByUser.value = false
+            val goesOn = active != null && !rule.endsFor(all, active)
+            if (goesOn) emit(noticeOf(all, checkNotNull(active)))
             goesOn
         }
         .distinctUntilChanged()
 
-    fun started() = wakeHold.acquire()
+    fun started() {
+        state.running.value = true
+        wakeHold.acquire()
+    }
 
-    fun stopped() = wakeHold.release()
+    fun stopped() {
+        state.running.value = false
+        wakeHold.release()
+    }
 
     /** Dismissing the notification never stops the service; the others stop it only while the rule allows. */
     fun actionFor(request: LinkRequest): LinkAction = when (request) {
         LinkRequest.NOTIFICATION_DISMISSED -> LinkAction.REPOST
 
-        LinkRequest.DISCONNECT, LinkRequest.TASK_REMOVED ->
-            if (rule.operatorMayStop(activeNow())) LinkAction.STOP else LinkAction.REFUSE
+        LinkRequest.DISCONNECT, LinkRequest.TASK_REMOVED -> when {
+            !rule.operatorMayStop(vehicles.vehicles.value.values) -> LinkAction.REFUSE
+            else -> LinkAction.STOP.also { state.disconnectedByUser.value = request == LinkRequest.DISCONNECT }
+        }
     }
 
-    private fun activeNow(): Vehicle? = vehicles.activeSystemId.value?.let(vehicles.vehicles.value::get)
-
-    private fun noticeOf(active: Vehicle) = LinkNotice(
+    private fun noticeOf(all: Collection<Vehicle>, active: Vehicle) = LinkNotice(
         state = active.state,
         connected = active.link == VehicleLink.CONNECTED,
-        disconnectOffered = rule.operatorMayStop(active),
+        disconnectOffered = rule.operatorMayStop(all),
     )
 }
 

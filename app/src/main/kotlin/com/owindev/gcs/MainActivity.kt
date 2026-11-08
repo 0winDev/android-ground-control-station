@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -66,8 +67,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Refused on the edge of leaving the foreground (API 31+): the next start, by level, tries again. */
     private fun startVehicleLinkService() {
-        ContextCompat.startForegroundService(this, Intent(this, VehicleLinkService::class.java))
+        try {
+            ContextCompat.startForegroundService(this, Intent(this, VehicleLinkService::class.java))
+        } catch (e: IllegalStateException) {
+            Log.w("MainActivity", "The vehicle link service could not start", e)
+        }
     }
 
     /**

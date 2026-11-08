@@ -39,16 +39,19 @@ REQ-021 rules for the HEARTBEAT do not change. It declares `FOREGROUND_SERVICE_C
 prerequisite, `CHANGE_NETWORK_STATE`: the link is UDP over whatever network carries it (Wi-Fi, Ethernet, USB
 tethering), not Wi-Fi only.
 
-- **Start:** only from the foreground, when the active live vehicle becomes connected; never in replay or with no
-  vehicle. The activity only starts it; the service, not the activity, observes in the background (#74).
-- **Stop:** a pure rule (`BackgroundLinkRule`) decides. While the vehicle's last known state is armed nothing stops it:
-  the notification's Disconnect is hidden and refused, removing the app from recents is ignored, and dismissing the
-  notification posts it again. Disarmed, Disconnect and recents stop it, and so does 10 min of link loss (the
-  recording's REQ-036 limit) or the end of the live session.
+- **Start:** a pure rule (`BackgroundLinkRule`) says when it must run, by level, not by transition: always while any
+  live vehicle is armed, and while the active live vehicle is connected unless the operator disconnected it; arming
+  overrides that Disconnect. The activity starts it whenever it must run and is not running, only from the foreground;
+  the service, not the activity, observes in the background (#74). Never in replay or with no vehicle.
+- **Stop:** while any live vehicle's last known state is armed nothing stops it, as for a replay (REQ-037: every
+  vehicle behind the active one's address hears the HEARTBEAT): the notification's Disconnect is hidden and refused,
+  removing the app from recents is ignored, and dismissing the notification posts it again. Otherwise Disconnect and
+  recents stop it, and so does 10 min of link loss (the recording's REQ-036 limit) or the end of the live session.
 - **Wake lock:** one `PARTIAL_WAKE_LOCK`, not reference counted, acquired when the service starts and released when
   it stops, with no timeout: its lifetime is the service's, which the rule bounds.
 - **No Wi-Fi lock:** with the screen off in the background no mode is active on API 34+, and the only one that was
-  is deprecated.
+  is deprecated. It is deliberately left out on API 26–33 too, where `WIFI_MODE_FULL_HIGH_PERF` still works: the
+  device check decides whether incoming datagrams need it.
 - `START_NOT_STICKY`: a service restarted after a process kill would start with no vehicle.
 
 ## Alternatives considered
@@ -72,6 +75,8 @@ tethering), not Wi-Fi only.
   declaration with a video before any store release. Since Android 13 the user can stop the whole app from the Task
   Manager, and force stop does the same, with no callback
   ([user stopping](https://developer.android.com/develop/background-work/services/fgs/handle-user-stopping)); a process
-  kill ends the service too. In each case the vehicle's own `FS_GCS` is the fallback.
+  kill ends the service too. In each case the vehicle's own `FS_GCS` is the fallback. A vehicle lost while armed
+  (crashed, out of battery) holds the service and the wake lock until one of those, since the app cannot know it
+  will not come back.
 - Follow-ups: PR 2 of #28 asks `POST_NOTIFICATIONS`, warns in the HUD when the notification is hidden and logs
   `ApplicationExitInfo` `REASON_USER_REQUESTED`.

@@ -11,4 +11,5 @@
     <string name="link_armed">Armado</string>
     <string name="link_disarmed">Desarmado</string>
     <string name="link_text">%1$s · %2$s</string>
+    <string name="link_text_last_known">Último conocido: %1$s · %2$s</string>
 </resources>

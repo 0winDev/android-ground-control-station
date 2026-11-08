@@ -60,7 +60,11 @@ internal object LinkNotification {
             is FlightMode.Named -> mode.name
             is FlightMode.Unknown -> mode.number.toString()
         }
-        return context.getString(R.string.link_text, armed, mode)
+        return context.getString(
+            if (notice.connected) R.string.link_text else R.string.link_text_last_known,
+            armed,
+            mode,
+        )
     }
 
     private fun activity(context: Context): PendingIntent = PendingIntent.getActivity(

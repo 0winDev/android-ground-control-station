@@ -38,6 +38,7 @@ class LinkServiceControllerTest {
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val vehicleRepository: VehicleRepository = mockk()
     private val wakeHold: WakeHold = mockk()
+    private val state = BackgroundLinkState()
 
     private lateinit var controller: LinkServiceController
 
@@ -49,6 +50,7 @@ class LinkServiceControllerTest {
             vehicleRepository,
             BackgroundLinkRule(LinkLossRule(), RecordingRule()),
             wakeHold,
+            state,
         )
     }
 
@@ -60,7 +62,8 @@ class LinkServiceControllerTest {
             controller.notices.test {
                 val result = awaitItem()
 
-                result shouldBeEqualTo LinkNotice(state(armed = false), connected = true, disconnectOffered = true)
+                result shouldBeEqualTo
+                    LinkNotice(vehicleState(armed = false), connected = true, disconnectOffered = true)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -72,7 +75,7 @@ class LinkServiceControllerTest {
         controller.notices.test {
             val result = awaitItem()
 
-            result shouldBeEqualTo LinkNotice(state(armed = true), connected = true, disconnectOffered = false)
+            result shouldBeEqualTo LinkNotice(vehicleState(armed = true), connected = true, disconnectOffered = false)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -102,6 +105,38 @@ class LinkServiceControllerTest {
     }
 
     @Test
+    fun `GIVEN a disarmed vehicle silent 9 min WHEN it is heard again THEN the 10 min count starts over`() =
+        testScope.runTest {
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false, link = VehicleLink.LOST))
+            controller.notices.test {
+                skipItems(1)
+                testScheduler.advanceTimeBy(NINE_MINUTES)
+                vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false))
+                skipItems(1)
+
+                testScheduler.advanceTimeBy(NINE_MINUTES)
+
+                expectNoEvents()
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `GIVEN a vehicle disconnected by the operator WHEN it is seen armed THEN the Disconnect is forgotten`() =
+        testScope.runTest {
+            state.disconnectedByUser.value = true
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = true))
+            controller.notices.test {
+                skipItems(1)
+
+                val result = state.disconnectedByUser.value
+
+                result shouldBeEqualTo false
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun `GIVEN a replay starts WHEN observing THEN the notices end`() = testScope.runTest {
         vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false))
         controller.notices.test {
@@ -114,12 +149,22 @@ class LinkServiceControllerTest {
     }
 
     @Test
-    fun `GIVEN a disarmed vehicle WHEN Disconnect arrives THEN the service stops`() {
+    fun `GIVEN a disarmed vehicle WHEN Disconnect arrives THEN the service stops and remembers it`() {
         vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = false))
 
         val result = controller.actionFor(LinkRequest.DISCONNECT)
 
-        result shouldBeEqualTo LinkAction.STOP
+        result to state.disconnectedByUser.value shouldBeEqualTo (LinkAction.STOP to true)
+    }
+
+    @Test
+    fun `GIVEN a disarmed active vehicle and another live one armed WHEN Disconnect arrives THEN it is refused`() {
+        vehicles.value =
+            mapOf(SYSTEM_1 to vehicle(armed = false), SYSTEM_2 to vehicle(armed = true, systemId = SYSTEM_2))
+
+        val result = controller.actionFor(LinkRequest.DISCONNECT)
+
+        result shouldBeEqualTo LinkAction.REFUSE
     }
 
     @Test
@@ -170,6 +215,7 @@ class LinkServiceControllerTest {
             wakeHold.acquire()
             wakeHold.release()
         }
+        state.running.value shouldBeEqualTo false
     }
 
     @Test
@@ -184,16 +230,19 @@ class LinkServiceControllerTest {
         verifyNever {
             wakeHold.release()
         }
+        state.running.value shouldBeEqualTo true
     }
 
-    private fun state(armed: Boolean) = VehicleState(SYSTEM_1, VehicleType.COPTER, LOITER, armed = armed)
+    private fun vehicleState(armed: Boolean, systemId: SystemId = SYSTEM_1) =
+        VehicleState(systemId, VehicleType.COPTER, LOITER, armed = armed)
 
     private fun vehicle(
         armed: Boolean,
         link: VehicleLink = VehicleLink.CONNECTED,
         origin: DataOrigin = DataOrigin.LIVE,
+        systemId: SystemId = SYSTEM_1,
     ) = Vehicle(
-        state = state(armed),
+        state = vehicleState(armed, systemId),
         link = link,
         lastHeartbeat = testScope.testScheduler.timeSource.markNow() - HEARD_AGO,
         origin = origin,
@@ -201,6 +250,8 @@ class LinkServiceControllerTest {
 }
 
 private val SYSTEM_1 = SystemId(1)
+private val SYSTEM_2 = SystemId(2)
+private val NINE_MINUTES = 9.minutes
 private val LOITER = FlightMode.Named("Loiter")
 private val HEARD_AGO = 1.seconds
 private val AN_HOUR = 60.minutes

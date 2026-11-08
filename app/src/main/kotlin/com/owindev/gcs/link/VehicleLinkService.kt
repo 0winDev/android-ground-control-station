@@ -32,19 +32,24 @@ class VehicleLinkService : Service() {
     @Inject
     lateinit var rule: BackgroundLinkRule
 
+    @Inject
+    lateinit var state: BackgroundLinkState
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var controller: LinkServiceController
     private var observing: Job? = null
     private var shown: LinkNotice? = null
+    private var lastStartId = 0
 
     override fun onCreate() {
         super.onCreate()
-        controller = LinkServiceController(vehicleRepository, rule, WakeHold(this))
+        controller = LinkServiceController(vehicleRepository, rule, WakeHold(this), state)
         LinkNotification.createChannel(this)
     }
 
     // A sticky restart would come with no vehicle: a killed process falls back on the vehicle's own GCS failsafe.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         when (intent?.action) {
             LinkNotification.ACTION_DISCONNECT -> apply(LinkRequest.DISCONNECT)
             LinkNotification.ACTION_DISMISSED -> apply(LinkRequest.NOTIFICATION_DISMISSED)
@@ -77,17 +82,23 @@ class VehicleLinkService : Service() {
         controller.started()
         observing = scope.launch {
             controller.notices.collect(::show)
-            stopSelf()
+            observing = null
+            stop()
         }
     }
 
     /** An action of a notification left from a service already stopped only stops this one again. */
     private fun apply(request: LinkRequest) {
-        if (observing == null) return stopSelf()
+        if (observing == null) return stop()
         val action = controller.actionFor(request)
-        if (action == LinkAction.STOP) return stopSelf()
+        if (action == LinkAction.STOP) return stop()
         if (action == LinkAction.REFUSE) Log.i(TAG, "$request refused: the vehicle is armed")
         shown?.let(::show)
+    }
+
+    /** Not if a start is already queued: it is handled next and observes again. */
+    private fun stop() {
+        stopSelfResult(lastStartId)
     }
 
     private fun show(notice: LinkNotice) {
