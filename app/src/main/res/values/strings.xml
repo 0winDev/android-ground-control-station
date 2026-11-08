@@ -4,4 +4,11 @@
     <string name="app_share_recording_failed">The recording could not be exported.</string>
     <string name="link_channel">Vehicle link</string>
     <string name="link_keeping">Keeping the vehicle link</string>
+    <string name="link_disconnect">Disconnect</string>
+    <string name="link_connected">Connected</string>
+    <string name="link_lost">Link lost</string>
+    <string name="link_title">SYS %1$d · %2$s</string>
+    <string name="link_armed">Armed</string>
+    <string name="link_disarmed">Disarmed</string>
+    <string name="link_text">%1$s · %2$s</string>
 </resources>

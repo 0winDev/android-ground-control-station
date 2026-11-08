@@ -45,7 +45,11 @@ class VehicleLinkService : Service() {
 
     // A sticky restart would come with no vehicle: a killed process falls back on the vehicle's own GCS failsafe.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        start()
+        when (intent?.action) {
+            LinkNotification.ACTION_DISCONNECT -> apply(LinkRequest.DISCONNECT)
+            LinkNotification.ACTION_DISMISSED -> apply(LinkRequest.NOTIFICATION_DISMISSED)
+            else -> start()
+        }
         return START_NOT_STICKY
     }
 
@@ -66,7 +70,7 @@ class VehicleLinkService : Service() {
         ServiceCompat.startForeground(
             this,
             LinkNotification.ID,
-            LinkNotification.build(this),
+            LinkNotification.build(this, shown),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
         )
         if (observing != null) return
@@ -90,7 +94,7 @@ class VehicleLinkService : Service() {
         shown = notice
         // Without POST_NOTIFICATIONS the notification is hidden, but the service keeps running.
         if (NotificationManagerCompat.from(this).areNotificationsEnabled()) {
-            NotificationManagerCompat.from(this).notify(LinkNotification.ID, LinkNotification.build(this))
+            NotificationManagerCompat.from(this).notify(LinkNotification.ID, LinkNotification.build(this, notice))
         }
     }
 }
