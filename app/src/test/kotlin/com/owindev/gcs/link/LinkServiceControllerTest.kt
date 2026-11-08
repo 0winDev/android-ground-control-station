@@ -198,7 +198,7 @@ class LinkServiceControllerTest {
     fun `GIVEN an armed vehicle WHEN the notification is dismissed THEN it is posted again`() {
         vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = true))
 
-        val result = controller.actionFor(LinkRequest.NOTIFICATION_DISMISSED)
+        val result = controller.actionFor(LinkRequest.POST_AGAIN)
 
         result shouldBeEqualTo LinkAction.REPOST
     }
@@ -215,7 +215,7 @@ class LinkServiceControllerTest {
             wakeHold.acquire()
             wakeHold.release()
         }
-        state.running.value shouldBeEqualTo false
+        state.status.value.running shouldBeEqualTo false
     }
 
     @Test
@@ -230,7 +230,7 @@ class LinkServiceControllerTest {
         verifyNever {
             wakeHold.release()
         }
-        state.running.value shouldBeEqualTo true
+        state.status.value.running shouldBeEqualTo true
     }
 
     private fun vehicleState(armed: Boolean, systemId: SystemId = SYSTEM_1) =

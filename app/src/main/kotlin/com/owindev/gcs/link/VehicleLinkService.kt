@@ -52,7 +52,7 @@ class VehicleLinkService : Service() {
         lastStartId = startId
         when (intent?.action) {
             LinkNotification.ACTION_DISCONNECT -> apply(LinkRequest.DISCONNECT)
-            LinkNotification.ACTION_DISMISSED -> apply(LinkRequest.NOTIFICATION_DISMISSED)
+            LinkNotification.ACTION_POST_AGAIN -> apply(LinkRequest.POST_AGAIN)
             else -> start()
         }
         return START_NOT_STICKY

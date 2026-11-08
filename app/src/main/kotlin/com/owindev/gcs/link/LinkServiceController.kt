@@ -18,8 +18,11 @@ import kotlinx.coroutines.flow.transformWhile
 /** The active vehicle as the background link's notification shows it (REQ-046). */
 internal data class LinkNotice(val state: VehicleState, val connected: Boolean, val disconnectOffered: Boolean)
 
-/** What the operator did to the background link from outside the app's screens. */
-internal enum class LinkRequest { DISCONNECT, TASK_REMOVED, NOTIFICATION_DISMISSED }
+/**
+ * What the operator did to the background link from outside the app's screens: [POST_AGAIN] when the notification was
+ * dismissed or has just been allowed.
+ */
+internal enum class LinkRequest { DISCONNECT, TASK_REMOVED, POST_AGAIN }
 
 internal enum class LinkAction { STOP, REFUSE, REPOST }
 
@@ -57,18 +60,18 @@ internal class LinkServiceController(
         .distinctUntilChanged()
 
     fun started() {
-        state.running.value = true
+        state.setRunning(true)
         wakeHold.acquire()
     }
 
     fun stopped() {
-        state.running.value = false
+        state.setRunning(false)
         wakeHold.release()
     }
 
     /** Dismissing the notification never stops the service; the others stop it only while the rule allows. */
     fun actionFor(request: LinkRequest): LinkAction = when (request) {
-        LinkRequest.NOTIFICATION_DISMISSED -> LinkAction.REPOST
+        LinkRequest.POST_AGAIN -> LinkAction.REPOST
 
         LinkRequest.DISCONNECT, LinkRequest.TASK_REMOVED -> when {
             !rule.operatorMayStop(vehicles.vehicles.value.values) -> LinkAction.REFUSE

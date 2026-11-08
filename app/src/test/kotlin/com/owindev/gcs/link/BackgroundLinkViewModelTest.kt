@@ -79,7 +79,7 @@ class BackgroundLinkViewModelTest {
 
     @Test
     fun `GIVEN the service running WHEN the vehicle is heard THEN it is not started again`() = runTest {
-        state.running.value = true
+        state.setRunning(true)
         viewModel.starts.test {
             heard(vehicle(armed = true))
 
@@ -138,6 +138,64 @@ class BackgroundLinkViewModelTest {
 
             result shouldBeEqualTo emptyList()
         }
+    }
+
+    @Test
+    fun `GIVEN the service running with its notification hidden WHEN notifications are allowed THEN it is posted`() =
+        runTest {
+            state.setRunning(true)
+            hidden(true)
+            viewModel.postAgain.test {
+                hidden(false)
+
+                val result = awaitItem()
+
+                result shouldBeEqualTo Unit
+            }
+        }
+
+    @Test
+    fun `GIVEN no service and the notification hidden WHEN notifications are allowed THEN nothing is posted`() =
+        runTest {
+            hidden(true)
+            viewModel.postAgain.test {
+                hidden(false)
+
+                val result = cancelAndConsumeRemainingEvents()
+
+                result shouldBeEqualTo emptyList()
+            }
+        }
+
+    @Test
+    fun `GIVEN the service running with its notification hidden WHEN it stops THEN nothing is posted`() = runTest {
+        state.setRunning(true)
+        hidden(true)
+        viewModel.postAgain.test {
+            state.setRunning(false)
+
+            val result = cancelAndConsumeRemainingEvents()
+
+            result shouldBeEqualTo emptyList()
+        }
+    }
+
+    @Test
+    fun `GIVEN the service running with its notification shown WHEN the device is read again THEN nothing is posted`() =
+        runTest {
+            state.setRunning(true)
+            hidden(false)
+            viewModel.postAgain.test {
+                state.refresh(notificationHidden = false, batteryOptimized = true, backgroundRestricted = false)
+
+                val result = cancelAndConsumeRemainingEvents()
+
+                result shouldBeEqualTo emptyList()
+            }
+        }
+
+    private fun hidden(notificationHidden: Boolean) {
+        state.refresh(notificationHidden, batteryOptimized = false, backgroundRestricted = false)
     }
 
     private fun heard(vehicle: Vehicle) {
