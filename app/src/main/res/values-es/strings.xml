@@ -2,4 +2,6 @@
     <string name="app_name">Estación de control terrestre</string>
     <string name="app_share_recording">Exportar la grabación</string>
     <string name="app_share_recording_failed">No se pudo exportar la grabación.</string>
+    <string name="link_channel">Enlace con el vehículo</string>
+    <string name="link_keeping">Manteniendo el enlace con el vehículo</string>
 </resources>

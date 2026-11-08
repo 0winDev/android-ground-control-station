@@ -2,4 +2,6 @@
     <string name="app_name">Ground Control Station</string>
     <string name="app_share_recording">Export the recording</string>
     <string name="app_share_recording_failed">The recording could not be exported.</string>
+    <string name="link_channel">Vehicle link</string>
+    <string name="link_keeping">Keeping the vehicle link</string>
 </resources>

@@ -1,5 +1,6 @@
 package com.owindev.gcs
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
@@ -14,25 +15,38 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import com.owindev.gcs.link.BackgroundLinkViewModel
+import com.owindev.gcs.link.VehicleLinkService
 import com.owindev.gcs.navigation.FlightGuardViewModel
 import com.owindev.gcs.navigation.GcsNavigation
 import com.owindev.gcs.navigation.shareRecording
 import com.owindev.gcs.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val themeViewModel: ThemeViewModel by viewModels()
     private val flightGuard: FlightGuardViewModel by viewModels()
+    private val backgroundLink: BackgroundLinkViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The stored palette is already read (ThemePreferences), so the bars are right from the first frame.
         enableSystemBars(themeViewModel.palette.value)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                backgroundLink.starts.collect { startVehicleLinkService() }
+            }
+        }
         setContent {
             val palette by themeViewModel.palette.collectAsStateWithLifecycle()
             DisposableEffect(palette) {
@@ -50,6 +64,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun startVehicleLinkService() {
+        ContextCompat.startForegroundService(this, Intent(this, VehicleLinkService::class.java))
     }
 
     /**
