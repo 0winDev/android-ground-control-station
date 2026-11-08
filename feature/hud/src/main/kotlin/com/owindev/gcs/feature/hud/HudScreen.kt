@@ -144,6 +144,7 @@ private fun SideColumn(state: HudUiState, onAcknowledgeAlert: (occurrence: Long)
         is HudUiState.Connected -> {
             // The vehicle's own alerts first: the banners below are about this device and the link.
             AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
+            UplinkBanner(doubt = state.uplink)
             UnstableLinkBanner(linkUnstable = state.linkUnstable)
             OtherVehiclesBanner(systemIds = state.otherVehicles)
         }

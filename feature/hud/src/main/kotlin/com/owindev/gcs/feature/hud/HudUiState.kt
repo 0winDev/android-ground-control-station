@@ -23,7 +23,8 @@ sealed interface HudUiState {
      * timeout: past it, the state is [LinkLost]. [linkUnstable] as in [WaitingForVehicle]: the vehicle is
      * still decided by its HEARTBEATs, the warning only says the link on this device may fail again.
      * [telemetry] is the vehicle's, each part with its staleness (REQ-029). [alert] is its alert banner (REQ-028),
-     * only while it is heard: [LinkLost] outranks every alert (REQ-017). [port] as in [WaitingForVehicle].
+     * only while it is heard: [LinkLost] outranks every alert (REQ-017). [port] as in [WaitingForVehicle]. [uplink] says
+     * why the vehicle may not be hearing this GCS (REQ-045), `null` when nothing points to it.
      */
     data class Connected(
         val vehicle: VehicleStatus,
@@ -33,6 +34,7 @@ sealed interface HudUiState {
         val linkUnstable: Boolean = false,
         val telemetry: TelemetryPanel = TelemetryPanel(),
         val alert: AlertBanner = AlertBanner.Hidden,
+        val uplink: UplinkDoubt? = null,
     ) : HudUiState
 
     /**
@@ -59,6 +61,16 @@ sealed interface HudUiState {
 
     /** The recording being replayed could not be read any further (REQ-037): no live link is open meanwhile. */
     data object ReplayUnreadable : HudUiState
+}
+
+/** Why the vehicle may not be hearing this GCS (REQ-045): only what this device can observe, never a certainty. */
+sealed interface UplinkDoubt {
+
+    /** This device fails to send this GCS's HEARTBEAT. */
+    data object SendsFailing : UplinkDoubt
+
+    /** A command got no answer [since] ago, in whole seconds, and no answer from the vehicle came after it. */
+    data class CommandUnanswered(val since: Duration) : UplinkDoubt
 }
 
 /** What the HUD shows of one vehicle (REQ-018). */

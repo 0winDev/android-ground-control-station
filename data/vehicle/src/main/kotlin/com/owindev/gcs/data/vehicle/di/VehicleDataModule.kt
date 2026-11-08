@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.attention.FlightAttentionRule
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRepository
+import com.owindev.gcs.core.domain.link.UplinkRule
 import com.owindev.gcs.core.domain.recording.ImportRule
 import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
@@ -131,6 +132,10 @@ abstract class VehicleDataModule {
         /** On the ground only on an ON_GROUND younger than 0.5 s (REQ-052, #112); change it here. */
         @Provides
         fun provideLandedRule(): LandedRule = LandedRule()
+
+        /** The vehicle may not be hearing this GCS after 3 failed HEARTBEAT periods (REQ-045); change it here. */
+        @Provides
+        fun provideUplinkRule(): UplinkRule = UplinkRule()
 
         /** A take off's second ground check (REQ-044): a position under 0.5 s old, 1 m above home, 0.5 m/s at most. */
         @Provides
