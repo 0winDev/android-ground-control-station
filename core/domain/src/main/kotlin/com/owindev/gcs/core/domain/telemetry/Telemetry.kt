@@ -18,6 +18,7 @@ data class Telemetry(
     val battery: Timed<Battery>? = null,
     val gps: Timed<GpsStatus>? = null,
     val home: Timed<Home>? = null,
+    val landed: Timed<LandedState>? = null,
 ) {
 
     /** The part of [kind], to judge its age with [StalenessRule]; `null` until its first message. [home] has none. */
@@ -27,6 +28,7 @@ data class Telemetry(
         TelemetryKind.AIR_DATA -> airData
         TelemetryKind.BATTERY -> battery
         TelemetryKind.GPS -> gps
+        TelemetryKind.LANDED -> landed
     }
 }
 

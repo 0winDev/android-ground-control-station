@@ -1,13 +1,26 @@
 package com.owindev.gcs.data.vehicle.command
 
 import android.util.Log
+import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.telemetry.GroundPositionRule
+import com.owindev.gcs.core.domain.telemetry.LandedRule
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TrailRule
+import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.SystemId
+import com.owindev.gcs.core.domain.vehicle.Vehicle
+import com.owindev.gcs.core.domain.vehicle.VehicleLink
+import com.owindev.gcs.core.domain.vehicle.VehicleRepository
+import com.owindev.gcs.core.domain.vehicle.VehicleState
+import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingCommand
 import com.owindev.gcs.core.domain.vehicle.command.PendingState
 import com.owindev.gcs.core.domain.vehicle.command.Rejection
+import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
+import com.owindev.gcs.core.mavlink.MavlinkMessage
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.testing.verifyNever
@@ -18,6 +31,8 @@ import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.REPLAY_SESSION
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.link.SessionId
+import com.owindev.gcs.data.vehicle.state.ActiveVehicle
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -48,11 +63,15 @@ import org.junit.jupiter.params.provider.ValueSource
 /**
  * The command service in virtual time, with a mocked sender and a hand-fed link: the "vehicle" answers a COMMAND_LONG
  * by putting a COMMAND_ACK on the session's messages 50 ms later, from its autopilot (1/1) to this GCS (255/190).
- * Command IDs and MAV_RESULT values come from `common.xml` (mavlink/mavlink master). An attempt waits 1.5 s, so an
- * unanswered RTL ends at 4.5 s; the tests act well away from those edges.
+ * Command IDs and MAV_RESULT values come from `common.xml` (mavlink/mavlink master), ArduCopter's GUIDED (4) from its
+ * `FLTMODE1` documentation. An attempt waits 1.5 s, so an unanswered RTL ends at 4.5 s; the tests act well away from
+ * those edges. The vehicle is armed in Loiter unless a test changes it, as its HEARTBEATs would; a take off test has it
+ * stream its landed state and position, on the ground at home unless the test changes them.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Tag("REQ-042")
+// Every command shares this hand-fed link and vehicle; split it when a command brings its own harness.
+@Suppress("LargeClass")
 class DefaultCommandRepositoryTest {
 
     private val testScope = TestScope()
@@ -62,6 +81,12 @@ class DefaultCommandRepositoryTest {
     private val sessions = MutableStateFlow(FIRST_SESSION)
     private val sent = mutableListOf<CommandLong>()
     private var route: CommandRoute = OPEN_ROUTE
+    private val vehicleRepository: VehicleRepository = mockk()
+    private val vehicles = MutableStateFlow(mapOf(SYSTEM to vehicle(LOITER, armed = true)))
+    private val telemetryStore = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
+    private var landedState = MAV_LANDED_STATE_ON_GROUND
+    private var relativeAltMillimetres = 0
+    private var vzCentimetresPerSecond = 0
 
     private lateinit var repository: DefaultCommandRepository
 
@@ -72,7 +97,21 @@ class DefaultCommandRepositoryTest {
         every { Log.w(any(), any<String>()) } returns 0
         every { session.messages } returns messages
         every { session.session } returns sessions
-        repository = DefaultCommandRepository(CommandExchange(sender, session) { route }, testScope.backgroundScope)
+        every { vehicleRepository.vehicles } returns vehicles
+        val exchange = CommandExchange(sender, session) { route }
+        repository = DefaultCommandRepository(
+            exchange = exchange,
+            takeOff = TakeOffSequence(
+                exchange = exchange,
+                vehicles = vehicleRepository,
+                routes = { route },
+                telemetry = telemetryStore,
+                landedRule = LandedRule(),
+                groundRule = GroundPositionRule(),
+            ),
+            altitudeRule = TakeOffAltitudeRule(),
+            scope = testScope.backgroundScope,
+        )
     }
 
     @AfterEach
@@ -482,6 +521,473 @@ class DefaultCommandRepositoryTest {
             )
         }
 
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN armed in Loiter WHEN taking off THEN GUIDED first and NAV_TAKEOFF once a HEARTBEAT shows it`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.Accepted
+            sent shouldBeEqualTo listOf(
+                commandLong(MAV_CMD_DO_SET_MODE, param1 = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, param2 = GUIDED_MODE),
+                commandLong(MAV_CMD_NAV_TAKEOFF, param7 = ALTITUDE),
+            )
+            currentTime shouldBeEqualTo ANSWER_DELAY + HEARTBEAT_DELAY + ANSWER_DELAY
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN armed in GUIDED WHEN taking off THEN only NAV_TAKEOFF is sent`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
+        vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.Accepted
+        sent shouldBeEqualTo listOf(commandLong(MAV_CMD_NAV_TAKEOFF, param7 = ALTITUDE))
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the vehicle denies GUIDED WHEN taking off THEN the mode is not changed and no take off is sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> ack(MAV_RESULT_DENIED, command.command) }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.ModeNotChanged(CommandResult.Rejected(Rejection.DENIED, reason = null))
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the mode change gets no answer WHEN taking off THEN it is sent once and no take off follows`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { null }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            delay(LONG_AFTER)
+
+            result shouldBeEqualTo CommandResult.ModeNotChanged(noAnswer(attempts = 1))
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN GUIDED accepted but no HEARTBEAT shows it WHEN taking off THEN it stops at 2,5 s`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.ModeNotChanged(modeChange = null)
+        sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        currentTime shouldBeEqualTo ANSWER_DELAY + GUIDED_CONFIRM_TIMEOUT
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the vehicle refuses the take off WHEN taking off THEN it is rejected and never re-sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
+            vehicleAnswers { command -> ack(MAV_RESULT_FAILED, command.command) }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            delay(LONG_AFTER)
+
+            result shouldBeEqualTo CommandResult.Rejected(Rejection.FAILED, reason = null)
+            sent.size shouldBeEqualTo 1
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the take off gets no answer WHEN taking off THEN it is sent once and never again`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicleAnswers { command -> switchesToGuided(command) }
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        delay(LONG_AFTER)
+
+        result shouldBeEqualTo noAnswer(attempts = 1)
+        sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF)
+    }
+
+    @Tag("REQ-044")
+    @Tag("REQ-043")
+    @Test
+    fun `GIVEN the link is lost while waiting for GUIDED WHEN taking off THEN no take off is sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> switchesToGuided(command) }
+            backgroundScope.launch {
+                delay(DURING_GUIDED_WAIT)
+                route = CommandRoute.Closed(NotSentReason.LINK_LOST)
+            }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LINK_LOST)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the vehicle disarms while switching to GUIDED WHEN taking off THEN no take off is sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command ->
+                heartbeatLater(after = ANSWER_DELAY + HEARTBEAT_DELAY) { vehicle(GUIDED, armed = false) }
+                ack(MAV_RESULT_ACCEPTED, command.command)
+            }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_ARMED)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a disarmed vehicle WHEN taking off THEN nothing is sent`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicles.value = mapOf(SYSTEM to vehicle(LOITER, armed = false))
+        vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_ARMED)
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-044")
+    @ParameterizedTest
+    @ValueSource(floats = [1.9f, 30.1f, Float.NaN])
+    fun `GIVEN an altitude outside 2 to 30 m WHEN taking off THEN nothing is sent`(altitude: Float) =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = repository.takeOff(SYSTEM, altitude)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.ALTITUDE_OUT_OF_RANGE)
+            sent shouldBeEqualTo emptyList()
+        }
+
+    @Tag("REQ-044")
+    @ParameterizedTest
+    @ValueSource(longs = [DURING_MODE_CHANGE, DURING_GUIDED_WAIT, DURING_TAKE_OFF])
+    fun `GIVEN a take off at any step WHEN sending an RTL THEN the take off is superseded and the RTL sent at once`(
+        rtlAt: Long,
+    ) = testScope.runTest {
+        vehicleStreamsGround()
+        vehicleAnswers { command ->
+            when (command.command) {
+                MAV_CMD_DO_SET_MODE -> switchesToGuided(command)
+                MAV_CMD_NAV_TAKEOFF -> ack(MAV_RESULT_IN_PROGRESS, MAV_CMD_NAV_TAKEOFF)
+                else -> ack(MAV_RESULT_ACCEPTED)
+            }
+        }
+        val takeOff = async(start = CoroutineStart.UNDISPATCHED) { repository.takeOff(SYSTEM, ALTITUDE) }
+        delay(rtlAt)
+
+        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
+        val result = listOf(takeOff.await(), rtl.await())
+        delay(LONG_AFTER)
+
+        result shouldBeEqualTo listOf(CommandResult.Superseded, CommandResult.Accepted)
+        sent.last().command shouldBeEqualTo MAV_CMD_NAV_RETURN_TO_LAUNCH
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a take off pending WHEN arming THEN the arm is not sent and the take off goes on`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+        val takeOff = async(start = CoroutineStart.UNDISPATCHED) { repository.takeOff(SYSTEM, ALTITUDE) }
+
+        val result = listOf(repository.arm(SYSTEM), takeOff.await())
+
+        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.BUSY), CommandResult.Accepted)
+        sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF)
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a take off without answer 5 s ago WHEN taking off again THEN it is not sent`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
+        vehicleAnswers { null }
+        repository.takeOff(SYSTEM, ALTITUDE)
+        delay(WITHIN_ARM_LATE_WINDOW)
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+        sent.size shouldBeEqualTo 1
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a mode change just ended without answer WHEN taking off again THEN it is not sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { null }
+            repository.takeOff(SYSTEM, ALTITUDE)
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a take off without answer past its 10 s late window WHEN taking off again THEN it is sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command).takeIf { sent.size == 2 } }
+            repository.takeOff(SYSTEM, ALTITUDE)
+            delay(PAST_ARM_LATE_WINDOW)
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.Accepted
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN armed in Loiter WHEN taking off THEN pending shows the take off through both steps`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            val states = mutableListOf<PendingCommand?>()
+            backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.pending.toList(states) }
+            vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            repository.takeOff(SYSTEM, ALTITUDE)
+
+            states shouldBeEqualTo listOf(
+                null,
+                PendingCommand(SYSTEM, VehicleCommand.TAKE_OFF, PendingState.Waiting(attempt = 1)),
+                null,
+            )
+        }
+
+    @Tag("REQ-044")
+    @Tag("REQ-052")
+    @ParameterizedTest
+    @ValueSource(
+        ints = [
+            MAV_LANDED_STATE_UNDEFINED,
+            MAV_LANDED_STATE_IN_AIR,
+            MAV_LANDED_STATE_TAKEOFF,
+            MAV_LANDED_STATE_LANDING,
+        ],
+    )
+    fun `GIVEN a landed state other than on the ground WHEN taking off THEN nothing is sent`(state: Int) =
+        testScope.runTest {
+            landedState = state
+            vehicleStreamsGround()
+            vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+            sent shouldBeEqualTo emptyList()
+        }
+
+    @Tag("REQ-044")
+    @Tag("REQ-052")
+    @Test
+    fun `GIVEN no landed state received WHEN taking off THEN nothing is sent`() = testScope.runTest {
+        vehicleStreamsPositionOnly()
+        vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN on the ground but over 1 m above home WHEN taking off THEN nothing is sent`() = testScope.runTest {
+        relativeAltMillimetres = OVER_A_METRE
+        vehicleStreamsGround()
+        vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN on the ground but climbing at 1 m per s WHEN taking off THEN nothing is sent`() = testScope.runTest {
+        vzCentimetresPerSecond = CLIMBING_A_METRE_PER_SECOND
+        vehicleStreamsGround()
+        vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the vehicle leaves the ground while switching to GUIDED WHEN taking off THEN no take off is sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> switchesToGuided(command) }
+            backgroundScope.launch {
+                delay(DURING_GUIDED_WAIT)
+                landedState = MAV_LANDED_STATE_IN_AIR
+            }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-044")
+    @Tag("REQ-043")
+    @ParameterizedTest
+    @EnumSource(NotSentReason::class, names = ["REPLAY", "LINK_LOST"])
+    fun `GIVEN a fresh ON_GROUND but a closed route WHEN taking off THEN nothing is sent, for the route's reason`(
+        reason: NotSentReason,
+    ) = testScope.runTest {
+        vehicleStreamsGround()
+        vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+        route = CommandRoute.Closed(reason)
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.NotSent(reason)
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-044")
+    @Tag("REQ-043")
+    @Test
+    fun `GIVEN the link is lost and no HEARTBEAT shows GUIDED WHEN taking off THEN it ends as link lost`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+            backgroundScope.launch {
+                delay(DURING_GUIDED_WAIT)
+                route = CommandRoute.Closed(NotSentReason.LINK_LOST)
+            }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LINK_LOST)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a take off superseded by a land WHEN taking off again 5 s later THEN it is not sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command ->
+                when (command.command) {
+                    MAV_CMD_DO_SET_MODE -> switchesToGuided(command)
+                    MAV_CMD_NAV_TAKEOFF -> null
+                    else -> ack(MAV_RESULT_ACCEPTED, command.command)
+                }
+            }
+            backgroundScope.launch { repository.takeOff(SYSTEM, ALTITUDE) }
+            delay(DURING_TAKE_OFF)
+            repository.land(SYSTEM)
+            delay(WITHIN_ARM_LATE_WINDOW)
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF, MAV_CMD_NAV_LAND)
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a take off superseded by a land WHEN taking off again past 10 s THEN it is sent`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicleAnswers { command ->
+            when (command.command) {
+                MAV_CMD_DO_SET_MODE -> switchesToGuided(command)
+                MAV_CMD_NAV_TAKEOFF -> ack(MAV_RESULT_ACCEPTED, command.command).takeIf { sent.size > 3 }
+                else -> ack(MAV_RESULT_ACCEPTED, command.command)
+            }
+        }
+        backgroundScope.launch { repository.takeOff(SYSTEM, ALTITUDE) }
+        delay(DURING_TAKE_OFF)
+        repository.land(SYSTEM)
+        delay(PAST_ARM_LATE_WINDOW)
+
+        val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+        result shouldBeEqualTo CommandResult.Accepted
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN an RTL pending WHEN taking off THEN the take off is not sent and the RTL goes on`() = testScope.runTest {
+        vehicleStreamsGround()
+        vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED).takeIf { command.confirmation == 2 } }
+        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
+        delay(DURING_SECOND_ATTEMPT)
+
+        val result = listOf(repository.takeOff(SYSTEM, ALTITUDE), rtl.await())
+
+        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.BUSY), CommandResult.Accepted)
+        sent.map { it.command }.distinct() shouldBeEqualTo listOf(MAV_CMD_NAV_RETURN_TO_LAUNCH)
+    }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a take off answered after its timeout WHEN taking off THEN no answer and the late ACK is only logged`() =
+        testScope.runTest {
+            vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
+            vehicleStreamsGround()
+            vehicleAnswers { null }
+            answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_NAV_TAKEOFF), after = PAST_ONE_ATTEMPT)
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            delay(LONG_AFTER)
+
+            result shouldBeEqualTo noAnswer(attempts = 1)
+            verifyOnce {
+                Log.w(EXCHANGE_TAG, "TAKE_OFF to system 1: late answer 0 dropped")
+            }
+        }
+
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN its caller is cancelled while waiting for GUIDED WHEN taking off THEN the take off still goes on`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+            val caller = launch { repository.takeOff(SYSTEM, ALTITUDE) }
+            delay(DURING_GUIDED_WAIT)
+
+            caller.cancel()
+            delay(LONG_AFTER)
+
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF)
+            verifyOnce {
+                Log.i(REPOSITORY_TAG, "TAKE_OFF to system 1: Accepted")
+            }
+        }
+
     /**
      * The vehicle answers each COMMAND_LONG the sender lets out with [answer], [ANSWER_DELAY] later, or not at all when
      * it gives `null`. The sender reads the route as the real one does, under its lock, before each frame.
@@ -509,6 +1015,79 @@ class DefaultCommandRepositoryTest {
         }
     }
 
+    /**
+     * Accepts a change to GUIDED, whose HEARTBEAT shows it [HEARTBEAT_DELAY] after the ACK; `null` for any other
+     * command.
+     */
+    private fun TestScope.switchesToGuided(command: CommandLong): ReceivedMessage? {
+        if (command.command != MAV_CMD_DO_SET_MODE) return null
+        heartbeatLater(after = ANSWER_DELAY + HEARTBEAT_DELAY) { vehicle(GUIDED, armed = true) }
+        return ack(MAV_RESULT_ACCEPTED, MAV_CMD_DO_SET_MODE)
+    }
+
+    /** Replaces the vehicle as its next HEARTBEAT would, [after] virtual ms from now. */
+    private fun TestScope.heartbeatLater(after: Long, vehicle: () -> Vehicle) {
+        backgroundScope.launch {
+            delay(after)
+            vehicles.value = mapOf(SYSTEM to vehicle())
+        }
+    }
+
+    private fun vehicle(mode: FlightMode, armed: Boolean) = Vehicle(
+        state = VehicleState(SYSTEM, VehicleType.COPTER, mode, armed),
+        link = VehicleLink.CONNECTED,
+        lastHeartbeat = testScope.testScheduler.timeSource.markNow(),
+        origin = DataOrigin.LIVE,
+    )
+
+    /**
+     * The vehicle streams its landed state and its position every [TELEMETRY_PERIOD] ms, as [landedState],
+     * [relativeAltMillimetres] and [vzCentimetresPerSecond] say at each moment.
+     */
+    private fun TestScope.vehicleStreamsGround() {
+        backgroundScope.launch {
+            while (true) {
+                record(MavlinkMessage.ExtendedSysState(MAV_VTOL_STATE_MC, landedState))
+                record(position())
+                delay(TELEMETRY_PERIOD)
+            }
+        }
+    }
+
+    private fun TestScope.vehicleStreamsPositionOnly() {
+        backgroundScope.launch {
+            while (true) {
+                record(position())
+                delay(TELEMETRY_PERIOD)
+            }
+        }
+    }
+
+    private fun TestScope.position() = MavlinkMessage.GlobalPositionInt(
+        timeBootMs = currentTime,
+        lat = HOME_LAT,
+        lon = HOME_LON,
+        alt = HOME_ALT_MILLIMETRES + relativeAltMillimetres,
+        relativeAlt = relativeAltMillimetres,
+        vx = 0,
+        vy = 0,
+        vz = vzCentimetresPerSecond,
+        hdg = UNKNOWN_HEADING,
+    )
+
+    private fun TestScope.record(message: MavlinkMessage) {
+        telemetryStore.record(
+            ReceivedMessage(
+                VEHICLE_SYSTEM_ID,
+                AUTOPILOT_COMPONENT_ID,
+                message,
+                VEHICLE_ADDRESS,
+                session = FIRST_SESSION,
+            ),
+            testScheduler.timeSource.markNow(),
+        )
+    }
+
     private fun strangerAck(stranger: String): ReceivedMessage {
         val ack = ack(MAV_RESULT_ACCEPTED)
         return when (stranger) {
@@ -531,11 +1110,29 @@ class DefaultCommandRepositoryTest {
         const val GCS_COMPONENT_ID = 190
         const val MAV_CMD_NAV_RETURN_TO_LAUNCH = 20
         const val MAV_CMD_NAV_LAND = 21
+        const val MAV_CMD_NAV_TAKEOFF = 22
+        const val MAV_CMD_DO_SET_MODE = 176
         const val MAV_CMD_COMPONENT_ARM_DISARM = 400
         const val MAV_RESULT_ACCEPTED = 0
         const val MAV_RESULT_DENIED = 2
+        const val MAV_RESULT_FAILED = 4
         const val MAV_RESULT_IN_PROGRESS = 5
         const val UNKNOWN_PROGRESS = 255
+        const val MAV_MODE_FLAG_CUSTOM_MODE_ENABLED = 1f
+        const val GUIDED_MODE = 4f
+        const val MAV_VTOL_STATE_MC = 3
+        const val MAV_LANDED_STATE_UNDEFINED = 0
+        const val MAV_LANDED_STATE_ON_GROUND = 1
+        const val MAV_LANDED_STATE_IN_AIR = 2
+        const val MAV_LANDED_STATE_TAKEOFF = 3
+        const val MAV_LANDED_STATE_LANDING = 4
+        const val HOME_LAT = -353_632_621
+        const val HOME_LON = 1_491_652_374
+        const val HOME_ALT_MILLIMETRES = 584_000
+        const val UNKNOWN_HEADING = 65_535
+        const val OVER_A_METRE = 1_010
+        const val CLIMBING_A_METRE_PER_SECOND = -100
+        const val ALTITUDE = 10f
 
         // Virtual milliseconds: an attempt waits 1.5 s, IN_PROGRESS 10 s more, the late window 1.5 s (arm's 10 s).
         const val ANSWER_DELAY = 50L
@@ -549,11 +1146,19 @@ class DefaultCommandRepositoryTest {
         const val WITHIN_ARM_LATE_WINDOW = 5_000L
         const val PAST_ARM_LATE_WINDOW = 10_500L
         const val LONG_AFTER = 20_000L
+        const val HEARTBEAT_DELAY = 1_000L
+        const val TELEMETRY_PERIOD = 100L
+        const val GUIDED_CONFIRM_TIMEOUT = 2_500L
+        const val DURING_MODE_CHANGE = 25L
+        const val DURING_GUIDED_WAIT = 550L
+        const val DURING_TAKE_OFF = 2_000L
 
         val SYSTEM = SystemId(VEHICLE_SYSTEM_ID)
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
         val OPEN_ROUTE = CommandRoute.Open(VEHICLE_ADDRESS)
+        val LOITER = FlightMode.Named("Loiter")
+        val GUIDED = FlightMode.Named("Guided")
 
         fun ack(
             result: Int,
@@ -569,18 +1174,18 @@ class DefaultCommandRepositoryTest {
             session = FIRST_SESSION,
         )
 
-        fun commandLong(command: Int, param1: Float = 0f) = CommandLong(
+        fun commandLong(command: Int, param1: Float = 0f, param2: Float = 0f, param7: Float = 0f) = CommandLong(
             targetSystem = VEHICLE_SYSTEM_ID,
             targetComponent = AUTOPILOT_COMPONENT_ID,
             command = command,
             confirmation = 0,
             param1 = param1,
-            param2 = 0f,
+            param2 = param2,
             param3 = 0f,
             param4 = 0f,
             param5 = 0f,
             param6 = 0f,
-            param7 = 0f,
+            param7 = param7,
         )
 
         fun acceptsOnlyLand(command: CommandLong) =

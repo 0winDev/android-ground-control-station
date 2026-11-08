@@ -46,7 +46,7 @@ internal fun panelOf(telemetry: Telemetry?, staleness: StalenessRule, lostSince:
  */
 internal fun untilPanelChanges(telemetry: Telemetry, staleness: StalenessRule): Duration? {
     val nextStale = staleness.untilNextStale(telemetry)
-    val nextAgeSecond = TelemetryKind.entries
+    val nextAgeSecond = TelemetryKind.DISPLAYED
         .mapNotNull { kind -> telemetry[kind]?.receivedAt?.elapsedNow()?.takeIf { staleness.isStale(kind, it) } }
         .map { age -> AGE_UNIT - (age.inWholeNanoseconds % AGE_UNIT.inWholeNanoseconds).nanoseconds }
         .minOrNull()

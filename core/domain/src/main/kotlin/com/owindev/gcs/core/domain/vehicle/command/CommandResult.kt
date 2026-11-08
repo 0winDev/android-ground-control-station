@@ -19,6 +19,12 @@ sealed interface CommandResult {
     data class NoAnswer(val attempts: Int, val startedByVehicle: Boolean, val retriesStopped: NotSentReason?) :
         CommandResult
 
+    /**
+     * A take off stopped before its NAV_TAKEOFF because the vehicle did not reach GUIDED: [modeChange] is the mode
+     * change's own result, `null` when it was accepted but no HEARTBEAT showed GUIDED in time.
+     */
+    data class ModeNotChanged(val modeChange: CommandResult?) : CommandResult
+
     /** Stopped for a newer RTL or land the operator sent. */
     data object Superseded : CommandResult
 
@@ -52,6 +58,15 @@ enum class NotSentReason {
 
     /** The vehicle's HEARTBEATs come from another address than its first one. */
     ROUTE_CHANGED,
+
+    /** A take off for a vehicle whose HEARTBEAT does not show it armed. */
+    NOT_ARMED,
+
+    /** A take off for a vehicle not known to be on the ground, by its landed state and its position both. */
+    NOT_LANDED,
+
+    /** A take off altitude outside [TakeOffAltitudeRule]'s range. */
+    ALTITUDE_OUT_OF_RANGE,
 
     /**
      * Another command is pending, or this one ended without answer moments ago and its late answer is still listened

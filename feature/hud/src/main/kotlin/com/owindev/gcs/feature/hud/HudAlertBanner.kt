@@ -204,6 +204,7 @@ private fun staleMessageOf(kind: TelemetryKind): Int = when (kind) {
     TelemetryKind.AIR_DATA -> R.string.hud_alert_stale_air_data
     TelemetryKind.BATTERY -> R.string.hud_alert_stale_battery
     TelemetryKind.GPS -> R.string.hud_alert_stale_gps
+    TelemetryKind.LANDED -> R.string.hud_alert_stale_landed
 }
 
 /** How a level looks: an emergency is announced at once and outlined, like the link-lost screen. */

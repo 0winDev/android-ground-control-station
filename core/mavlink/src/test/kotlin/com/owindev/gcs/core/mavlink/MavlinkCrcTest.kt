@@ -42,6 +42,7 @@ class MavlinkCrcTest {
         "telemetry/gps-raw-int.bin, 24",
         "statustext/arming-motors.bin, 83",
         "param/stat-runtime.bin, 220",
+        "landed/on-ground.bin, 130",
     )
     fun `GIVEN a real SITL frame WHEN computing its checksum THEN it matches the checksum bytes`(
         fixture: String,

@@ -2,6 +2,7 @@ package com.owindev.gcs.core.mavlink
 
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Attitude
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ExtendedSysState
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
@@ -162,6 +163,10 @@ object MavlinkDecoder {
     private const val HOME_APPROACH_Z_OFFSET = 48
     private const val HOME_TIME_USEC_OFFSET = 52
 
+    private const val EXTENDED_SYS_STATE_ID = 245
+    private const val VTOL_STATE_OFFSET = 0
+    private const val LANDED_STATE_OFFSET = 1
+
     private const val STATUSTEXT_ID = 253
 
     // STATUSTEXT: every base field is 1 byte, so XML order is wire order; the extensions id (uint16) and
@@ -185,6 +190,7 @@ object MavlinkDecoder {
             VFR_HUD_ID -> vfrHud(frame.payload)
             COMMAND_ACK_ID -> commandAck(frame.payload)
             HOME_POSITION_ID -> homePosition(frame.payload)
+            EXTENDED_SYS_STATE_ID -> extendedSysState(frame.payload)
             STATUSTEXT_ID -> statusText(frame.payload)
             else -> Undecoded(frame.messageId, frame.payload.copyOf(fullLength))
         }
@@ -283,6 +289,11 @@ object MavlinkDecoder {
         resultParam2 = payload.int32(ACK_RESULT_PARAM2_OFFSET),
         targetSystem = payload.uint8(ACK_TARGET_SYSTEM_OFFSET),
         targetComponent = payload.uint8(ACK_TARGET_COMPONENT_OFFSET),
+    )
+
+    private fun extendedSysState(payload: ByteArray) = ExtendedSysState(
+        vtolState = payload.uint8(VTOL_STATE_OFFSET),
+        landedState = payload.uint8(LANDED_STATE_OFFSET),
     )
 
     private fun homePosition(payload: ByteArray) = HomePosition(

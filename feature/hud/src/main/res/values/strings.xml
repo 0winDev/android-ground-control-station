@@ -96,6 +96,7 @@
     <string name="hud_alert_stale_air_data">Speed data stale</string>
     <string name="hud_alert_stale_battery">Battery data stale</string>
     <string name="hud_alert_stale_gps">GPS data stale</string>
+    <string name="hud_alert_stale_landed">Landed state stale</string>
     <string name="hud_alert_others" translatable="false">+%1$d</string>
     <string name="hud_alert_acknowledge">Acknowledge</string>
     <plurals name="hud_alert_others_description">

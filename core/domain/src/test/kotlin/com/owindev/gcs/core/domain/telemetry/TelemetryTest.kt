@@ -20,6 +20,7 @@ class TelemetryTest {
             airData = Timed(AIR_DATA, RECEIVED_AT),
             battery = Timed(BATTERY, RECEIVED_AT),
             gps = Timed(GPS, RECEIVED_AT),
+            landed = Timed(LandedState.ON_GROUND, RECEIVED_AT),
             origin = DataOrigin.LIVE,
         )
     }
@@ -36,6 +37,7 @@ class TelemetryTest {
             TelemetryKind.AIR_DATA to AIR_DATA,
             TelemetryKind.BATTERY to BATTERY,
             TelemetryKind.GPS to GPS,
+            TelemetryKind.LANDED to LandedState.ON_GROUND,
         )
     }
 

@@ -3,6 +3,7 @@ package com.owindev.gcs.core.mavlink
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Attitude
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ExtendedSysState
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
@@ -730,23 +731,25 @@ class MavlinkDecoderTest {
         frameOf(messageId, random.nextBytes(random.nextInt(MAX_PAYLOAD + 1)))
     }
 
-    private fun MavlinkMessage.kind(): String = when (this) {
-        is Heartbeat -> "HEARTBEAT"
-        is SysStatus -> "SYS_STATUS"
-        is GpsRawInt -> "GPS_RAW_INT"
-        is Attitude -> "ATTITUDE"
-        is GlobalPositionInt -> "GLOBAL_POSITION_INT"
-        is VfrHud -> "VFR_HUD"
-        is CommandAck -> "COMMAND_ACK"
-        is CommandLong -> "COMMAND_LONG"
-        is HomePosition -> "HOME_POSITION"
-        is StatusText -> "STATUSTEXT"
-        is ParamRequestRead -> "PARAM_REQUEST_READ"
-        is ParamValue -> "PARAM_VALUE"
-        is Undecoded -> "$messageId/${payload.size}"
-    }
+    private fun MavlinkMessage.kind(): String =
+        if (this is Undecoded) "$messageId/${payload.size}" else DECODED_NAMES.getValue(this::class)
 
     private companion object {
+        val DECODED_NAMES = mapOf(
+            Heartbeat::class to "HEARTBEAT",
+            SysStatus::class to "SYS_STATUS",
+            GpsRawInt::class to "GPS_RAW_INT",
+            Attitude::class to "ATTITUDE",
+            GlobalPositionInt::class to "GLOBAL_POSITION_INT",
+            VfrHud::class to "VFR_HUD",
+            CommandAck::class to "COMMAND_ACK",
+            CommandLong::class to "COMMAND_LONG",
+            HomePosition::class to "HOME_POSITION",
+            StatusText::class to "STATUSTEXT",
+            ParamRequestRead::class to "PARAM_REQUEST_READ",
+            ParamValue::class to "PARAM_VALUE",
+            ExtendedSysState::class to "EXTENDED_SYS_STATE",
+        )
         const val MAX_CUSTOM_MODE = "derived/heartbeat-max-custom-mode.bin"
         const val EXTRA_BYTE = "derived/heartbeat-extra-byte.bin"
         const val POWER_STATUS = "truncated/power_status.bin"
@@ -834,7 +837,7 @@ class MavlinkDecoderTest {
         const val FUZZ_FRAMES = 10_000
         const val MAX_PAYLOAD = 255
         const val MAX_MESSAGE_ID = 0xFF_FFFF
-        val FUZZ_IDS = listOf(0, 1, 20, 22, 24, 30, 33, 36, 74, 76, 77, 125, 242, 253)
+        val FUZZ_IDS = listOf(0, 1, 20, 22, 24, 30, 33, 36, 74, 76, 77, 125, 242, 245, 253)
         const val SCALED_PRESSURE_ID = 29
         const val QUADROTOR = 2
         const val ARDUPILOTMEGA = 3

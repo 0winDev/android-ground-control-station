@@ -9,7 +9,7 @@ package com.owindev.gcs.core.mavlink
  * https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked against
  * `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK (#35), ATTITUDE, GLOBAL_POSITION_INT and
  * VFR_HUD (#37), SYS_STATUS and GPS_RAW_INT (#38), HOME_POSITION (#66), STATUSTEXT (#96), PARAM_REQUEST_READ and
- * PARAM_VALUE (#97) computed with pymavlink's `mavparse` from both.
+ * PARAM_VALUE (#97), EXTENDED_SYS_STATE (#112) computed with pymavlink's `mavparse` from both.
  * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG and PARAM_REQUEST_READ are
  * only sent by the codec, so a received one stays undecoded.
  */
@@ -28,6 +28,7 @@ object MavlinkMessages : CrcExtraLookup {
     private const val COMMAND_LONG_ID = 76
     private const val COMMAND_ACK_ID = 77
     private const val HOME_POSITION_ID = 242
+    private const val EXTENDED_SYS_STATE_ID = 245
     private const val STATUSTEXT_ID = 253
 
     private val heartbeat = Definition(crcExtra = 50, fullLength = 9)
@@ -52,6 +53,7 @@ object MavlinkMessages : CrcExtraLookup {
 
     // 52 bytes without its extension (time_usec).
     private val homePosition = Definition(crcExtra = 104, fullLength = 60)
+    private val extendedSysState = Definition(crcExtra = 130, fullLength = 2)
 
     // 51 bytes without its extensions (id, chunk_seq).
     private val statusText = Definition(crcExtra = 83, fullLength = 54)
@@ -78,6 +80,7 @@ object MavlinkMessages : CrcExtraLookup {
         COMMAND_LONG_ID -> commandLong
         COMMAND_ACK_ID -> commandAck
         HOME_POSITION_ID -> homePosition
+        EXTENDED_SYS_STATE_ID -> extendedSysState
         STATUSTEXT_ID -> statusText
         else -> null
     }
