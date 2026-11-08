@@ -22,7 +22,7 @@ internal object LinkNotification {
     const val ACTION_DISCONNECT = "com.owindev.gcs.link.DISCONNECT"
     const val ACTION_POST_AGAIN = "com.owindev.gcs.link.POST_AGAIN"
 
-    private const val CHANNEL = "vehicle_link"
+    const val CHANNEL = "vehicle_link"
     private const val OPEN_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
 
     fun createChannel(context: Context) {

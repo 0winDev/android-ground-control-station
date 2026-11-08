@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
     lateinit var backgroundLinkState: BackgroundLinkState
 
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        backgroundLinkState.refresh(this)
+        refreshBackgroundLink()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,11 +59,8 @@ class MainActivity : ComponentActivity() {
         enableSystemBars(themeViewModel.palette.value)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { backgroundLink.postAgain.collect { postLinkNotificationAgain() } }
-                backgroundLink.starts.collect {
-                    startVehicleLinkService()
-                    askNotificationsOnce()
-                }
+                launch { backgroundLink.asksNotifications.collect { askNotificationsOnce() } }
+                backgroundLink.starts.collect { startVehicleLinkService() }
             }
         }
         setContent {
@@ -85,9 +82,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Not only on start: in split screen the system's settings change beside the app while it stays started.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) refreshBackgroundLink()
+    }
+
     override fun onStart() {
         super.onStart()
-        backgroundLinkState.refresh(this)
+        refreshBackgroundLink()
+    }
+
+    private fun refreshBackgroundLink() {
+        if (backgroundLinkState.refresh(this)) postLinkNotificationAgain()
     }
 
     /** Asked when the service first starts (REQ-046); denied, the service runs with its notification hidden. */
@@ -100,7 +107,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun postLinkNotificationAgain() {
-        startService(Intent(this, VehicleLinkService::class.java).setAction(LinkNotification.ACTION_POST_AGAIN))
+        try {
+            startService(Intent(this, VehicleLinkService::class.java).setAction(LinkNotification.ACTION_POST_AGAIN))
+        } catch (e: IllegalStateException) {
+            Log.w("MainActivity", "The vehicle link notification could not be posted again", e)
+        }
     }
 
     /** Refused on the edge of leaving the foreground (API 31+): the next start, by level, tries again. */

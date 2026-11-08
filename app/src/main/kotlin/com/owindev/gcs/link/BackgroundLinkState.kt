@@ -12,6 +12,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 
 /**
@@ -33,23 +34,31 @@ class BackgroundLinkState @Inject constructor() : BackgroundLinkRepository {
 
     fun setRunning(running: Boolean) = mutableStatus.update { it.copy(running = running) }
 
-    /** The operator changes these in the system's settings, so they are read again on every start of the activity. */
-    fun refresh(context: Context) {
+    /**
+     * The operator changes these in the system's settings, so they are read again whenever the activity regains the
+     * window. Returns whether the notification must be posted again: allowed while the service runs.
+     */
+    fun refresh(context: Context): Boolean {
         val power = context.getSystemService(PowerManager::class.java)
         val activity = context.getSystemService(ActivityManager::class.java)
-        refresh(
-            notificationHidden = !NotificationManagerCompat.from(context).areNotificationsEnabled(),
+        val notifications = NotificationManagerCompat.from(context)
+        val channel = notifications.getNotificationChannelCompat(LinkNotification.CHANNEL)
+        return refresh(
+            notificationHidden = !notifications.areNotificationsEnabled() ||
+                channel?.importance == NotificationManagerCompat.IMPORTANCE_NONE,
             batteryOptimized = !power.isIgnoringBatteryOptimizations(context.packageName),
             backgroundRestricted = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && activity.isBackgroundRestricted,
         )
     }
 
-    fun refresh(notificationHidden: Boolean, batteryOptimized: Boolean, backgroundRestricted: Boolean) =
-        mutableStatus.update {
+    fun refresh(notificationHidden: Boolean, batteryOptimized: Boolean, backgroundRestricted: Boolean): Boolean {
+        val before = mutableStatus.getAndUpdate {
             it.copy(
                 notificationHidden = notificationHidden,
                 batteryOptimized = batteryOptimized,
                 backgroundRestricted = backgroundRestricted,
             )
         }
+        return before.running && before.notificationHidden && !notificationHidden
+    }
 }

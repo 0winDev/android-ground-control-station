@@ -5,7 +5,8 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * What this device lets the background link do (REQ-046): whether it runs, whether its notification is hidden, and
- * whether the system may stop the app in the background. The pre-flight check (#102) reads it.
+ * whether the system may stop the app in the background. No warning means only no known restriction, never that the
+ * link will survive: other manufacturers' managers are invisible here. The pre-flight check (#102) reads it.
  */
 data class BackgroundLinkStatus(
     val running: Boolean = false,

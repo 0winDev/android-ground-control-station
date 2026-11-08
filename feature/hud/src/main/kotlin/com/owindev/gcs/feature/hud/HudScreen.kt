@@ -177,9 +177,10 @@ private fun SideColumn(
             // The vehicle's own alerts first: the banners below are about this device and the link.
             AlertBannerContent(banner = state.alert, onAcknowledge = onAcknowledgeAlert)
             UplinkBanner(doubt = state.uplink)
-            BackgroundLinkBanners(background.warnings, background.onOpenSettings)
             UnstableLinkBanner(linkUnstable = state.linkUnstable)
             OtherVehiclesBanner(systemIds = state.otherVehicles)
+            // Below the link's cautions: battery optimisation is every app's default and must not push them away.
+            BackgroundLinkBanners(background.warnings, background.onOpenSettings)
         }
 
         is HudUiState.WaitingForVehicle -> {
