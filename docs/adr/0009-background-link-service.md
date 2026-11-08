@@ -25,7 +25,8 @@ while it is armed.
   ([Doze](https://developer.android.com/training/monitoring-device-state/doze-standby)), while an app "running a
   foreground service" has network "No restrictions"
   ([power details](https://developer.android.com/topic/performance/power/power-details)). The two pages do not say how
-  they combine, so it is measured on a real device (REQ-046 matrix).
+  they combine, so it was measured on a real device: in deep Doze the service, the wake lock and the network kept
+  working (REQ-046 matrix).
 - Wi-Fi power save can delay incoming datagrams. `WIFI_MODE_FULL_LOW_LATENCY` "is only active when the screen is on"
   and "when the acquiring app is running in the foreground"; `WIFI_MODE_FULL_HIGH_PERF` is deprecated in API 34 and
   "automatically replaced with `WIFI_MODE_FULL_LOW_LATENCY` with all the restrictions"
@@ -78,5 +79,7 @@ tethering), not Wi-Fi only.
   kill ends the service too. In each case the vehicle's own `FS_GCS` is the fallback. A vehicle lost while armed
   (crashed, out of battery) holds the service and the wake lock until one of those, since the app cannot know it
   will not come back.
+- A manufacturer's battery manager can kill the app regardless: ColorOS's did after 5 min with its defaults, and
+  did not once the app's background activity was allowed. The operator must allow it before flying.
 - Follow-ups: PR 2 of #28 asks `POST_NOTIFICATIONS`, warns in the HUD when the notification is hidden and logs
-  `ApplicationExitInfo` `REASON_USER_REQUESTED`.
+  `ApplicationExitInfo` `REASON_USER_REQUESTED`; guiding the operator to the battery settings comes with it.

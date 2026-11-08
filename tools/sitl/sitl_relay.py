@@ -36,6 +36,9 @@ stream once (the relay deletes it); stop the process to quit.
 
 pymavlink is the reference decoder here and only a tool dependency (py -m pip install --user pymavlink).
 
+A physical device on the same Wi-Fi (#28): --app <device IP>:14550 --bind 0.0.0.0 (the host firewall must let the
+device's datagrams in).
+
 Usage:
   adb emu redir add udp:14561:14550
   python sitl_relay.py --sitl tcp:127.0.0.1:5763 --app 127.0.0.1:14561
@@ -191,6 +194,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sitl", default="tcp:127.0.0.1:5763")
     parser.add_argument("--app", default="127.0.0.1:14561", help="host:port redirected into the emulator")
+    parser.add_argument("--bind", default="127.0.0.1", help="local address for the app's side; 0.0.0.0 for a device on the LAN")
     parser.add_argument("--log", default="relay-14.log")
     parser.add_argument("--background", action="store_true", help="control by file instead of the terminal")
     parser.add_argument("--tlog", help="write the frames forwarded each way to <prefix>.down.tlog and <prefix>.up.tlog")
@@ -208,7 +212,7 @@ def main() -> None:
     log(f"waiting for SITL on {args.sitl}...")
     sitl.wait_heartbeat(timeout=30)
     udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp.bind(("127.0.0.1", 0))
+    udp.bind((args.bind, 0))
     udp.settimeout(0.5)
     log(f"relay up: SITL {args.sitl} -> app {app}; app replies come back to {udp.getsockname()}")
 
