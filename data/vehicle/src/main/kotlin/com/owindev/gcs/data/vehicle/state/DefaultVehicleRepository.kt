@@ -165,6 +165,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         val at = timeSource.markNow()
                         messageStore.record(received, at)
                         if (telemetryStore.record(received, at)) {
+                            messageStore.rebooted(SystemId(received.systemId), received.session)
                             events.send(Event.Rebooted(SystemId(received.systemId), received.session))
                         }
                         HeartbeatMapper.vehicleStateOf(received)?.let { state ->

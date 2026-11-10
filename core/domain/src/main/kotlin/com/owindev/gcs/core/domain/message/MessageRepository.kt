@@ -12,9 +12,11 @@ interface MessageRepository {
     val activeMessages: StateFlow<List<VehicleMessage>>
 
     /**
-     * The latest `PreArm:` message, `null` once the vehicle arms or reports its pre-arm checks healthy. Informational
-     * only, never the pre-arm state: that is SYS_STATUS's `MAV_SYS_STATUS_PREARM_CHECK` (#102), since this text can be
-     * lost over UDP, or grow old ([PreArmRule.isCurrent]) while the failure is still active.
+     * The latest `PreArm:` message of this boot, dropped when the vehicle arms, reports its pre-arm checks healthy or
+     * reboots. Informational only, never the pre-arm state: that is SYS_STATUS's `MAV_SYS_STATUS_PREARM_CHECK` (#102),
+     * since this text can be lost over UDP or grow old while the failure is still active. `null` never means the checks
+     * pass, only that no reason is held; a value is kept however old it is, and nothing is emitted as it ages, so a
+     * consumer judges [PreArmRule.isCurrent] on its own clock, again as time passes.
      */
     val preArmReason: StateFlow<VehicleMessage?>
 }

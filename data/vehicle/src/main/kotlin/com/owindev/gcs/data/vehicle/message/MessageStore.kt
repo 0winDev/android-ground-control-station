@@ -18,13 +18,15 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The active vehicle's autopilot messages (REQ-047), newest first and at most [MAX_MESSAGES], and its latest `PreArm:`
- * reason, cleared when a HEARTBEAT shows it armed or SYS_STATUS reports its pre-arm checks healthy. Only that vehicle's
- * component 1, so a stream of made-up system IDs or components cannot grow it. The text is never logged.
+ * reason, cleared when a HEARTBEAT shows it armed, SYS_STATUS reports its pre-arm checks healthy or it reboots. Only that
+ * vehicle's component 1, so a stream of made-up system IDs or components cannot grow it. The text is never logged.
  *
  * Written by the vehicle repository's listener, one message at a time, so it is filled for exactly as long as the link
  * is listened to. A chunked message waiting for its last chunk is closed by the vehicle's next message once its time
  * limit has passed. It holds one link session at a time, as the telemetry does (REQ-037): [startSession] forgets
- * everything, and a message from another session is dropped. The listener and the watchdog both call it, hence the lock.
+ * everything, and a message from another session is dropped, so the first messages of a new session that reach the
+ * listener before the watchdog moves the store on are lost, as the telemetry's are. The listener and the watchdog both
+ * call it, hence the lock. Nothing is allocated for a message that changes nothing: most of the link's are not texts.
  */
 @Singleton
 internal class MessageStore @Inject constructor(
@@ -46,13 +48,31 @@ internal class MessageStore @Inject constructor(
         if (received.session != session || received.componentId != MAV_COMP_ID_AUTOPILOT1) return@synchronized
         val followed = followedFor(SystemId(received.systemId)) ?: return@synchronized
         val completed = listOfNotNull(assembler.expired()) + completedBy(received.message, receivedAt)
-        val reason = completed.lastOrNull(preArmRule::isPreArm)
-            ?: followed.preArmReason.takeUnless { clearsPreArm(received) }
-        val next = followed.copy(
+        // A clear always comes after what completed with it: an expired chunk is older than the message closing it.
+        val reason = if (clearsPreArm(received)) {
+            null
+        } else {
+            completed.lastOrNull(preArmRule::isPreArm)
+                ?: followed.preArmReason
+        }
+        if (completed.isEmpty() && reason == followed.preArmReason && followed === mutableMessages.value) {
+            return@synchronized
+        }
+        mutableMessages.value = followed.copy(
             messages = (completed.asReversed() + followed.messages).take(MAX_MESSAGES),
             preArmReason = reason,
         )
-        if (next != mutableMessages.value) mutableMessages.value = next
+    }
+
+    /**
+     * [systemId] rebooted in [session] (#69): its pending chunks and its pre-arm reason belong to the boot before, so
+     * both are forgotten; the texts already kept stay, with their times.
+     */
+    fun rebooted(systemId: SystemId, session: SessionId) = synchronized(lock) {
+        val followed = mutableMessages.value
+        if (session != this.session || followed.systemId != systemId) return@synchronized
+        assembler = StatusTextAssembler(session.origin)
+        if (followed.preArmReason != null) mutableMessages.value = followed.copy(preArmReason = null)
     }
 
     /** Forgets every message and keeps only [session]'s from now on. */
