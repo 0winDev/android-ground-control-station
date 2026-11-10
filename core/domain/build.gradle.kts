@@ -25,6 +25,8 @@ kover {
                     "com.owindev.gcs.core.domain.vehicle.command.PendingCommand",
                     "com.owindev.gcs.core.domain.vehicle.command.PendingState*",
                     "com.owindev.gcs.core.domain.vehicle.command.VehicleCommand",
+                    "com.owindev.gcs.core.domain.message.VehicleMessage",
+                    "com.owindev.gcs.core.domain.message.MessageSeverity",
                 )
             }
         }
