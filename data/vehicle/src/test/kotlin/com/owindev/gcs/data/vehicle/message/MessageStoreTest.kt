@@ -341,6 +341,28 @@ class MessageStoreTest {
         result.shouldBeEmpty()
     }
 
+    @Test
+    fun `GIVEN ArduCopter's real pre-arm text WHEN its real healthy SYS_STATUS arrives THEN the reason is cleared`() {
+        activeVehicle.pinFirst(SystemId(MESSAGE_SYSTEM_1), FIRST_SESSION)
+        store.record(received(sitlMessage(SITL_PRE_ARM_GPS), FIRST_SESSION), clock.markNow())
+
+        store.record(received(sitlMessage(SITL_SYS_STATUS_PREARM_HEALTHY), FIRST_SESSION), clock.markNow())
+        val result = store.messages.value.preArmReason
+
+        result.shouldBeNull()
+    }
+
+    @Test
+    fun `GIVEN ArduCopter's real pre-arm text WHEN its real failing SYS_STATUS arrives THEN the reason stays`() {
+        activeVehicle.pinFirst(SystemId(MESSAGE_SYSTEM_1), FIRST_SESSION)
+        store.record(received(sitlMessage(SITL_PRE_ARM_GPS), FIRST_SESSION), clock.markNow())
+
+        store.record(received(sitlMessage(SITL_SYS_STATUS_PREARM_UNHEALTHY), FIRST_SESSION), clock.markNow())
+        val result = store.messages.value.preArmReason
+
+        result shouldBeEqualTo kept(PRE_ARM_TEXT)
+    }
+
     private fun firstChunk(text: String) =
         StatusText(MAV_SEVERITY_CRITICAL, text, CHUNKED_ID, chunkSeq = 0, endsInField = false)
 

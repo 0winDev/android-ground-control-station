@@ -49,6 +49,24 @@ class StatusTextAssemblerTest {
     }
 
     @Test
+    fun `GIVEN ArduCopter's real pre-arm text WHEN accepted THEN it is a whole critical message`() {
+        val statusText = sitlMessage(SITL_PRE_ARM_GPS) as StatusText
+
+        val result = assembler.accept(statusText, start)
+
+        result shouldBeEqualTo listOf(message(PRE_ARM_TEXT))
+    }
+
+    @Test
+    fun `GIVEN ArduCopter's real pre-arm text cut at 50 bytes WHEN accepted THEN it is whole, not a chunk`() {
+        val statusText = sitlMessage(SITL_PRE_ARM_SERIAL) as StatusText
+
+        val result = assembler.accept(statusText, start)
+
+        result shouldBeEqualTo listOf(message(SITL_PRE_ARM_SERIAL_TEXT))
+    }
+
+    @Test
     fun `GIVEN the first chunks WHEN the last one is not received yet THEN nothing is complete`() {
         assembler.accept(chunk(seq = 0, FULL_FIELD), start)
 

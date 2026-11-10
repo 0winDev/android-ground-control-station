@@ -1,6 +1,10 @@
 package com.owindev.gcs.data.vehicle.message
 
+import com.owindev.gcs.core.mavlink.MavlinkDecoder
 import com.owindev.gcs.core.mavlink.MavlinkMessage
+import com.owindev.gcs.core.mavlink.MavlinkMessages
+import com.owindev.gcs.core.mavlink.MavlinkParser
+import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.link.SessionId
 import java.net.InetAddress
@@ -18,6 +22,17 @@ internal const val MAV_SEVERITY_CRITICAL = 2
 internal const val PREARM_CHECK_BIT = 0x10000000L
 
 internal const val PRE_ARM_TEXT = "PreArm: GPS 1: Bad fix"
+
+/** Real ArduCopter 4.7.3 frames (resources `README.md`, #100); their texts as pymavlink 2.4.50 decodes them. */
+internal const val SITL_PRE_ARM_GPS = "statustext/prearm-gps-bad-fix.bin"
+internal const val SITL_PRE_ARM_SERIAL = "statustext/prearm-serial-rcin.bin"
+internal const val SITL_PRE_ARM_SERIAL_TEXT = "PreArm: Multiple SERIAL ports configured for RC in"
+internal const val SITL_SYS_STATUS_PREARM_HEALTHY = "statustext/sys-status-prearm-healthy.bin"
+internal const val SITL_SYS_STATUS_PREARM_UNHEALTHY = "statustext/sys-status-prearm-unhealthy.bin"
+
+/** The one frame in [path], decoded by the codec. */
+internal fun sitlMessage(path: String): MavlinkMessage =
+    MavlinkDecoder.decode(MavlinkParser(MavlinkMessages).parse(readFixture(path)).single())
 
 private val SENDER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
 
