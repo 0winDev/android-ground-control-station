@@ -2,6 +2,7 @@ package com.owindev.gcs.data.vehicle.replay
 
 import android.util.Log
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.message.PreArmRule
 import com.owindev.gcs.core.domain.recording.RecordingRule
 import com.owindev.gcs.core.domain.replay.ReplayRule
 import com.owindev.gcs.core.domain.replay.ReplayState
@@ -22,6 +23,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
+import com.owindev.gcs.data.vehicle.message.MessageStore
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
@@ -112,6 +114,7 @@ class ReplayPipelineTest {
             heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
+            messageStore = MessageStore(activeVehicle, PreArmRule()),
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
@@ -362,6 +365,7 @@ class ReplayPipelineTest {
             heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
+            messageStore = MessageStore(activeVehicle, PreArmRule()),
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,

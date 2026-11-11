@@ -96,3 +96,16 @@ is documented; decoded with pymavlink 2.4.50.
 | File | Origin | Used for |
 |---|---|---|
 | `replay/qgroundcontrol.tlog` | real, QGroundControl with SITL ArduCopter 4.7.2: vehicle 1/1 (10 HEARTBEATs, 30 GLOBAL_POSITION_INTs) and QGroundControl's own 255/190 frames (10 HEARTBEATs, 3 COMMAND_LONGs, 1 TIMESYNC) | an external log replayed: only vehicle 1 is heard, the ground station's frames are ignored (REQ-020) |
+
+## STATUSTEXT and the pre-arm bit (#100)
+
+Real frames of ArduCopter 4.7.3 SITL (AUTOPILOT_VERSION, git `bf693f31`, Mission Planner's simulator, 2026-11-10),
+cut from the relay's `.down.tlog` (what the app received) and a pymavlink session on TCP 5763; decoded with pymavlink
+2.4.50. The pre-arm bit is `MAV_SYS_STATUS_PREARM_CHECK` (`0x10000000`).
+
+| File | Origin | Raw values (pymavlink) | Used for |
+|---|---|---|---|
+| `statustext/prearm-gps-bad-fix.bin` | real, `SIM_GPS1_ENABLE` 0 in LOITER | severity 2, id 0, chunk_seq 0, `PreArm: GPS 1: Bad fix`, LEN 23 | a real pre-arm reason, whole |
+| `statustext/prearm-serial-rcin.bin` | real, `SERIAL5_PROTOCOL` and `SERIAL6_PROTOCOL` 23 (RCIN) | severity 2, id 0, chunk_seq 0, `PreArm: Multiple SERIAL ports configured for RC in`, LEN 51 | a pre-arm text over 50 bytes cut by ArduPilot, never chunked |
+| `statustext/sys-status-prearm-unhealthy.bin` | real, same session as the SERIAL text | present `0x5371fc2f`, enabled `0x52619c2f`, health `0x47719c2f` | pre-arm bit enabled, not healthy |
+| `statustext/sys-status-prearm-healthy.bin` | real, STABILIZE with `SIM_GPS1_ENABLE` 0 | present `0x5371fc2f`, enabled `0x52619c2f`, health `0x57719c2f` | pre-arm bit enabled and healthy |

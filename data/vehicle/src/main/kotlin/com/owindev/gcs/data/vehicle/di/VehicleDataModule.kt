@@ -8,6 +8,8 @@ import com.owindev.gcs.core.domain.background.BackgroundLinkRule
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRule
+import com.owindev.gcs.core.domain.message.MessageRepository
+import com.owindev.gcs.core.domain.message.PreArmRule
 import com.owindev.gcs.core.domain.recording.ImportRule
 import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
@@ -31,6 +33,7 @@ import com.owindev.gcs.data.vehicle.command.DefaultCommandRepository
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.message.DefaultMessageRepository
 import com.owindev.gcs.data.vehicle.recording.DefaultRecordingRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
@@ -74,6 +77,9 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindTelemetryRepository(impl: DefaultTelemetryRepository): TelemetryRepository
+
+    @Binds
+    internal abstract fun bindMessageRepository(impl: DefaultMessageRepository): MessageRepository
 
     @Binds
     internal abstract fun bindAlertRepository(impl: DefaultAlertRepository): AlertRepository
@@ -150,6 +156,10 @@ abstract class VehicleDataModule {
         /** The trail limits decided for v0.3 (REQ-035: 2 m, 5 000 points), trusting positions as the HUD does. */
         @Provides
         fun provideTrailRule(staleness: StalenessRule): TrailRule = TrailRule(staleness)
+
+        /** A pre-arm reason current for 35 s (REQ-047), as QGroundControl reads it. */
+        @Provides
+        fun providePreArmRule(): PreArmRule = PreArmRule()
 
         /** The recording thresholds decided for v0.3 (REQ-036, REQ-039: 10 min, 256 MiB); change them here. */
         @Provides

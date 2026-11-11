@@ -216,6 +216,7 @@ the issue number to an existing one.
 - A restricted app's foreground service loses the foreground once hidden: start it again on every app start (#28).
 - Rejecting a value never erases state: drop the frame; compare ±π as float32 and integers with `in` (#49).
 - A base class default is not the vehicle's: read the override (ArduCopter's `vtol_state` is MC, not UNDEFINED) (#112).
+- ArduPilot cuts a `PreArm:` format at 50 bytes before its arguments: a fixed text never comes in chunks (#100).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -244,6 +245,7 @@ the issue number to an existing one.
 - A 1 Hz loop misses a LOST shorter than its period: reset on the watchdog's transition, not on a poll (#29).
 - Set a mark and clear it in the same coroutine, or an answer applied first leaves the mark forever (#29).
 - Two sessions of one kind look alike in a conflated `StateFlow`: tell them apart by an epoch (#71).
+- Compare a new state with the published one, not a fresh copy, or a vehicle's first change is never published (#100).
 - A consumer started lazily starts from the producer's first state, never its current one (#71).
 - A clock followed after it started running is anchored on its position, or time jumps ahead then freezes (#71).
 - A value passed into a Navigation 3 entry never changes: read the palette and changing state inside the screen (#61).
@@ -264,6 +266,7 @@ the issue number to an existing one.
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
 - A display staleness threshold is no safety gate: give the gate its own bound and the stream the rate it needs (#112).
 - A gate of two checks needs a test where each fails alone, or one hides the other: mutate them one at a time (#99).
+- A clear and the text it closes can arrive together: apply the clear last, it is the newer (#100).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
@@ -271,13 +274,14 @@ the issue number to an existing one.
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).
 - The simulator updates itself: query AUTOPILOT_VERSION each session, record it with every capture (#5, #39, #41, #29).
-- SITL tools send their own HEARTBEAT and stream requests; pass pymavlink `retries` across a reboot (#41, #42).
+- SITL tools send their own HEARTBEAT and stream requests; pass pymavlink `retries` across a reboot (#41, #42, #100).
 - Changing `BATT_CAPACITY` does not recharge the battery: relaunch the simulator (#56).
 - Check QGroundControl's UI in the installed version's docs and compare values with its MAVLink Inspector (#42).
 - Measure timings in SITL before documenting them: API 36 blocks a background app's network after about 5 s (#14).
 - In airplane mode the emulator's bound UDP socket never fails: a transport failure cannot be reproduced there (#25).
 - A SITL TCP port can stay silent for a whole session: count raw bytes on it first (#70).
 - Restarting the relay changes its port: restart the app too, or every command is refused as a route change (#99).
+- ArduCopter checks the GPS before arming only in a mode that needs position: fail it in LOITER, not STABILIZE (#100).
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
 - pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
@@ -291,6 +295,7 @@ the issue number to an existing one.
 - QGroundControl's UDP AutoConnect holds host port 14550: redirect a free port; find holders with `netstat -ano` (#6).
 - The emulator's clock can run seconds behind the host: match logcat to the relay log by events (#39).
 - On Windows `NUL` claims to be a terminal and Python writes CRLF unless `newline="\n"` (#14, #56).
+- `py -I` hides the user's site-packages, pymavlink included: run the repo's SITL tools without it (#100).
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
 - detekt measures tests too: a `when` over message types that grows with the codec becomes a table (#112).
 - Lint's ExperimentalDetector crashes on a fun-interface lambda held in a property: use a function reference (#99).

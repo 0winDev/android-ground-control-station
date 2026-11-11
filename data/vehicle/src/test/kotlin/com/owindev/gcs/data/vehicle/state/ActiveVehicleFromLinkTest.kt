@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.state
 
+import com.owindev.gcs.core.domain.message.PreArmRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
@@ -11,6 +12,7 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
+import com.owindev.gcs.data.vehicle.message.MessageStore
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
@@ -64,6 +66,7 @@ class ActiveVehicleFromLinkTest {
             ),
             telemetryRequester = telemetryRequester,
             telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
+            messageStore = MessageStore(activeVehicle, PreArmRule()),
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
