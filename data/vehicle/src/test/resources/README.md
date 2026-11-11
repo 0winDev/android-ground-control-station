@@ -109,3 +109,12 @@ cut from the relay's `.down.tlog` (what the app received) and a pymavlink sessio
 | `statustext/prearm-serial-rcin.bin` | real, `SERIAL5_PROTOCOL` and `SERIAL6_PROTOCOL` 23 (RCIN) | severity 2, id 0, chunk_seq 0, `PreArm: Multiple SERIAL ports configured for RC in`, LEN 51 | a pre-arm text over 50 bytes cut by ArduPilot, never chunked |
 | `statustext/sys-status-prearm-unhealthy.bin` | real, same session as the SERIAL text | present `0x5371fc2f`, enabled `0x52619c2f`, health `0x47719c2f` | pre-arm bit enabled, not healthy |
 | `statustext/sys-status-prearm-healthy.bin` | real, STABILIZE with `SIM_GPS1_ENABLE` 0 | present `0x5371fc2f`, enabled `0x52619c2f`, health `0x57719c2f` | pre-arm bit enabled and healthy |
+
+## Battery parameters (#101)
+
+Byte-identical copy of `core/mavlink/src/test/resources/derived/param-value-batt-low-volt.bin` (#97), built by pymavlink
+2.4.50 in `tools/fixtures/derive_fixtures.py`; decoded again with it before copying.
+
+| File | Origin | Raw values (pymavlink) | Used for |
+|---|---|---|---|
+| `derived/param-value-batt-low-volt.bin` | real `MOT_THST_HOVER` re-packed as `BATT_LOW_VOLT` | system 1, component 1, `BATT_LOW_VOLT` 10.5, type 9 (REAL32), count 1370, index 65535, LEN 25 | a battery parameter through the link into the store |

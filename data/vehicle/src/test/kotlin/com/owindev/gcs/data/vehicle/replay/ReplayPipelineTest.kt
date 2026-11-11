@@ -24,6 +24,7 @@ import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
@@ -115,6 +116,7 @@ class ReplayPipelineTest {
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
             messageStore = MessageStore(activeVehicle, PreArmRule()),
+            parameterStore = ParameterStore(activeVehicle),
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
@@ -366,6 +368,7 @@ class ReplayPipelineTest {
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
             telemetryStore = store,
             messageStore = MessageStore(activeVehicle, PreArmRule()),
+            parameterStore = ParameterStore(activeVehicle),
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,

@@ -1,0 +1,116 @@
+package com.owindev.gcs.data.vehicle.state
+
+import com.owindev.gcs.core.domain.telemetry.StalenessRule
+import com.owindev.gcs.core.domain.telemetry.TrailRule
+import com.owindev.gcs.core.transport.Datagram
+import com.owindev.gcs.core.transport.DatagramSource
+import com.owindev.gcs.core.transport.SendResult
+import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.parameter.BatteryParameter
+import com.owindev.gcs.data.vehicle.parameter.FollowedParameters
+import com.owindev.gcs.data.vehicle.parameter.ParameterStore
+import com.owindev.gcs.data.vehicle.replay.ReplayClock
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
+import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.amshove.kluent.shouldBeEqualTo
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
+
+/** The listener and the watchdog feeding the parameter store, with pymavlink's PARAM_VALUE through the pipeline. */
+@OptIn(ExperimentalCoroutinesApi::class)
+@Tag("REQ-028")
+class ParametersFromLinkTest {
+
+    private val testScope = TestScope()
+    private val transport: UdpTransport = mockk()
+    private val telemetryRequester: TelemetryRequester = mockk()
+    private val activeVehicle = ActiveVehicle()
+    private val session = testScope.sessionOn(transport, activeVehicle)
+    private val parameterStore = ParameterStore(activeVehicle)
+
+    private lateinit var repository: DefaultVehicleRepository
+
+    @BeforeEach
+    fun setUp() {
+        coEvery { transport.send(any(), any()) } returns SendResult.Sent
+        coEvery { telemetryRequester.run(any(), any()) } coAnswers { awaitCancellation() }
+        repository = testScope.repositoryOn(
+            transport = transport,
+            telemetryRequester = telemetryRequester,
+            telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
+            activeVehicle = activeVehicle,
+            session = session,
+            parameterStore = parameterStore,
+        )
+    }
+
+    @Test
+    fun `GIVEN the active vehicle WHEN its battery parameter comes on the link THEN the store keeps it`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE, GAP to BATT_LOW_VOLT)
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(HEARD)
+            val result = parameterStore.parameters.value.values
+
+            result shouldBeEqualTo mapOf(BatteryParameter.LOW_VOLT to LOW_VOLTS)
+        }
+
+    @Tag("REQ-033")
+    @Test
+    fun `GIVEN a battery parameter kept WHEN the vehicle reboots THEN it is forgotten`() = testScope.runTest {
+        every { transport.datagrams() } returns datagrams(
+            GAP to DISARMED_STABILIZE,
+            GAP to BATT_LOW_VOLT,
+            GAP to ATTITUDE_LONG_UP,
+            GAP to ATTITUDE_AFTER_REBOOT,
+        )
+        repository.vehicles.launchIn(backgroundScope)
+
+        delay(HEARD)
+        val result = parameterStore.parameters.value.values
+
+        result shouldBeEqualTo emptyMap()
+    }
+
+    @Tag("REQ-037")
+    @Test
+    fun `GIVEN a battery parameter kept WHEN a replay starts THEN it is forgotten`() = testScope.runTest {
+        every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE, GAP to BATT_LOW_VOLT)
+        repository.vehicles.launchIn(backgroundScope)
+        delay(HEARD)
+
+        session.replay(emptySource(), ReplayClock(testScheduler.timeSource))
+        runCurrent()
+        val result = parameterStore.parameters.value
+
+        result shouldBeEqualTo FollowedParameters.empty(session.session.value)
+    }
+}
+
+private fun emptySource(): DatagramSource = object : DatagramSource {
+    override fun datagrams() = emptyFlow<Datagram>()
+}
+
+/** `BATT_LOW_VOLT` 10.5, REAL32, from system 1 component 1 (pymavlink, resources `README.md`). */
+private const val BATT_LOW_VOLT = "derived/param-value-batt-low-volt.bin"
+private const val LOW_VOLTS = 10.5f
+
+/** Every datagram delivered, well within the 3 s link-loss timeout (REQ-017). */
+private const val HEARD = 500L
+
+/** `time_boot_ms` 4000000000 and then 397119 (pymavlink): back by far more than the reboot backstep. */
+private const val ATTITUDE_LONG_UP = "derived/attitude-edges.bin"
+private const val ATTITUDE_AFTER_REBOOT = "telemetry/attitude.bin"
