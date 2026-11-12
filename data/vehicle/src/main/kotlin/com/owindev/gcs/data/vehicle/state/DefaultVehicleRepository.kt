@@ -20,6 +20,7 @@ import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.BatteryParameterRequester
 import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
@@ -50,7 +51,7 @@ import kotlinx.coroutines.launch
  * Keeps every vehicle heard on the shared [LinkSession], keyed by system ID (REQ-016), and watches each
  * one's link (REQ-017, REQ-019).
  *
- * Four jobs in the application scope, all started on first use:
+ * Five jobs in the application scope, all started on first use:
  * - the **listener** collects HEARTBEATs only while [vehicles] is observed (plus [LINK_STOP_TIMEOUT]),
  *   so the socket is not kept open for nobody. It also keeps every vehicle's telemetry in the
  *   [TelemetryStore] (REQ-026), marked on arrival with the same clock as the HEARTBEATs;
@@ -66,7 +67,9 @@ import kotlinx.coroutines.launch
  *   becomes CONNECTED (REQ-023), and never any other system ID. The watchdog tells it of every change of the
  *   active vehicle's link, in order, so a LOST followed at once by a CONNECTED still starts a new round, and
  *   of a reboot the store detects while it stays CONNECTED, since the autopilot has forgotten the intervals
- *   (REQ-033). It only listens for answers while it is waiting for one.
+ *   (REQ-033). It only listens for answers while it is waiting for one;
+ * - the **parameter** job ([BatteryParameterRequester]) reads the active vehicle's battery parameters on the same
+ *   changes (REQ-028), from the answers the listener keeps in the [ParameterStore].
  *
  * The [activeSystemId] is the [ActiveVehicle] the link pinned with the first vehicle heard, and stays so (REQ-020);
  * the others are kept in the map like any vehicle, never merged into it.
@@ -86,8 +89,8 @@ import kotlinx.coroutines.launch
  * A replay (REQ-037) is a session of its own: when the link's [LinkSession.session] changes, the watchdog forgets every
  * vehicle, timer, address and request target, and the stores their telemetry, messages and parameters, so nothing live
  * shows in a replay, nor one replay in the next, nor a replay after it; a message from another session is dropped. The
- * heartbeat and telemetry jobs only run on the live link, and only the live active vehicle is ever a telemetry target,
- * so a replay never transmits.
+ * heartbeat, telemetry and parameter jobs only run on the live link, and only the live active vehicle is ever a request
+ * target, so a replay never transmits.
  *
  * Time comes from the injected [timeSource]; on a device it keeps counting while the CPU sleeps, so a
  * vehicle's age is right after waking. Timers use coroutine `delay`, which pauses during sleep, so the
@@ -103,6 +106,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val heartbeatSender: GcsHeartbeatSender,
     private val uplink: DefaultUplinkRepository,
     private val telemetryRequester: TelemetryRequester,
+    private val parameterRequester: BatteryParameterRequester,
     private val telemetryStore: TelemetryStore,
     private val messageStore: MessageStore,
     private val parameterStore: ParameterStore,
@@ -116,6 +120,7 @@ internal class DefaultVehicleRepository @Inject constructor(
 
     private val activeLinkChanges = ActiveLinkChanges()
     private val telemetryTargets = activeLinkChanges.newConsumer()
+    private val parameterTargets = activeLinkChanges.newConsumer()
 
     /** Where each vehicle's last HEARTBEAT came from; written only by the watchdog. */
     @Volatile
@@ -135,6 +140,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         scope.launch { session.session.collect { current -> events.send(Event.SessionChanged(current)) } }
         scope.launch { whileLive { heartbeatSender.run(::activeAddressWhileConnected) } }
         scope.launch { whileLive { telemetryRequester.run(telemetryTargets, ::activeHeardNow) } }
+        scope.launch { whileLive { parameterRequester.run(parameterTargets, ::activeHeardNow) } }
         mutableVehicles.asStateFlow()
     }
 

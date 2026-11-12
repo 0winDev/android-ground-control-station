@@ -6,20 +6,27 @@ import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
+import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.parameter.BatteryParameter
+import com.owindev.gcs.data.vehicle.parameter.BatteryParameterRequester
 import com.owindev.gcs.data.vehicle.parameter.FollowedParameters
 import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
+import io.mockk.CapturingSlot
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -28,7 +35,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
-/** The listener and the watchdog feeding the parameter store, with pymavlink's PARAM_VALUE through the pipeline. */
+/**
+ * The listener and the watchdog feeding the parameter store, with pymavlink's PARAM_VALUE through the pipeline, and
+ * telling the parameter requester of the active vehicle's link changes.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Tag("REQ-028")
 class ParametersFromLinkTest {
@@ -49,6 +59,7 @@ class ParametersFromLinkTest {
         repository = testScope.repositoryOn(
             transport = transport,
             telemetryRequester = telemetryRequester,
+            parameterRequester = idleParameterRequester(),
             telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
             activeVehicle = activeVehicle,
             session = session,
@@ -66,6 +77,36 @@ class ParametersFromLinkTest {
             val result = parameterStore.parameters.value.values
 
             result shouldBeEqualTo mapOf(BatteryParameter.LOW_VOLT to LOW_VOLTS)
+        }
+
+    @Tag("REQ-019")
+    @Test
+    fun `GIVEN the active vehicle LOST WHEN it is heard again THEN its parameters are requested again`() =
+        testScope.runTest {
+            val parameterRequester: BatteryParameterRequester = mockk()
+            val parameterTargets: CapturingSlot<Flow<VehicleTarget?>> = slot()
+            coEvery { parameterRequester.run(capture(parameterTargets), any()) } coAnswers { awaitCancellation() }
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                WELL_PAST_TIMEOUT to DISARMED_LOITER,
+            )
+            repositoryOn(
+                transport = transport,
+                telemetryRequester = telemetryRequester,
+                telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
+                activeVehicle = activeVehicle,
+                session = session,
+                parameterRequester = parameterRequester,
+            ).vehicles.launchIn(backgroundScope)
+            runCurrent()
+
+            val result = parameterTargets.captured.take(3).toList()
+
+            result shouldBeEqualTo listOf(
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                null,
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+            )
         }
 
     @Tag("REQ-033")

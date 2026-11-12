@@ -6,6 +6,7 @@ import com.owindev.gcs.core.mavlink.MavlinkEncoder
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamRequestRead
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.command.CommandRoute
@@ -28,8 +29,8 @@ import kotlinx.coroutines.withContext
  * would repeat numbers and make the vehicle count lost packets that were never lost.
  *
  * The number advances only for frames actually sent and wraps after 255. Senders run in different
- * coroutines (the HEARTBEAT loop, the telemetry requests), so encoding, sending and advancing happen under
- * one lock: a frame is never sent with a number another frame already used.
+ * coroutines (the HEARTBEAT loop, the telemetry and parameter requests), so encoding, sending and advancing
+ * happen under one lock: a frame is never sent with a number another frame already used.
  *
  * A sender cancelled before it holds the lock sends nothing, so a superseded command never leaves after the one that
  * replaced it. Once the socket write starts it finishes, even if the sender is cancelled meanwhile (a telemetry round
@@ -57,6 +58,9 @@ internal class GcsMessageSender @Inject constructor(
 
     suspend fun send(commandLong: CommandLong, to: InetSocketAddress): SendResult =
         send(to) { sequence -> MavlinkEncoder.encode(sequence, GCS_SYSTEM_ID, GCS_COMPONENT_ID, commandLong) }
+
+    suspend fun send(request: ParamRequestRead, to: InetSocketAddress): SendResult =
+        send(to) { sequence -> MavlinkEncoder.encode(sequence, GCS_SYSTEM_ID, GCS_COMPONENT_ID, request) }
 
     /**
      * Sends a vehicle command to the address [route] gives, read under the lock (REQ-043): a frame waiting for the
