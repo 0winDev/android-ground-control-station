@@ -16,6 +16,7 @@ import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.liveSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
@@ -82,6 +83,7 @@ class TelemetryFromLinkTest {
             telemetryRequester = telemetryRequester,
             telemetryStore = store,
             messageStore = MessageStore(activeVehicle, PreArmRule()),
+            parameterStore = ParameterStore(activeVehicle),
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
@@ -179,6 +181,7 @@ class TelemetryFromLinkTest {
                 telemetryRequester = telemetryRequester,
                 telemetryStore = store,
                 messageStore = MessageStore(activeVehicle, PreArmRule()),
+                parameterStore = ParameterStore(activeVehicle),
                 uplink = uplinkOnTestClock(),
                 activeVehicle = activeVehicle,
                 scope = backgroundScope,

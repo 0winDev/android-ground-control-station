@@ -16,6 +16,7 @@ import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.replay.ReplayClock
@@ -81,6 +82,7 @@ class SessionChangeTest {
             telemetryRequester = telemetryRequester,
             telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
             messageStore = MessageStore(activeVehicle, PreArmRule()),
+            parameterStore = ParameterStore(activeVehicle),
             uplink = uplink,
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,

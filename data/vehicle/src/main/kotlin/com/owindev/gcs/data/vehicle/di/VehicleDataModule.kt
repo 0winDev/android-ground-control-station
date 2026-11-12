@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.attention.FlightAttentionRule
 import com.owindev.gcs.core.domain.background.BackgroundLinkRule
+import com.owindev.gcs.core.domain.battery.BatteryThresholdRepository
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRule
@@ -34,6 +35,7 @@ import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.message.DefaultMessageRepository
+import com.owindev.gcs.data.vehicle.parameter.DefaultBatteryThresholdRepository
 import com.owindev.gcs.data.vehicle.recording.DefaultRecordingRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RECORDINGS_FOLDER
@@ -59,6 +61,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.plus
 
+// One binding per contract this module implements; splitting them would scatter one module's wiring.
+@Suppress("TooManyFunctions")
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class VehicleDataModule {
@@ -80,6 +84,11 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindMessageRepository(impl: DefaultMessageRepository): MessageRepository
+
+    @Binds
+    internal abstract fun bindBatteryThresholdRepository(
+        impl: DefaultBatteryThresholdRepository,
+    ): BatteryThresholdRepository
 
     @Binds
     internal abstract fun bindAlertRepository(impl: DefaultAlertRepository): AlertRepository

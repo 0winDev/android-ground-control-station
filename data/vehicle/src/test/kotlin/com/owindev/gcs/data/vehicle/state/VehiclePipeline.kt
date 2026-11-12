@@ -12,6 +12,7 @@ import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
@@ -42,6 +43,7 @@ internal fun TestScope.repositoryOn(
     heartbeatSender: GcsHeartbeatSender =
         GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), session), uplink),
     messageStore: MessageStore = MessageStore(activeVehicle, PreArmRule()),
+    parameterStore: ParameterStore = ParameterStore(activeVehicle),
     scope: CoroutineScope = backgroundScope,
 ) = DefaultVehicleRepository(
     session = session,
@@ -52,6 +54,7 @@ internal fun TestScope.repositoryOn(
     telemetryRequester = telemetryRequester,
     telemetryStore = telemetryStore,
     messageStore = messageStore,
+    parameterStore = parameterStore,
     activeVehicle = activeVehicle,
     scope = scope,
 )

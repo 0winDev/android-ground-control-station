@@ -19,6 +19,7 @@ import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
@@ -84,10 +85,10 @@ import kotlinx.coroutines.launch
  * which has no handler, so the process crashes on purpose rather than keep showing links nobody watches.
  *
  * A replay (REQ-037) is a session of its own: when the link's [LinkSession.session] changes, the watchdog forgets every
- * vehicle, timer, address and request target, and the stores their telemetry and messages, so nothing live shows in a replay, nor one
- * replay in the next, nor a replay after it; a message from another session is dropped. The heartbeat and telemetry
- * jobs only run on the live link, and only the live active vehicle is ever a telemetry target, so a replay never
- * transmits.
+ * vehicle, timer, address and request target, and the stores their telemetry, messages and parameters, so nothing live
+ * shows in a replay, nor one replay in the next, nor a replay after it; a message from another session is dropped. The
+ * heartbeat and telemetry jobs only run on the live link, and only the live active vehicle is ever a telemetry target,
+ * so a replay never transmits.
  *
  * Time comes from the injected [timeSource]; on a device it keeps counting while the CPU sleeps, so a
  * vehicle's age is right after waking. Timers use coroutine `delay`, which pauses during sleep, so the
@@ -105,6 +106,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val telemetryRequester: TelemetryRequester,
     private val telemetryStore: TelemetryStore,
     private val messageStore: MessageStore,
+    private val parameterStore: ParameterStore,
     private val activeVehicle: ActiveVehicle,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository,
@@ -164,8 +166,10 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Marked on arrival, not when the watchdog gets to it.
                         val at = timeSource.markNow()
                         messageStore.record(received, at)
+                        parameterStore.record(received)
                         if (telemetryStore.record(received, at)) {
                             messageStore.rebooted(SystemId(received.systemId), received.session)
+                            parameterStore.rebooted(SystemId(received.systemId), received.session)
                             events.send(Event.Rebooted(SystemId(received.systemId), received.session))
                         }
                         HeartbeatMapper.vehicleStateOf(received)?.let { state ->
@@ -262,6 +266,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         mutableVehicles.value = emptyMap()
         telemetryStore.startSession(to)
         messageStore.startSession(to)
+        parameterStore.startSession(to)
         do {
             val drained = activeLinkChanges.tryReceive().isSuccess
         } while (drained)
