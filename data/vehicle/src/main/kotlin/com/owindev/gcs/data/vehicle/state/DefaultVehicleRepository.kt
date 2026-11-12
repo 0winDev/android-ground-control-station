@@ -18,11 +18,11 @@ import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.LINK_STOP_TIMEOUT
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.SessionId
+import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.message.MessageStore
 import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
-import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
 import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -43,7 +43,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -115,12 +114,8 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val mutableVehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val events = Channel<Event>(Channel.UNLIMITED)
 
-    /**
-     * Each change of the active vehicle's link, for the telemetry job: its target when it becomes CONNECTED or
-     * reboots while CONNECTED, `null` when it is lost. A channel, not a state: two changes in a row must both
-     * arrive, and there is a single consumer, so nothing is replayed to a late one.
-     */
-    private val activeLinkChanges = Channel<TelemetryTarget?>(Channel.UNLIMITED)
+    private val activeLinkChanges = ActiveLinkChanges()
+    private val telemetryTargets = activeLinkChanges.newConsumer()
 
     /** Where each vehicle's last HEARTBEAT came from; written only by the watchdog. */
     @Volatile
@@ -139,7 +134,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         scope.launch { listenWhileObserved() }
         scope.launch { session.session.collect { current -> events.send(Event.SessionChanged(current)) } }
         scope.launch { whileLive { heartbeatSender.run(::activeAddressWhileConnected) } }
-        scope.launch { whileLive { telemetryRequester.run(activeLinkChanges.receiveAsFlow(), ::activeHeardNow) } }
+        scope.launch { whileLive { telemetryRequester.run(telemetryTargets, ::activeHeardNow) } }
         mutableVehicles.asStateFlow()
     }
 
@@ -240,7 +235,6 @@ internal class DefaultVehicleRepository @Inject constructor(
             mutableVehicles.update { vehicles ->
                 vehicles.mapValues { (_, vehicle) -> vehicle.copy(link = VehicleLink.LOST) }
             }
-            activeLinkChanges.trySend(null)
             activeLinkChanges.close()
         }
     }
@@ -267,10 +261,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         telemetryStore.startSession(to)
         messageStore.startSession(to)
         parameterStore.startSession(to)
-        do {
-            val drained = activeLinkChanges.tryReceive().isSuccess
-        } while (drained)
-        activeLinkChanges.trySend(null)
+        activeLinkChanges.restart()
         return to
     }
 
@@ -285,12 +276,12 @@ internal class DefaultVehicleRepository @Inject constructor(
         // Only the live vehicle is ever asked for anything: a replayed one has no address to send to.
         if (systemId == activeVehicle.systemId.value && vehicle.origin == DataOrigin.LIVE && vehicle.link != before) {
             val target = if (vehicle.link == VehicleLink.CONNECTED) {
-                TelemetryTarget(systemId, addresses.getValue(systemId))
+                VehicleTarget(systemId, addresses.getValue(systemId))
             } else {
                 uplink.reset()
                 null
             }
-            activeLinkChanges.trySend(target)
+            activeLinkChanges.announce(target)
         }
     }
 
@@ -305,7 +296,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         val vehicle = mutableVehicles.value[systemId]
         val connected = vehicle?.link == VehicleLink.CONNECTED && vehicle.origin == DataOrigin.LIVE
         if (systemId == activeVehicle.systemId.value && connected) {
-            activeLinkChanges.trySend(TelemetryTarget(systemId, addresses.getValue(systemId)))
+            activeLinkChanges.announce(VehicleTarget(systemId, addresses.getValue(systemId)))
         }
     }
 
