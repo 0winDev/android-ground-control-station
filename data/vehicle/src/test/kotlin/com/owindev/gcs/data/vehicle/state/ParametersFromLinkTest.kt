@@ -79,6 +79,21 @@ class ParametersFromLinkTest {
             result shouldBeEqualTo mapOf(BatteryParameter.LOW_VOLT to LOW_VOLTS)
         }
 
+    @Test
+    fun `GIVEN the active vehicle WHEN ArduCopter answers a whole round THEN the store keeps all nine`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                *SITL_ROUND.keys.map { fixture -> GAP to fixture }.toTypedArray(),
+            )
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(ROUND_HEARD)
+            val result = parameterStore.parameters.value.values
+
+            result shouldBeEqualTo SITL_ROUND.values.toMap()
+        }
+
     @Tag("REQ-019")
     @Test
     fun `GIVEN the active vehicle LOST WHEN it is heard again THEN its parameters are requested again`() =
@@ -149,8 +164,24 @@ private fun emptySource(): DatagramSource = object : DatagramSource {
 private const val BATT_LOW_VOLT = "derived/param-value-batt-low-volt.bin"
 private const val LOW_VOLTS = 10.5f
 
+/** ArduCopter 4.7.3-beta's real answers, with the values pymavlink decodes (resources `README.md`). */
+private val SITL_ROUND = mapOf(
+    "param/batt-monitor.bin" to (BatteryParameter.MONITOR to 4f),
+    "param/batt-low-volt.bin" to (BatteryParameter.LOW_VOLT to 10.8f),
+    "param/batt-crt-volt.bin" to (BatteryParameter.CRT_VOLT to 0f),
+    "param/batt-low-mah.bin" to (BatteryParameter.LOW_MAH to 0f),
+    "param/batt-crt-mah.bin" to (BatteryParameter.CRT_MAH to 0f),
+    "param/batt-low-timer.bin" to (BatteryParameter.LOW_TIMER to 10f),
+    "param/batt-capacity.bin" to (BatteryParameter.CAPACITY to 3000f),
+    "param/batt-fs-low-act.bin" to (BatteryParameter.FS_LOW_ACT to 2f),
+    "param/batt-fs-crt-act.bin" to (BatteryParameter.FS_CRT_ACT to 0f),
+)
+
 /** Every datagram delivered, well within the 3 s link-loss timeout (REQ-017). */
 private const val HEARD = 500L
+
+/** A HEARTBEAT and the nine answers, [GAP] apart, all delivered and still within the link-loss timeout. */
+private const val ROUND_HEARD = 1_500L
 
 /** `time_boot_ms` 4000000000 and then 397119 (pymavlink): back by far more than the reboot backstep. */
 private const val ATTITUDE_LONG_UP = "derived/attitude-edges.bin"
