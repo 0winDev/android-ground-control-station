@@ -307,14 +307,14 @@ class BatteryParameterRequesterTest {
         // The first request times out at 1 s, so the second one is in flight when the vehicle is lost.
         const val ONE_AND_A_HALF_TIMEOUTS = 1_500L
 
-        // Eight answers of 50 ms each take 400 ms.
+        // Nine answers of 50 ms each take 450 ms.
         const val AFTER_A_ROUND = 1_000L
 
-        // Past the longest round here, a reboot's second one after eight lost requests of 1 s each.
+        // Past the longest round here, a reboot's second one after nine lost requests of 1 s each.
         const val LONG_AFTER_EVERY_ROUND = 60_000L
 
         const val SITL_LINE = "BATT_MONITOR=4.0 BATT_LOW_VOLT=10.5 BATT_CRT_VOLT=0.0 BATT_LOW_MAH=0.0 " +
-            "BATT_CRT_MAH=0.0 BATT_CAPACITY=3300.0 BATT_FS_LOW_ACT=0.0 BATT_FS_CRT_ACT=0.0"
+            "BATT_CRT_MAH=0.0 BATT_LOW_TIMER=10.0 BATT_CAPACITY=3300.0 BATT_FS_LOW_ACT=0.0 BATT_FS_CRT_ACT=0.0"
 
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val TARGET = VehicleTarget(SystemId(MESSAGE_SYSTEM_1), VEHICLE_ADDRESS)

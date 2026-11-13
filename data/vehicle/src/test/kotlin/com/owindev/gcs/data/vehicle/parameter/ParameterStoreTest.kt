@@ -30,7 +30,7 @@ class ParameterStoreTest {
     }
 
     @Test
-    fun `GIVEN the active vehicle WHEN it sends its eight battery parameters THEN each is kept with its value`() {
+    fun `GIVEN the active vehicle WHEN it sends its nine battery parameters THEN each is kept with its value`() {
         activeVehicle.pinFirst(SystemId(MESSAGE_SYSTEM_1), FIRST_SESSION)
 
         SITL_BATTERY_PARAMETERS.forEach { store.record(received(it, FIRST_SESSION)) }
@@ -298,6 +298,7 @@ class ParameterStoreTest {
             BatteryParameter.CRT_VOLT to 0f,
             BatteryParameter.LOW_MAH to 0f,
             BatteryParameter.CRT_MAH to 0f,
+            BatteryParameter.LOW_TIMER to 10f,
             BatteryParameter.CAPACITY to 3300f,
             BatteryParameter.FS_LOW_ACT to 0f,
             BatteryParameter.FS_CRT_ACT to 0f,
