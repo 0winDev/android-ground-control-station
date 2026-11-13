@@ -20,9 +20,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Reads the active vehicle's [BatteryParameter]s each time it becomes CONNECTED or reboots while CONNECTED (REQ-028),
  * then logs each change of them for as long as it stays so.
  *
- * `BATT_MONITOR` is read first: at 0 ArduPilot hides the rest of its group (`AP_PARAM_FLAG_ENABLE`, `AP_Param.h`)
- * and answers a request for one with PARAM_ERROR, which the codec does not decode, so nothing else is asked; nor while
- * it is unknown. The others are asked one at a time, skipping any value the vehicle sent during the round. Each request
+ * `BATT_MONITOR` is read first: at 0 there is no battery monitor, so no battery failsafe, and ArduPilot drops the rest
+ * of its group from its parameter list (`AP_PARAM_FLAG_ENABLE`, `AP_Param.h`) while still answering each by name with
+ * a value it does not use (SITL, 4.7.3), so nothing else is asked; nor while it is unknown. The others are asked one at
+ * a time, skipping any value the vehicle sent during the round. Each request
  * is one PARAM_REQUEST_READ by name to the autopilot (`MAV_COMP_ID_AUTOPILOT1`); its answer is read from the
  * [ParameterStore], which the vehicle repository's listener fills, never from the link, so waiting never opens the
  * socket again (#39). A request unanswered within [ANSWER_TIMEOUT] is sent again, [MAX_ATTEMPTS] times in all, since a
@@ -33,8 +34,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  * or a request cannot be sent; the next CONNECTED starts a new one.
  *
  * Known limits:
- * - a `BATT_MONITOR` changed from 0 on the vehicle takes effect only after its reboot, which starts a new round;
- * - PARAM_VALUE is unsigned until v0.6, so a forged one can set a value (`docs/security.md`, N-2).
+ * - `BATT_MONITOR` takes effect only after the vehicle's reboot (`@RebootRequired`), both ways: raised from 0, the
+ *   other values are read by the round that reboot starts; lowered to 0 from another GCS, the store shows no monitor
+ *   at once while the vehicle still monitors, and acts, until it reboots;
+ * - values are kept while the vehicle is LOST, as last read: whoever shows them must combine them with the link state;
+ * - PARAM_VALUE is unsigned until v0.6, so a forged one can set a value (`docs/security.md`, K-2 and N-2).
  */
 @Singleton
 internal class BatteryParameterRequester @Inject constructor(
@@ -115,7 +119,7 @@ internal class BatteryParameterRequester @Inject constructor(
     private enum class Outcome { ANSWERED, UNANSWERED, STOPPED }
 
     companion object {
-        /** How long to wait for each PARAM_VALUE before asking again. */
+        /** How long to wait for each PARAM_VALUE before asking again; SITL answered within 9–122 ms (#101). */
         val ANSWER_TIMEOUT: Duration = 1.seconds
 
         /** Requests sent for one parameter in a round, the first included. */
