@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.link
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
+import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamRequestRead
 import com.owindev.gcs.core.mavlink.MavlinkMessages
 import com.owindev.gcs.core.mavlink.MavlinkParser
 import com.owindev.gcs.core.testing.coVerifyNever
@@ -91,6 +92,25 @@ class GcsMessageSenderTest {
             Header(sequence = 3, messageId = COMMAND_LONG_ID),
         )
     }
+
+    @Tag("REQ-028")
+    @Test
+    fun `GIVEN HEARTBEATs and PARAM_REQUEST_READs WHEN sending them in turn THEN they share one sequence number`() =
+        runTest {
+            sender.send(HEARTBEAT, PEER)
+            sender.send(PARAM_REQUEST, PEER)
+            sender.send(HEARTBEAT, PEER)
+
+            val result = sender.send(PARAM_REQUEST, PEER)
+
+            result shouldBeEqualTo SendResult.Sent
+            sent.map(::headerOf) shouldBeEqualTo listOf(
+                Header(sequence = 0, messageId = HEARTBEAT_ID),
+                Header(sequence = 1, messageId = PARAM_REQUEST_READ_ID),
+                Header(sequence = 2, messageId = HEARTBEAT_ID),
+                Header(sequence = 3, messageId = PARAM_REQUEST_READ_ID),
+            )
+        }
 
     @Test
     fun `GIVEN a closed link and then a failure WHEN sending THEN the sequence number only advances once sent`() =
@@ -285,6 +305,7 @@ class GcsMessageSenderTest {
     private companion object {
         const val HEARTBEAT_ID = 0
         const val COMMAND_LONG_ID = 76
+        const val PARAM_REQUEST_READ_ID = 20
         const val SENDS_AT_ONCE = 10
         const val SEND_TIME = 10L
         const val SEQUENCE_NUMBERS = 256
@@ -293,6 +314,7 @@ class GcsMessageSenderTest {
         val PEER = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OPEN_ROUTE = CommandRoute.Open(PEER)
         val HEARTBEAT = GcsHeartbeatSender.GCS_HEARTBEAT
+        val PARAM_REQUEST = ParamRequestRead(targetSystem = 1, targetComponent = 1, paramId = "BATT_MONITOR")
         val COMMAND = CommandLong(
             targetSystem = 1,
             targetComponent = 1,

@@ -24,6 +24,7 @@ import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.BatteryParameterRequester
 import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
 import com.owindev.gcs.data.vehicle.recording.RecordingsFolder
@@ -98,6 +99,7 @@ class ReplayPipelineTest {
     fun setUp() {
         mockkStatic(Log::class)
         every { Log.w(any(), any<String>()) } returns 0
+        every { Log.i(any(), any<String>()) } returns 0
         every { transport.datagrams() } returns silentSocket()
         session = LinkSession(
             live = transport,
@@ -108,15 +110,17 @@ class ReplayPipelineTest {
             activeVehicle = activeVehicle,
         )
         val sender = GcsMessageSender(transport, recorder, session)
+        val parameterStore = ParameterStore(activeVehicle)
         vehicles = DefaultVehicleRepository(
             session = session,
             timeSource = clock,
             rule = LinkLossRule(),
             heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
+            parameterRequester = BatteryParameterRequester(sender, parameterStore),
             telemetryStore = store,
             messageStore = MessageStore(activeVehicle, PreArmRule()),
-            parameterStore = ParameterStore(activeVehicle),
+            parameterStore = parameterStore,
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,
@@ -360,15 +364,17 @@ class ReplayPipelineTest {
     /** A vehicle repository like the app's, timed on [timeSource] instead of the pipeline's clock itself. */
     private fun vehiclesOn(timeSource: TimeSource.WithComparableMarks): DefaultVehicleRepository {
         val sender = GcsMessageSender(transport, recorder, session)
+        val parameterStore = ParameterStore(activeVehicle)
         return DefaultVehicleRepository(
             session = session,
             timeSource = timeSource,
             rule = LinkLossRule(),
             heartbeatSender = GcsHeartbeatSender(sender, uplinkOnTestClock()),
             telemetryRequester = TelemetryRequester(sender, session, store, StalenessRule(), clock),
+            parameterRequester = BatteryParameterRequester(sender, parameterStore),
             telemetryStore = store,
             messageStore = MessageStore(activeVehicle, PreArmRule()),
-            parameterStore = ParameterStore(activeVehicle),
+            parameterStore = parameterStore,
             uplink = uplinkOnTestClock(),
             activeVehicle = activeVehicle,
             scope = testScope.backgroundScope,

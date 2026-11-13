@@ -14,6 +14,7 @@ import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
+import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.message.MessageStore
 import com.owindev.gcs.data.vehicle.parameter.ParameterStore
@@ -22,7 +23,6 @@ import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
-import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -55,7 +55,7 @@ class SessionChangeTest {
     private val testScope = TestScope()
     private val transport: UdpTransport = mockk()
     private val telemetryRequester: TelemetryRequester = mockk()
-    private val targets = mutableListOf<Flow<TelemetryTarget?>>()
+    private val targets = mutableListOf<Flow<VehicleTarget?>>()
     private val activeVehicle = ActiveVehicle()
     private val uplink = DefaultUplinkRepository(testScope.testScheduler.timeSource)
     private val session = LinkSession(
@@ -80,6 +80,7 @@ class SessionChangeTest {
                 uplinkOnTestClock(),
             ),
             telemetryRequester = telemetryRequester,
+            parameterRequester = idleParameterRequester(),
             telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
             messageStore = MessageStore(activeVehicle, PreArmRule()),
             parameterStore = ParameterStore(activeVehicle),

@@ -10,8 +10,8 @@ import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.link.isForThisGcs
-import java.net.InetSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -26,9 +26,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
-
-/** The vehicle to request telemetry from, and the address its HEARTBEATs come from. */
-internal data class TelemetryTarget(val systemId: SystemId, val address: InetSocketAddress)
 
 /** What came of requesting one stream. */
 internal sealed interface StreamResult {
@@ -102,7 +99,7 @@ internal class TelemetryRequester @Inject constructor(
      * vehicle to ask (none active, or the active one is not CONNECTED); whatever is in progress is cancelled
      * then.
      */
-    suspend fun run(targets: Flow<TelemetryTarget?>, isHeard: () -> Boolean) {
+    suspend fun run(targets: Flow<VehicleTarget?>, isHeard: () -> Boolean) {
         targets.collectLatest { target ->
             if (target != null) {
                 requestAll(target)
@@ -112,7 +109,7 @@ internal class TelemetryRequester @Inject constructor(
     }
 
     /** Requests every stream from [target], one after the other, and returns their results in order. */
-    suspend fun requestAll(target: TelemetryTarget): List<StreamResult> =
+    suspend fun requestAll(target: VehicleTarget): List<StreamResult> =
         TELEMETRY_STREAMS.map { stream -> request(target, stream).also { result -> report(stream, result) } }
 
     /** The streams whose silence is watched, with the part of the telemetry that tells it. */
@@ -126,7 +123,7 @@ internal class TelemetryRequester @Inject constructor(
      * message that arrived in the meantime moves that stream's turn later. A turn that comes while the vehicle
      * is not [isHeard] is skipped, not sent, and waits a whole interval again.
      */
-    private suspend fun requestAgainWhenSilent(target: TelemetryTarget, isHeard: () -> Boolean): Nothing {
+    private suspend fun requestAgainWhenSilent(target: VehicleTarget, isHeard: () -> Boolean): Nothing {
         val requestedAt = watched.keys.associateWithTo(mutableMapOf()) { timeSource.markNow() }
         while (true) {
             val untilDue = watched.mapValues { (stream, kind) -> untilDue(target, kind, requestedAt.getValue(stream)) }
@@ -141,14 +138,14 @@ internal class TelemetryRequester @Inject constructor(
     }
 
     /** How long until the stream of [kind] is due to be requested again; zero or less when it is due now. */
-    private fun untilDue(target: TelemetryTarget, kind: TelemetryKind, requestedAt: TimeMark): Duration {
+    private fun untilDue(target: VehicleTarget, kind: TelemetryKind, requestedAt: TimeMark): Duration {
         val silence = store.telemetry.value[target.systemId]?.get(kind)?.receivedAt?.elapsedNow()
         val untilStale = if (silence == null) Duration.ZERO else rule.thresholdOf(kind) - silence
         val untilAllowed = REQUEST_AGAIN_INTERVAL - requestedAt.elapsedNow()
         return maxOf(untilStale, untilAllowed)
     }
 
-    private suspend fun request(target: TelemetryTarget, stream: TelemetryStream): StreamResult = coroutineScope {
+    private suspend fun request(target: VehicleTarget, stream: TelemetryStream): StreamResult = coroutineScope {
         // Listening before sending, so an answer faster than the send's return is not missed.
         val ack = async(start = CoroutineStart.UNDISPATCHED) {
             withTimeoutOrNull(ACK_TIMEOUT) { session.messages.first { it.isFinalAckFrom(target) } }
@@ -164,7 +161,7 @@ internal class TelemetryRequester @Inject constructor(
         }
     }
 
-    private fun ReceivedMessage.isFinalAckFrom(target: TelemetryTarget): Boolean {
+    private fun ReceivedMessage.isFinalAckFrom(target: VehicleTarget): Boolean {
         val ack = message as? CommandAck ?: return false
         return systemId == target.systemId.value &&
             componentId == MAV_COMP_ID_AUTOPILOT1 &&

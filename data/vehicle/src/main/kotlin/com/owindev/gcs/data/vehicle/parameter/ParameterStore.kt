@@ -50,8 +50,15 @@ internal class ParameterStore @Inject constructor(private val activeVehicle: Act
 
     /** [systemId] rebooted in [session] (#69): what it sent before may have changed, so all of it is forgotten. */
     fun rebooted(systemId: SystemId, session: SessionId) = synchronized(lock) {
+        if (session == this.session) forgetHoldingLock(systemId)
+    }
+
+    /** Forgets what [systemId] sent in the current session, so that it is read again. */
+    fun forget(systemId: SystemId) = synchronized(lock) { forgetHoldingLock(systemId) }
+
+    private fun forgetHoldingLock(systemId: SystemId) {
         val followed = mutableParameters.value
-        if (session == this.session && followed.systemId == systemId && followed.values.isNotEmpty()) {
+        if (followed.systemId == systemId && followed.values.isNotEmpty()) {
             mutableParameters.value = followed.copy(values = emptyMap())
         }
     }

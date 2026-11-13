@@ -4,6 +4,8 @@ import org.amshove.kluent.shouldBeEqualTo
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 @Tag("REQ-028")
 class FailsafeActionReadTest {
@@ -22,6 +24,22 @@ class FailsafeActionReadTest {
         val result = action.of(code)
 
         result shouldBeEqualTo FailsafeAction.Acts(code)
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = [1, 7])
+    fun `GIVEN the ends of ArduCopter's actions WHEN reading the action THEN acts with that code`(code: Int) {
+        val result = action.of(code)
+
+        result shouldBeEqualTo FailsafeAction.Acts(code)
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = [8, 127, -1, -128])
+    fun `GIVEN a code ArduCopter has no action for WHEN reading the action THEN is unknown`(code: Int) {
+        val result = action.of(code)
+
+        result shouldBeEqualTo FailsafeAction.Unknown
     }
 
     @Test
