@@ -81,6 +81,8 @@
     <string name="hud_alert_battery_critical_percent">Batería crítica (%1$d %%)</string>
     <string name="hud_alert_battery_low">Batería baja</string>
     <string name="hud_alert_battery_low_percent">Batería baja (%1$d %%)</string>
+    <string name="hud_alert_battery_critical_volts">Batería crítica (%1$.2f V)</string>
+    <string name="hud_alert_battery_low_volts">Batería baja (%1$.2f V)</string>
     <string name="hud_alert_battery_unhealthy">Batería con fallo o en failsafe</string>
     <string name="hud_alert_battery_unknown">Estado de la batería desconocido</string>
     <string name="hud_alert_gps_fix_lost">Sin fix GPS 3D</string>

@@ -2,7 +2,10 @@ package com.owindev.gcs.data.vehicle.alert
 
 import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
+import com.owindev.gcs.core.domain.alert.AlertInput
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.alert.AlertState
+import com.owindev.gcs.core.domain.battery.BatteryThresholds
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
@@ -45,7 +48,11 @@ class BootBatteryAlertTest {
     fun `GIVEN the real boot SYS_STATUS WHEN the vehicle is disarmed THEN the battery is unknown, not an emergency`() {
         val telemetry = bootTelemetry()
 
-        val result = rule.evaluate(emptyList(), telemetry, armed = false, clock.markNow() - SETTLED, ::nextOccurrence)
+        val result = rule.evaluate(
+            previous = AlertState(),
+            input = AlertInput(telemetry, BatteryThresholds.UNKNOWN, armed = false, clock.markNow() - SETTLED),
+            nextOccurrence = ::nextOccurrence,
+        ).active
 
         result shouldBeEqualTo
             listOf(
@@ -57,7 +64,11 @@ class BootBatteryAlertTest {
     fun `GIVEN the real boot SYS_STATUS WHEN the vehicle is armed THEN the battery is an emergency`() {
         val telemetry = bootTelemetry()
 
-        val result = rule.evaluate(emptyList(), telemetry, armed = true, clock.markNow() - SETTLED, ::nextOccurrence)
+        val result = rule.evaluate(
+            previous = AlertState(),
+            input = AlertInput(telemetry, BatteryThresholds.UNKNOWN, armed = true, clock.markNow() - SETTLED),
+            nextOccurrence = ::nextOccurrence,
+        ).active
 
         result shouldBeEqualTo listOf(
             ActiveAlert(Alert.BatteryUnhealthy, occurrence = 2, raisedAt = clock.markNow(), origin = DataOrigin.LIVE),

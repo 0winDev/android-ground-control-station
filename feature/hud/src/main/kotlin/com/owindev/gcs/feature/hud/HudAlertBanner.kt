@@ -37,6 +37,7 @@ import com.owindev.gcs.core.designsystem.R as DesignSystemR
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import kotlinx.coroutines.delay
 
@@ -80,7 +81,7 @@ private fun ShowingBanner(banner: AlertBanner.Showing, onAcknowledge: (occurrenc
                 text = stringResource(
                     id = R.string.hud_alert_banner,
                     stringResource(id = style.label),
-                    banner.alert.message(banner.batteryRemaining),
+                    banner.alert.message(banner.batteryRemaining, banner.batteryVoltage),
                 ),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
@@ -177,16 +178,15 @@ private fun AcknowledgedBanner(count: Int, level: AlertLevel, recorded: Boolean)
 }
 
 @Composable
-private fun Alert.message(batteryRemaining: Int?): String = when (this) {
-    Alert.BatteryCritical ->
-        batteryRemaining
-            ?.let { stringResource(id = R.string.hud_alert_battery_critical_percent, it) }
-            ?: stringResource(id = R.string.hud_alert_battery_critical)
+private fun Alert.message(batteryRemaining: Int?, batteryVoltage: Double?): String = when (this) {
+    is Alert.BatteryCritical, Alert.BatteryVoltageCritical ->
+        batteryLevelMessage(critical = true, batteryRemaining, batteryVoltage)
 
-    Alert.BatteryLow ->
-        batteryRemaining
-            ?.let { stringResource(id = R.string.hud_alert_battery_low_percent, it) }
-            ?: stringResource(id = R.string.hud_alert_battery_low)
+    is Alert.BatteryLow, Alert.BatteryVoltageLow -> batteryLevelMessage(
+        critical = false,
+        batteryRemaining,
+        batteryVoltage,
+    )
 
     Alert.BatteryUnhealthy -> stringResource(id = R.string.hud_alert_battery_unhealthy)
 
@@ -195,6 +195,22 @@ private fun Alert.message(batteryRemaining: Int?): String = when (this) {
     Alert.GpsFixLost -> stringResource(id = R.string.hud_alert_gps_fix_lost)
 
     is Alert.TelemetryStale -> stringResource(id = staleMessageOf(kind))
+}
+
+/** The [AlertBanner.Showing] gives a remaining energy only for an energy alert, a voltage only for a voltage one. */
+@Composable
+private fun batteryLevelMessage(critical: Boolean, remaining: Int?, voltage: Double?): String = when {
+    remaining != null -> stringResource(
+        id = if (critical) R.string.hud_alert_battery_critical_percent else R.string.hud_alert_battery_low_percent,
+        remaining,
+    )
+
+    voltage != null -> stringResource(
+        id = if (critical) R.string.hud_alert_battery_critical_volts else R.string.hud_alert_battery_low_volts,
+        voltage,
+    )
+
+    else -> stringResource(id = if (critical) R.string.hud_alert_battery_critical else R.string.hud_alert_battery_low)
 }
 
 @StringRes
@@ -256,18 +272,18 @@ private fun AlertBannerPreview() {
         Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content)) {
             AlertBannerContent(
                 banner = AlertBanner.Showing(
-                    alert = Alert.BatteryCritical,
+                    alert = Alert.BatteryVoltageCritical,
                     occurrence = 3,
                     acknowledgeable = false,
                     others = 2,
                     othersLevel = AlertLevel.CAUTION,
-                    batteryRemaining = 9,
+                    batteryVoltage = 9.82,
                 ),
                 onAcknowledge = {},
             )
             AlertBannerContent(
                 banner = AlertBanner.Showing(
-                    alert = Alert.BatteryLow,
+                    alert = Alert.BatteryLow(EnergyLimitSource.VEHICLE),
                     occurrence = 2,
                     acknowledgeable = true,
                     others = 1,

@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.link.LinkRepository
 import com.owindev.gcs.core.domain.link.LinkTraffic
@@ -107,12 +108,12 @@ class HudViewModelAlertTest {
                         battery = Timed(LOW_BATTERY, testScheduler.timeSource.markNow()),
                         origin = DataOrigin.LIVE,
                     )
-                activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = 1)))
+                activeAlerts.value = Alerts.Evaluated(listOf(raised(VEHICLE_LOW, occurrence = 1)))
 
                 val result = viewModel.state.testIn(backgroundScope)
 
                 result.expectMostRecentItem().alertBanner() shouldBeEqualTo AlertBanner.Showing(
-                    alert = Alert.BatteryLow,
+                    alert = VEHICLE_LOW,
                     occurrence = 1,
                     acknowledgeable = true,
                     others = 0,
@@ -126,7 +127,7 @@ class HudViewModelAlertTest {
     fun `GIVEN an emergency WHEN the link is lost THEN link lost shows and no banner`() = runTest {
         turbineScope {
             heardVehicle(VehicleLink.LOST, heardAgo = TIMEOUT)
-            activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryCritical, occurrence = 1)))
+            activeAlerts.value = Alerts.Evaluated(listOf(raised(VEHICLE_CRITICAL, occurrence = 1)))
 
             val result = viewModel.state.testIn(backgroundScope)
 
@@ -212,7 +213,7 @@ class HudViewModelAlertTest {
                 activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = OCCURRENCE)))
                 viewModel.state.launchIn(backgroundScope)
                 delay(ACKNOWLEDGE_GUARD)
-                activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = NEXT_OCCURRENCE)))
+                activeAlerts.value = Alerts.Evaluated(listOf(raised(VEHICLE_LOW, occurrence = NEXT_OCCURRENCE)))
 
                 viewModel.onAlertAcknowledged(occurrence = OCCURRENCE)
 
@@ -229,7 +230,7 @@ class HudViewModelAlertTest {
             activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.GpsFixLost, occurrence = OCCURRENCE)))
             viewModel.state.launchIn(backgroundScope)
             delay(ACKNOWLEDGE_GUARD)
-            activeAlerts.value = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = NEXT_OCCURRENCE)))
+            activeAlerts.value = Alerts.Evaluated(listOf(raised(VEHICLE_LOW, occurrence = NEXT_OCCURRENCE)))
 
             viewModel.onAlertAcknowledged(occurrence = NEXT_OCCURRENCE)
 
@@ -283,3 +284,6 @@ private val LOW_BATTERY = Battery(
 )
 
 private fun HudUiState.alertBanner(): AlertBanner? = (this as? HudUiState.Connected)?.alert
+
+private val VEHICLE_LOW = Alert.BatteryLow(EnergyLimitSource.VEHICLE)
+private val VEHICLE_CRITICAL = Alert.BatteryCritical(EnergyLimitSource.VEHICLE)

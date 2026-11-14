@@ -90,6 +90,8 @@
     <string name="hud_alert_battery_critical_percent">Battery critical (%1$d %%)</string>
     <string name="hud_alert_battery_low">Battery low</string>
     <string name="hud_alert_battery_low_percent">Battery low (%1$d %%)</string>
+    <string name="hud_alert_battery_critical_volts">Battery critical (%1$.2f V)</string>
+    <string name="hud_alert_battery_low_volts">Battery low (%1$.2f V)</string>
     <string name="hud_alert_battery_unhealthy">Battery unhealthy or in failsafe</string>
     <string name="hud_alert_battery_unknown">Battery state unknown</string>
     <string name="hud_alert_gps_fix_lost">No 3D GPS fix</string>

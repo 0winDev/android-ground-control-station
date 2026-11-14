@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
@@ -137,7 +138,7 @@ class DefaultAlertRepositoryTest {
 
             result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(1)))
             verifyOnce {
-                Log.i(TAG, "Alert raised: BatteryLow (caution)")
+                Log.i(TAG, "Alert raised: BatteryLow(source=GCS_UNREAD) (caution)")
             }
         }
 
@@ -240,7 +241,7 @@ class DefaultAlertRepositoryTest {
 
         result shouldBeEqualTo Alerts.Evaluated(listOf(LOW.raised(1, acknowledged = true)))
         verifyOnce {
-            Log.i(TAG, "Alert acknowledged: BatteryLow (caution)")
+            Log.i(TAG, "Alert acknowledged: BatteryLow(source=GCS_UNREAD) (caution)")
         }
     }
 
@@ -272,7 +273,7 @@ class DefaultAlertRepositoryTest {
 
             result shouldBeEqualTo Alerts.Evaluated(listOf(CRITICAL.raised(1)))
             verifyNever {
-                Log.i(TAG, "Alert acknowledged: BatteryCritical (emergency)")
+                Log.i(TAG, "Alert acknowledged: BatteryCritical(source=GCS_UNREAD) (emergency)")
             }
         }
 
@@ -289,7 +290,7 @@ class DefaultAlertRepositoryTest {
 
             result shouldBeEqualTo Alerts.NotEvaluated
             verifyOnce {
-                Log.i(TAG, "Alert cleared: BatteryLow (caution)")
+                Log.i(TAG, "Alert cleared: BatteryLow(source=GCS_UNREAD) (caution)")
             }
         }
 
@@ -436,8 +437,8 @@ private val VEHICLE = SystemId(1)
 private val OTHER_VEHICLE = SystemId(2)
 
 private val NONE = emptyList<ActiveAlert>()
-private val LOW = Alert.BatteryLow
-private val CRITICAL = Alert.BatteryCritical
+private val LOW = Alert.BatteryLow(EnergyLimitSource.GCS_UNREAD)
+private val CRITICAL = Alert.BatteryCritical(EnergyLimitSource.GCS_UNREAD)
 private val STALE_GPS = Alert.TelemetryStale(TelemetryKind.GPS)
 private val UNKNOWN = Alert.BatteryUnknown
 private val UNHEALTHY = Alert.BatteryUnhealthy
