@@ -681,7 +681,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN custom thresholds WHEN evaluating an energy THEN uses them`() {
-        val custom = AlertRule(StalenessRule(), BatteryThresholds(low = 30, critical = 15, hysteresis = 5), clock)
+        val custom = AlertRule(StalenessRule(), GcsEnergyThresholds(low = 30, critical = 15, hysteresis = 5), clock)
 
         val result = listOf(31, 30, 15).map { remaining ->
             custom.evaluate(NONE, telemetry(battery(remaining)), ARMED, evaluatingSince, ::nextOccurrence)
@@ -692,7 +692,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN a critical threshold not below the low one WHEN creating the thresholds THEN is rejected`() {
-        val creating = { BatteryThresholds(low = 20, critical = 20) }
+        val creating = { GcsEnergyThresholds(low = 20, critical = 20) }
 
         val result = invoking(creating)
 
@@ -701,7 +701,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN a negative critical threshold WHEN creating the thresholds THEN is rejected`() {
-        val creating = { BatteryThresholds(critical = -1) }
+        val creating = { GcsEnergyThresholds(critical = -1) }
 
         val result = invoking(creating)
 
@@ -710,7 +710,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN no hysteresis WHEN creating the thresholds THEN is rejected`() {
-        val creating = { BatteryThresholds(hysteresis = 0) }
+        val creating = { GcsEnergyThresholds(hysteresis = 0) }
 
         val result = invoking(creating)
 
@@ -719,7 +719,7 @@ class AlertRuleTest {
 
     @Test
     fun `GIVEN a low threshold whose hysteresis passes 100 percent WHEN creating the thresholds THEN is rejected`() {
-        val creating = { BatteryThresholds(low = 98, hysteresis = 3) }
+        val creating = { GcsEnergyThresholds(low = 98, hysteresis = 3) }
 
         val result = invoking(creating)
 

@@ -26,7 +26,7 @@ import kotlin.time.TimeSource
  */
 class AlertRule(
     private val staleness: StalenessRule = StalenessRule(),
-    private val thresholds: BatteryThresholds = BatteryThresholds(),
+    private val thresholds: GcsEnergyThresholds = GcsEnergyThresholds(),
     private val timeSource: TimeSource.WithComparableMarks = TimeSource.Monotonic,
 ) {
 
@@ -134,7 +134,7 @@ class AlertRule(
         }
     }
 
-    /** Raised at or below a threshold, cleared only once the energy is [BatteryThresholds.hysteresis] above it. */
+    /** Raised at or below a threshold, cleared only once the energy is [GcsEnergyThresholds.hysteresis] above it. */
     private fun energyAlert(remaining: Int, wasActive: Set<Alert>): Alert? {
         val wasCritical = Alert.BatteryCritical in wasActive
         val wasLow = wasCritical || Alert.BatteryLow in wasActive
@@ -212,7 +212,7 @@ class AlertRule(
  * sends no remaining energy, so the battery is only [Alert.BatteryUnknown] and never low or critical; and these
  * thresholds are not the ones configured on the vehicle. A voltage rule from the vehicle's own parameters is #53.
  */
-class BatteryThresholds(val low: Int = 20, val critical: Int = 10, val hysteresis: Int = 3) {
+class GcsEnergyThresholds(val low: Int = 20, val critical: Int = 10, val hysteresis: Int = 3) {
 
     init {
         require(critical in 0 until low) { "The critical threshold must be from 0 to below the low one, was $critical" }
