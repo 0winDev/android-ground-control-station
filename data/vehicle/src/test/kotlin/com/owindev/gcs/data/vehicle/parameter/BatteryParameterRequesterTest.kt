@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.parameter
 
 import android.util.Log
+import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamRequestRead
 import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamValue
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldBeLessThan
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -71,6 +73,15 @@ class BatteryParameterRequesterTest {
             result shouldBeEqualTo ALL_IDS
             store.parameters.value.values shouldBeEqualTo SITL_VALUES
         }
+
+    @Test
+    fun `GIVEN every parameter answered on its last request WHEN a round lasts THEN ends before the alerts say so`() {
+        val parameters = BatteryParameter.entries
+
+        val result = BatteryParameterRequester.ANSWER_TIMEOUT * BatteryParameterRequester.MAX_ATTEMPTS * parameters.size
+
+        result shouldBeLessThan AlertRule.BATTERY_LIMITS_DUE
+    }
 
     @Test
     fun `GIVEN no battery monitor WHEN connected THEN nothing but BATT_MONITOR is asked for`() = testScope.runTest {

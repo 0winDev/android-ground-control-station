@@ -33,7 +33,7 @@ internal class BatteryAlertRule(
         val limits = limitsOf(input.battery)
         val voltage = battery.voltage?.takeIf { battery.monitored && it > 0.0 }
         val remaining = battery.remaining
-        val voltageJudged = limits.low.voltage is VoltageLimit.Below || limits.critical.voltage is VoltageLimit.Below
+        val voltageJudged = limits.anyVoltage { it is VoltageLimit.Below }
         val judged = voltageAlerts(voltage, limits, previous, wasActive)
         val alerts = buildSet {
             // A reading needs a monitor, so no voltage covers no monitor too.
@@ -51,11 +51,23 @@ internal class BatteryAlertRule(
             if (!battery.monitored || remaining == null) {
                 addAll(wasActive.filter(::isEnergyAlert))
             } else {
-                energyAlert(remaining, limits, wasActive)?.let(::add)
+                addAll(energyAlerts(remaining, limits, wasActive))
             }
             judged.alert?.let(::add)
+            if (limits.anyVoltage { it == VoltageLimit.NotComparable }) add(Alert.BatteryVoltageNotJudged)
         }
         return BatteryJudgement(alerts, judged.low.since, judged.critical.since)
+    }
+
+    /**
+     * Whether [Alert.BatteryLimitsNotRead] is raised: once a setting that sets a limit has stayed not read for
+     * [AlertRule.BATTERY_LIMITS_DUE] since [since], or since now if it was read until now; and the new mark, `null`
+     * once all are read.
+     */
+    fun limitsNotRead(battery: BatteryThresholds, since: TimeMark?): Held {
+        if (!battery.anyLimitUnread()) return Held(raised = false, since = null)
+        val unreadSince = since ?: timeSource.markNow()
+        return Held(raised = unreadSince.elapsedNow() >= AlertRule.BATTERY_LIMITS_DUE, since = unreadSince)
     }
 
     /** How long until each voltage debounce running in [state] ends, at the vehicle's [battery] thresholds. */
@@ -96,8 +108,20 @@ internal class BatteryAlertRule(
         }
     }
 
-    private fun crosses(remaining: Int, limit: EnergyLimit): Boolean =
-        if (limit.source == EnergyLimitSource.VEHICLE) remaining < limit.percent else remaining <= limit.percent
+    /**
+     * The energy alert at [limits]. While the vehicle's limits are not known again, as after a reboot, with an alert
+     * raised at them active, that alert is kept, since a value not known never clears one, and the energy is judged at
+     * the GCS's as well, so it can still get worse: the more urgent of the two stays, the one active if both are as
+     * urgent. Once it has got worse no alert at the vehicle's is held, so an energy that rises again clears at the
+     * GCS's thresholds; accepted, since a reboot resets the energy used and [Alert.BatteryLimitsNotRead] is up by then.
+     */
+    private fun energyAlerts(remaining: Int, limits: BatteryAlertLimits, wasActive: Set<Alert>): Set<Alert> {
+        val judged = setOfNotNull(energyAlert(remaining, limits, wasActive))
+        if (!unreadAfterVehicle(limits, wasActive)) return judged
+        val candidates = wasActive.filter(::isEnergyAlert) + judged
+        val mostUrgent = candidates.filter { it.level == candidates.maxOf(Alert::level) }
+        return setOf(mostUrgent.firstOrNull { it in wasActive } ?: mostUrgent.first())
+    }
 
     /** The critical voltage alert if raised, else the low one: a critical voltage is low as well, as for the energy. */
     private fun voltageAlerts(
@@ -120,34 +144,32 @@ internal class BatteryAlertRule(
 
     /**
      * Whether a voltage level's alert is raised now, and since when the readings have been on the other side of its
-     * threshold. A threshold that is off clears it; one not known, or no [voltage] reading, keeps it as it was and
-     * starts its debounce again. A voltage compares as the float ArduPilot compares (`check_failsafe_types`).
+     * threshold. A threshold that is off clears it; one not known or not comparable, or no [voltage] reading, keeps it
+     * as it was and starts its debounce again. A voltage compares as the float ArduPilot compares
+     * (`check_failsafe_types`).
+     *
+     * A critical level keeps the low one raised, so with a critical threshold at or above the low one, which
+     * ArduPilot refuses to arm with (`fs_voltage_inversion`), clearing the critical alert shows the low one for one
+     * more debounce.
      */
-    private fun voltageLevel(
-        voltage: Double?,
-        limit: VoltageLimit,
-        wasRaised: Boolean,
-        since: TimeMark?,
-    ): LevelJudgement = when {
-        limit == VoltageLimit.Off -> LevelJudgement(raised = false, since = null)
+    private fun voltageLevel(voltage: Double?, limit: VoltageLimit, wasRaised: Boolean, since: TimeMark?): Held = when {
+        limit == VoltageLimit.Off -> Held(raised = false, since = null)
 
-        limit !is VoltageLimit.Below || voltage == null -> LevelJudgement(raised = wasRaised, since = null)
+        limit !is VoltageLimit.Below || voltage == null -> Held(raised = wasRaised, since = null)
 
-        (voltage.toFloat() < limit.volts) == wasRaised -> LevelJudgement(raised = wasRaised, since = null)
+        (voltage.toFloat() < limit.volts) == wasRaised -> Held(raised = wasRaised, since = null)
 
         else -> {
             val crossingSince = since ?: timeSource.markNow()
             if (crossingSince.elapsedNow() >= limit.debounce) {
-                LevelJudgement(raised = !wasRaised, since = null)
+                Held(raised = !wasRaised, since = null)
             } else {
-                LevelJudgement(raised = wasRaised, since = crossingSince)
+                Held(raised = wasRaised, since = crossingSince)
             }
         }
     }
 
-    private data class VoltageJudgement(val alert: Alert?, val low: LevelJudgement, val critical: LevelJudgement)
-
-    private data class LevelJudgement(val raised: Boolean, val since: TimeMark?)
+    private data class VoltageJudgement(val alert: Alert?, val low: Held, val critical: Held)
 
     companion object {
         fun isBatteryAlert(alert: Alert): Boolean = isEnergyAlert(alert) || alert in OTHER_BATTERY_ALERTS
@@ -157,11 +179,34 @@ internal class BatteryAlertRule(
         private val OTHER_BATTERY_ALERTS: Set<Alert> = setOf(
             Alert.BatteryVoltageCritical,
             Alert.BatteryVoltageLow,
+            Alert.BatteryVoltageNotJudged,
             Alert.BatteryUnhealthy,
             Alert.BatteryUnknown,
         )
     }
 }
+
+/** A level's energy limit is not known again while an alert raised at the vehicle's is active. */
+private fun unreadAfterVehicle(limits: BatteryAlertLimits, wasActive: Set<Alert>): Boolean {
+    val unread = limits.low.energy.source == EnergyLimitSource.GCS_UNREAD ||
+        limits.critical.energy.source == EnergyLimitSource.GCS_UNREAD
+    return unread && wasActive.any { energySourceOf(it) == EnergyLimitSource.VEHICLE }
+}
+
+private fun crosses(remaining: Int, limit: EnergyLimit): Boolean =
+    if (limit.source == EnergyLimitSource.VEHICLE) remaining < limit.percent else remaining <= limit.percent
+
+private fun energySourceOf(alert: Alert): EnergyLimitSource? = when (alert) {
+    is Alert.BatteryCritical -> alert.source
+    is Alert.BatteryLow -> alert.source
+    else -> null
+}
+
+private fun BatteryAlertLimits.anyVoltage(predicate: (VoltageLimit) -> Boolean): Boolean =
+    predicate(low.voltage) || predicate(critical.voltage)
+
+/** Whether an alert is raised, and since when what would change it has lasted, `null` while nothing does. */
+internal data class Held(val raised: Boolean, val since: TimeMark?)
 
 /** The battery's alerts, and since when each voltage level's readings have been across its threshold. */
 internal data class BatteryJudgement(

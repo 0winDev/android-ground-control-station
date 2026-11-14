@@ -176,6 +176,49 @@ class BatteryVoltageAlertTest {
     }
 
     @Test
+    fun `GIVEN a critical voltage WHEN BATT_MONITOR changes in flight to type 31 THEN stays, unknown`() {
+        val currentOnly = VEHICLE.copy(monitor = BatteryMonitor.Present(MONITOR_ANALOG_CURRENT_ONLY))
+
+        val result = alertsAfter(stateWith(Alert.BatteryVoltageCritical), listOf(BELOW_CRITICAL), currentOnly)
+
+        result shouldBeEqualTo setOf(Alert.BatteryVoltageCritical, Alert.BatteryUnknown)
+    }
+
+    @Test
+    fun `GIVEN a critical voltage WHEN BATT_MONITOR changes in flight to 0 THEN stays, unknown`() {
+        val noMonitor = VEHICLE.copy(monitor = BatteryMonitor.None)
+
+        val result = alertsAfter(stateWith(Alert.BatteryVoltageCritical), listOf(BELOW_CRITICAL), noMonitor)
+
+        result shouldBeEqualTo setOf(Alert.BatteryVoltageCritical, Alert.BatteryUnknown)
+    }
+
+    @Test
+    fun `GIVEN the resting voltage sent and the raw one compared WHEN the voltage stays below THEN it is not judged`() {
+        val notComparable = VEHICLE.copy(sentVoltage = SentVoltage.MAY_BE_ABOVE_COMPARED)
+
+        val result = alertsAfter(AlertState(), List(2 * TIMER_SECONDS + 1) { BELOW_CRITICAL }, notComparable)
+
+        result shouldBeEqualTo setOf(Alert.BatteryVoltageNotJudged, Alert.BatteryUnknown)
+    }
+
+    @Test
+    fun `GIVEN the voltage not comparable and an energy WHEN evaluating THEN only says the voltage is not judged`() {
+        val notComparable = VEHICLE.copy(sentVoltage = SentVoltage.MAY_BE_ABOVE_COMPARED)
+        val telemetry = telemetryOf(
+            Battery(voltage = BELOW_CRITICAL, current = 1.0, remaining = 50, monitored = true, healthy = true),
+        )
+
+        val result = rule.evaluate(
+            AlertState(),
+            AlertInput(telemetry, notComparable, ARMED, evaluatingSince),
+            ::nextOccurrence,
+        )
+
+        result.active.map(ActiveAlert::alert) shouldBeEqualTo listOf(Alert.BatteryVoltageNotJudged)
+    }
+
+    @Test
     fun `GIVEN the thresholds not read WHEN the voltage stays below for twice the timer THEN raises nothing`() {
         val voltages = List(2 * TIMER_SECONDS + 1) { BELOW_CRITICAL }
 
@@ -246,6 +289,164 @@ class BatteryVoltageAlertTest {
         val result = energies.map { remaining -> energyAlertsOf(previous, remaining) }
 
         result shouldBeEqualTo listOf(setOf(Alert.BatteryLow(EnergyLimitSource.VEHICLE)), emptySet())
+    }
+
+    @Test
+    fun `GIVEN a low energy at the vehicle's threshold WHEN its settings are unknown again THEN stays low`() {
+        val previous = stateWith(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+
+        val result = energyAlertsOf(previous, VEHICLE_LOW_PERCENT - 5, BatteryThresholds.UNKNOWN)
+
+        result shouldBeEqualTo setOf(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+    }
+
+    @Test
+    fun `GIVEN a critical energy at the vehicle's threshold WHEN its settings are unknown again THEN stays critical`() {
+        val previous = stateWith(Alert.BatteryCritical(EnergyLimitSource.VEHICLE))
+
+        val result = energyAlertsOf(previous, VEHICLE_LOW_PERCENT - 5, BatteryThresholds.UNKNOWN)
+
+        result shouldBeEqualTo setOf(Alert.BatteryCritical(EnergyLimitSource.VEHICLE))
+    }
+
+    @Test
+    fun `GIVEN a low energy at the vehicle's threshold WHEN only BATT_LOW_MAH is unknown again THEN stays low`() {
+        val previous = stateWith(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+        val lowUnread = VEHICLE.copy(low = VEHICLE.low.copy(remainingMah = BatteryThreshold.Unknown))
+
+        val result = energyAlertsOf(previous, VEHICLE_LOW_PERCENT - 5, lowUnread)
+
+        result shouldBeEqualTo setOf(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+    }
+
+    @Test
+    fun `GIVEN a critical energy at the vehicle's threshold WHEN only BATT_CRT_MAH is unknown again THEN stays`() {
+        val previous = stateWith(Alert.BatteryCritical(EnergyLimitSource.VEHICLE))
+        val criticalUnread = VEHICLE.copy(critical = VEHICLE.critical.copy(remainingMah = BatteryThreshold.Unknown))
+
+        val result = energyAlertsOf(previous, VEHICLE_LOW_PERCENT - 5, criticalUnread)
+
+        result shouldBeEqualTo setOf(Alert.BatteryCritical(EnergyLimitSource.VEHICLE))
+    }
+
+    @Test
+    fun `GIVEN a low energy held at the vehicle's unread threshold WHEN it reaches the GCS's critical THEN critical`() {
+        val previous = stateWith(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+
+        val result = energyAlertsOf(previous, GCS_CRITICAL_PERCENT, BatteryThresholds.UNKNOWN)
+
+        result shouldBeEqualTo setOf(Alert.BatteryCritical(EnergyLimitSource.GCS_UNREAD))
+    }
+
+    @Test
+    fun `GIVEN a low energy held as BATT_CRT_MAH is unknown again WHEN it reaches the GCS's critical THEN critical`() {
+        val previous = stateWith(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+        val criticalUnread = VEHICLE.copy(critical = VEHICLE.critical.copy(remainingMah = BatteryThreshold.Unknown))
+
+        val result = energyAlertsOf(previous, GCS_CRITICAL_PERCENT, criticalUnread)
+
+        result shouldBeEqualTo setOf(Alert.BatteryCritical(EnergyLimitSource.GCS_UNREAD))
+    }
+
+    @Test
+    fun `GIVEN a low energy held at the vehicle's unread threshold WHEN low at the GCS's too THEN keeps it`() {
+        val previous = stateWith(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+
+        val result = energyAlertsOf(previous, GCS_LOW_PERCENT, BatteryThresholds.UNKNOWN)
+
+        result shouldBeEqualTo setOf(Alert.BatteryLow(EnergyLimitSource.VEHICLE))
+    }
+
+    @Test
+    fun `GIVEN battery settings not read WHEN a whole round of requests passes THEN says the limits are not read`() {
+        val before = rule.evaluate(AlertState(), inputOf(BatteryThresholds.UNKNOWN), ::nextOccurrence)
+        clock += AlertRule.BATTERY_LIMITS_DUE
+
+        val result = rule.evaluate(before, inputOf(BatteryThresholds.UNKNOWN), ::nextOccurrence)
+
+        result.active.map(ActiveAlert::alert) shouldBeEqualTo listOf(Alert.BatteryLimitsNotRead)
+    }
+
+    @Test
+    fun `GIVEN battery settings not read WHEN 1 s is left to a whole round THEN says nothing yet`() {
+        val before = rule.evaluate(AlertState(), inputOf(BatteryThresholds.UNKNOWN), ::nextOccurrence)
+        clock += AlertRule.BATTERY_LIMITS_DUE - 1.seconds
+
+        val result = rule.evaluate(before, inputOf(BatteryThresholds.UNKNOWN), ::nextOccurrence)
+
+        result.active shouldBeEqualTo emptyList()
+    }
+
+    @Test
+    fun `GIVEN only BATT_OPTIONS not read WHEN a whole round of requests passes THEN says the limits are not read`() {
+        val optionsUnread = VEHICLE.copy(sentVoltage = SentVoltage.UNKNOWN)
+        val before = rule.evaluate(AlertState(), inputOf(optionsUnread), ::nextOccurrence)
+        clock += AlertRule.BATTERY_LIMITS_DUE
+
+        val result = rule.evaluate(before, inputOf(optionsUnread), ::nextOccurrence)
+
+        result.active.map(ActiveAlert::alert) shouldBeEqualTo listOf(Alert.BatteryLimitsNotRead)
+    }
+
+    @Test
+    fun `GIVEN each limit setting alone not read WHEN a whole round passes THEN says the limits are not read`() {
+        val unread = listOf(
+            VEHICLE.copy(low = VEHICLE.low.copy(voltage = BatteryThreshold.Unknown)),
+            VEHICLE.copy(low = VEHICLE.low.copy(remainingMah = BatteryThreshold.Unknown)),
+            VEHICLE.copy(critical = VEHICLE.critical.copy(voltage = BatteryThreshold.Unknown)),
+            VEHICLE.copy(critical = VEHICLE.critical.copy(remainingMah = BatteryThreshold.Unknown)),
+            VEHICLE.copy(lowVoltageTimer = LowVoltageTimer.Unknown),
+            VEHICLE.copy(capacityMah = null),
+            VEHICLE.copy(sentVoltage = SentVoltage.UNKNOWN),
+        )
+        val since = clock.markNow() - AlertRule.BATTERY_LIMITS_DUE
+
+        val result = unread.map { thresholds ->
+            rule.limitsNotReadAfter(AlertState(limitsUnreadSince = since), inputOf(thresholds))
+        }
+
+        result shouldBeEqualTo List(unread.size) { true }
+    }
+
+    @Test
+    fun `GIVEN the limits said not read WHEN the settings are read THEN clears`() {
+        val before = rule.evaluate(AlertState(), inputOf(BatteryThresholds.UNKNOWN), ::nextOccurrence)
+        clock += AlertRule.BATTERY_LIMITS_DUE
+        val notRead = rule.evaluate(before, inputOf(BatteryThresholds.UNKNOWN), ::nextOccurrence)
+
+        val result = rule.evaluate(notRead, inputOf(VEHICLE), ::nextOccurrence)
+
+        result shouldBeEqualTo AlertState()
+    }
+
+    @Test
+    fun `GIVEN no monitor and nothing else read WHEN a whole round of requests passes THEN says nothing`() {
+        val noMonitor = BatteryThresholds.UNKNOWN.copy(monitor = BatteryMonitor.None)
+        val before = rule.evaluate(AlertState(), inputOf(noMonitor), ::nextOccurrence)
+        clock += AlertRule.BATTERY_LIMITS_DUE
+
+        val result = rule.evaluate(before, inputOf(noMonitor), ::nextOccurrence)
+
+        result.active shouldBeEqualTo emptyList()
+    }
+
+    @Test
+    fun `GIVEN battery settings not read for 30 s WHEN asking when to evaluate again THEN is when they are due`() {
+        val state = AlertState(limitsUnreadSince = clock.markNow())
+        clock += 30.seconds
+
+        val result = rule.untilNextEvaluation(state, inputOf(BatteryThresholds.UNKNOWN, receivedLater = true))
+
+        result shouldBeEqualTo AlertRule.BATTERY_LIMITS_DUE - 30.seconds
+    }
+
+    @Test
+    fun `GIVEN a low energy at the GCS's unread threshold WHEN it comes back THEN clears as before`() {
+        val previous = stateWith(Alert.BatteryLow(EnergyLimitSource.GCS_UNREAD))
+
+        val result = energyAlertsOf(previous, GCS_LOW_PERCENT + 3, BatteryThresholds.UNKNOWN)
+
+        result shouldBeEqualTo emptySet()
     }
 
     @Test
@@ -325,7 +526,10 @@ class BatteryVoltageAlertTest {
             Battery(voltage = ABOVE_LOW, current = 1.0, remaining = remaining, monitored = true, healthy = true)
         val telemetry = telemetryOf(battery)
         return rule.evaluate(previous, AlertInput(telemetry, thresholds, ARMED, evaluatingSince), ::nextOccurrence)
-            .active.map(ActiveAlert::alert).filterTo(mutableSetOf()) { it is Alert.BatteryLow }
+            .active.map(ActiveAlert::alert).filterTo(mutableSetOf()) {
+                it is Alert.BatteryLow ||
+                    it is Alert.BatteryCritical
+            }
     }
 
     private fun stateWith(alert: Alert): AlertState = AlertState(
@@ -342,6 +546,16 @@ class BatteryVoltageAlertTest {
         gps = Timed(FIX_3D, receivedAt),
         origin = DataOrigin.LIVE,
     )
+
+    private fun AlertRule.limitsNotReadAfter(state: AlertState, input: AlertInput): Boolean =
+        Alert.BatteryLimitsNotRead in evaluate(state, input, ::nextOccurrence).active.map(ActiveAlert::alert)
+
+    /** A healthy battery at 50 % and 11.1 V, fresh, or fresh for a long while if [receivedLater]. */
+    private fun inputOf(thresholds: BatteryThresholds, receivedLater: Boolean = false): AlertInput {
+        val battery = Battery(voltage = ABOVE_LOW, current = 1.0, remaining = 50, monitored = true, healthy = true)
+        val receivedAt = if (receivedLater) clock.markNow() + SETTLED else clock.markNow()
+        return AlertInput(telemetryOf(battery, receivedAt), thresholds, ARMED, evaluatingSince)
+    }
 
     private fun nextOccurrence(): Long = ++raised
 
@@ -361,7 +575,9 @@ class BatteryVoltageAlertTest {
         const val VEHICLE_LOW_PERCENT = 30
         const val VEHICLE_LOW_MAH = 990f
         const val GCS_LOW_PERCENT = 20
+        const val GCS_CRITICAL_PERCENT = 10
         const val MONITOR_VOLTAGE_AND_CURRENT = 4
+        const val MONITOR_ANALOG_CURRENT_ONLY = 31
         val READING_PERIOD: Duration = 1.seconds
         val STALE_GAP: Duration = 4.seconds
         val SETTLED: Duration = 1.minutes

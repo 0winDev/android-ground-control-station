@@ -53,6 +53,22 @@ sealed interface Alert {
     }
 
     /**
+     * A battery setting that sets a limit has stayed not read for a whole round of requests: the battery is judged at
+     * the GCS's own energy thresholds and the voltage may not be judged at all.
+     */
+    data object BatteryLimitsNotRead : Alert {
+        override val level = AlertLevel.ADVISORY
+    }
+
+    /**
+     * The voltage alerts are off although a threshold is set: the vehicle sends its resting voltage while it compares
+     * the raw one ([VoltageLimit.NotComparable]), so only the remaining energy can warn.
+     */
+    data object BatteryVoltageNotJudged : Alert {
+        override val level = AlertLevel.ADVISORY
+    }
+
+    /**
      * The battery is unknown, never OK: the vehicle has no battery monitor, sends no voltage, sends no remaining energy
      * while no voltage threshold is known, or its battery reading has gone stale.
      */
@@ -106,12 +122,14 @@ sealed interface Alerts {
 
 /**
  * What [AlertRule] keeps between evaluations: the [active] alerts, and since when the fresh voltage readings have
- * stayed on the other side of each voltage threshold from its alert, `null` while they have not ([VoltageLimit.Below]).
+ * stayed on the other side of each voltage threshold from its alert, `null` while they have not ([VoltageLimit.Below]),
+ * and since when a battery limit setting has not been read ([Alert.BatteryLimitsNotRead]).
  */
 data class AlertState(
     val active: List<ActiveAlert> = emptyList(),
     val lowVoltageSince: TimeMark? = null,
     val criticalVoltageSince: TimeMark? = null,
+    val limitsUnreadSince: TimeMark? = null,
 )
 
 /**

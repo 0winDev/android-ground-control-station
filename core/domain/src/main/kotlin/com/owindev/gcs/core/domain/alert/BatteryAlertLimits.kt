@@ -20,10 +20,20 @@ data class BatteryLevelLimits(val voltage: VoltageLimit, val energy: EnergyLimit
 /** A voltage threshold for an alert. */
 sealed interface VoltageLimit {
 
-    /** A setting it depends on has not been read, or the voltage sent may be above the one the vehicle compares. */
+    /**
+     * A setting it depends on has not been read, or `BATT_MONITOR` says no voltage is measured: 0 or a type that
+     * reads none. That one takes effect only when the vehicle reboots (`@RebootRequired`), so until then the vehicle
+     * may still compare the voltage, and an alert raised before must not clear.
+     */
     data object Unknown : VoltageLimit
 
-    /** No threshold: no monitor, a monitor that reads no voltage, or a threshold of 0 or less. */
+    /**
+     * A threshold is set, but the voltage the vehicle sends may be above the one it compares ([SentVoltage]), so a
+     * threshold it has crossed may not show: the operator must be told the voltage is not judged.
+     */
+    data object NotComparable : VoltageLimit
+
+    /** A threshold of 0 or less: ArduPilot stops comparing it at once (`check_failsafe_types`). */
     data object Off : VoltageLimit
 
     /**
@@ -53,7 +63,9 @@ enum class EnergyLimitSource {
  * Both voltage levels share `BATT_LOW_TIMER` as their debounce, as `AP_BattMonitor_Backend::update_failsafes` does
  * (lines 162–163 critical, 179–180 low, ArduCopter 4.7.2); at 0 the vehicle never acts on voltage but the threshold
  * still warns, debounced by the parameter's default of 10 s (`AP_BattMonitor_Params.cpp`). The voltage the vehicle
- * sends must never be above the one it compares ([SentVoltage]), or a threshold it has crossed may not show.
+ * sends must never be above the one it compares ([SentVoltage]), or a threshold it has crossed may not show. With
+ * `BATT_FS_VOLTSRC` 1 and the raw voltage sent, the alert judges the raw voltage, never above the resting estimate the
+ * vehicle compares: it may warn of a sag the vehicle does not count, so it never means the vehicle is in failsafe.
  */
 fun batteryAlertLimitsOf(thresholds: BatteryThresholds, defaults: GcsEnergyThresholds): BatteryAlertLimits =
     BatteryAlertLimits(
@@ -72,15 +84,17 @@ private fun voltageLimitOf(thresholds: BatteryThresholds, threshold: BatteryThre
     return when {
         monitor == BatteryMonitor.Unknown -> VoltageLimit.Unknown
 
-        monitor == BatteryMonitor.None -> VoltageLimit.Off
+        monitor == BatteryMonitor.None -> VoltageLimit.Unknown
 
-        monitor is BatteryMonitor.Present && !monitor.measuresVoltage -> VoltageLimit.Off
+        monitor is BatteryMonitor.Present && !monitor.measuresVoltage -> VoltageLimit.Unknown
 
         threshold == BatteryThreshold.Unknown -> VoltageLimit.Unknown
 
         threshold !is BatteryThreshold.At -> VoltageLimit.Off
 
-        thresholds.sentVoltage != SentVoltage.NEVER_ABOVE_COMPARED -> VoltageLimit.Unknown
+        thresholds.sentVoltage == SentVoltage.UNKNOWN -> VoltageLimit.Unknown
+
+        thresholds.sentVoltage == SentVoltage.MAY_BE_ABOVE_COMPARED -> VoltageLimit.NotComparable
 
         else -> when (val timer = thresholds.lowVoltageTimer) {
             LowVoltageTimer.Unknown -> VoltageLimit.Unknown
@@ -104,6 +118,22 @@ private fun energyLimitOf(remainingMah: BatteryThreshold, capacityMah: Int?, def
         EnergyLimit(PERCENT * remainingMah.value / capacityMah, EnergyLimitSource.VEHICLE)
 
     else -> EnergyLimit(default.toDouble(), EnergyLimitSource.GCS_UNSET)
+}
+
+/**
+ * Whether a setting that sets a limit has not been read. With no monitor (`BATT_MONITOR` 0) nothing else is asked
+ * (`BatteryParameterRequester`) and nothing else applies.
+ */
+internal fun BatteryThresholds.anyLimitUnread(): Boolean = when (monitor) {
+    BatteryMonitor.Unknown -> true
+
+    BatteryMonitor.None -> false
+
+    is BatteryMonitor.Present -> listOf(low.voltage, low.remainingMah, critical.voltage, critical.remainingMah)
+        .any { it == BatteryThreshold.Unknown } ||
+        lowVoltageTimer == LowVoltageTimer.Unknown ||
+        capacityMah == null ||
+        sentVoltage == SentVoltage.UNKNOWN
 }
 
 /** `BATT_LOW_TIMER`'s default (`AP_BattMonitor_Params.cpp`). */

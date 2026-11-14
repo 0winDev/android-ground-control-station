@@ -86,21 +86,21 @@ class BatteryAlertLimitsTest {
     }
 
     @Test
-    fun `GIVEN no monitor WHEN deriving the limits THEN the voltage one is off`() {
+    fun `GIVEN no monitor, which takes effect on a reboot WHEN deriving the limits THEN the voltage one is unknown`() {
         val read = thresholds.copy(monitor = BatteryMonitor.None)
 
         val result = batteryAlertLimitsOf(read, defaults).low.voltage
 
-        result shouldBeEqualTo VoltageLimit.Off
+        result shouldBeEqualTo VoltageLimit.Unknown
     }
 
     @Test
-    fun `GIVEN a monitor that reads no voltage WHEN deriving the limits THEN the voltage one is off`() {
+    fun `GIVEN a monitor that reads no voltage WHEN deriving the limits THEN the voltage one is unknown`() {
         val read = thresholds.copy(monitor = BatteryMonitor.Present(MONITOR_ANALOG_CURRENT_ONLY))
 
         val result = batteryAlertLimitsOf(read, defaults).low.voltage
 
-        result shouldBeEqualTo VoltageLimit.Off
+        result shouldBeEqualTo VoltageLimit.Unknown
     }
 
     @Test
@@ -146,12 +146,24 @@ class BatteryAlertLimitsTest {
     }
 
     @Test
-    fun `GIVEN the voltage sent may be above the one compared WHEN deriving the limits THEN both are unknown`() {
+    fun `GIVEN the voltage sent may be above the one compared WHEN deriving the limits THEN both are not comparable`() {
         val read = thresholds.copy(sentVoltage = SentVoltage.MAY_BE_ABOVE_COMPARED)
 
         val result = batteryAlertLimitsOf(read, defaults).let { listOf(it.low.voltage, it.critical.voltage) }
 
-        result shouldBeEqualTo listOf(VoltageLimit.Unknown, VoltageLimit.Unknown)
+        result shouldBeEqualTo listOf(VoltageLimit.NotComparable, VoltageLimit.NotComparable)
+    }
+
+    @Test
+    fun `GIVEN the voltage sent may be above and the threshold disabled WHEN deriving the limits THEN it is off`() {
+        val read = thresholds.copy(
+            sentVoltage = SentVoltage.MAY_BE_ABOVE_COMPARED,
+            low = thresholds.low.copy(voltage = BatteryThreshold.Disabled),
+        )
+
+        val result = batteryAlertLimitsOf(read, defaults).low.voltage
+
+        result shouldBeEqualTo VoltageLimit.Off
     }
 
     @Test

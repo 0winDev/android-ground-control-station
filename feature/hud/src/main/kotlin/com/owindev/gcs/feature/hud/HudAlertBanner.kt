@@ -188,6 +188,10 @@ private fun Alert.message(batteryRemaining: Int?, batteryVoltage: Double?): Stri
         batteryVoltage,
     )
 
+    Alert.BatteryVoltageNotJudged -> stringResource(id = R.string.hud_alert_battery_voltage_not_judged)
+
+    Alert.BatteryLimitsNotRead -> stringResource(id = R.string.hud_alert_battery_limits_not_read)
+
     Alert.BatteryUnhealthy -> stringResource(id = R.string.hud_alert_battery_unhealthy)
 
     Alert.BatteryUnknown -> stringResource(id = R.string.hud_alert_battery_unknown)

@@ -47,7 +47,9 @@ class AlertRule(
         val telemetry = input.telemetry
         val wasActive = previous.active.map(ActiveAlert::alert).toSet()
         val judged = batteryAlerts(input, previous)
+        val limits = batteryRule.limitsNotRead(input.battery, previous.limitsUnreadSince)
         val active = judged.alerts +
+            setOfNotNull(Alert.BatteryLimitsNotRead.takeIf { limits.raised }) +
             gpsAlerts(telemetry.gps, input.evaluatingSince, wasActive) +
             staleAlerts(telemetry, previous.active)
         val kept = previous.active.filter { it.alert in active }
@@ -64,6 +66,7 @@ class AlertRule(
             active = (raised + kept).sortedByDescending { it.alert.level },
             lowVoltageSince = judged.lowVoltageSince,
             criticalVoltageSince = judged.criticalVoltageSince,
+            limitsUnreadSince = limits.since,
         )
     }
 
@@ -71,8 +74,8 @@ class AlertRule(
      * When the [state] must be evaluated again with nothing new arriving: when a value goes stale
      * ([StalenessRule.untilNextStale]), or a value that stopped arriving would never raise [Alert.TelemetryStale];
      * when a value never received has had its time to arrive ([evaluate]); when a stale alert's hold ends, or it
-     * would outlast [STALE_MINIMUM_HOLD]; and when a voltage debounce ends, or a voltage that stays across its
-     * threshold would wait for the next reading.
+     * would outlast [STALE_MINIMUM_HOLD]; when a voltage debounce ends, or a voltage that stays across its
+     * threshold would wait for the next reading; and when battery settings not read are due.
      */
     fun untilNextEvaluation(state: AlertState, input: AlertInput): Duration? {
         val untilNeverReceived = NEVER_RECEIVED_ALERTED
@@ -81,7 +84,9 @@ class AlertRule(
         val untilHoldEnds = state.active
             .filter { it.alert is Alert.TelemetryStale }
             .map { STALE_MINIMUM_HOLD - it.raisedAt.elapsedNow() }
-        val untilStale = listOfNotNull(staleness.untilNextStale(input.telemetry))
+        val untilLimitsDue =
+            listOfNotNull(state.limitsUnreadSince?.let { BATTERY_LIMITS_DUE - it.elapsedNow() })
+        val untilStale = listOfNotNull(staleness.untilNextStale(input.telemetry)) + untilLimitsDue
         return (untilNeverReceived + untilHoldEnds + batteryRule.untilDebounceEnds(state, input.battery) + untilStale)
             .filter { it > Duration.ZERO }
             .minOrNull()
@@ -156,6 +161,13 @@ class AlertRule(
          * 6 min of steady SITL streams (#41) one ATTITUDE stream was late once, for about 0.15 s.
          */
         val STALE_MINIMUM_HOLD: Duration = 2.seconds
+
+        /**
+         * How long the vehicle's battery settings may stay not read before [Alert.BatteryLimitsNotRead] is raised:
+         * longer than a whole round of `BatteryParameterRequester` that still succeeds (eleven parameters, three
+         * requests each, 1 s apart: 33 s), so an answer to a last request never makes it flash.
+         */
+        val BATTERY_LIMITS_DUE: Duration = 40.seconds
 
         /** The values that raise an alert when never received, once they are late ([evaluate]). */
         private val NEVER_RECEIVED_ALERTED: Set<TelemetryKind> = setOf(TelemetryKind.BATTERY, TelemetryKind.GPS)
