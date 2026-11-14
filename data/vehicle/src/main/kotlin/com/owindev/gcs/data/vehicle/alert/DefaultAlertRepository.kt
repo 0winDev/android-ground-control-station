@@ -8,7 +8,7 @@ import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.AlertState
 import com.owindev.gcs.core.domain.alert.Alerts
-import com.owindev.gcs.core.domain.battery.BatteryThresholds
+import com.owindev.gcs.core.domain.battery.BatteryThresholdRepository
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.time.atLeastRecheck
@@ -44,9 +44,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * The active vehicle's alerts, evaluated by [AlertRule] on its telemetry (REQ-028).
+ * The active vehicle's alerts, evaluated by [AlertRule] on its telemetry and its battery failsafe settings (REQ-028).
  *
- * The alerts are evaluated whenever the telemetry changes, and again when a value goes stale or a value never
+ * The alerts are evaluated whenever the telemetry, the vehicle's armed state or its battery settings change, so a
+ * threshold changed in flight is followed at once, and again when a value goes stale or a value never
  * received has had its time to arrive, with nothing new arriving ([AlertRule.untilNextEvaluation]), so a stream that
  * stops raises [Alert.TelemetryStale] on time. That time counts from when the active vehicle's alerts started to be
  * evaluated, on [timeSource]. Each change is logged once, which is what the SITL check reads.
@@ -61,11 +62,14 @@ import kotlinx.coroutines.launch
  * hysteresis or acknowledgement from the vehicle before; and so they do when the link goes from live to a replay or
  * back (REQ-037), even for the same system ID, so a live alert never shows in a replay nor a recorded one after it.
  */
+// One source per input the rule judges, plus the rule, its clock and its scope; grouping them would only hide that.
+@Suppress("LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 internal class DefaultAlertRepository @Inject constructor(
     private val telemetryRepository: TelemetryRepository,
     private val vehicleRepository: VehicleRepository,
+    private val batteryThresholdRepository: BatteryThresholdRepository,
     session: LinkSession,
     private val rule: AlertRule,
     private val timeSource: TimeSource.WithComparableMarks,
@@ -90,6 +94,8 @@ internal class DefaultAlertRepository @Inject constructor(
     /**
      * Starts from [Alerts.NotEvaluated], so nothing of the vehicle active before is carried over. Its armed state
      * comes from its HEARTBEAT; a vehicle not heard is taken as armed, so a failing monitor is never played down.
+     * Its battery settings are kept as last read while it is LOST, when its battery telemetry is stale anyway, so they
+     * never raise or clear an alert then.
      */
     private fun evaluationsOfNewVehicle(systemId: SystemId, origin: DataOrigin): Flow<AlertInput?> = flow {
         emit(null)
@@ -99,8 +105,12 @@ internal class DefaultAlertRepository @Inject constructor(
             .map { vehicles -> vehicles[systemId]?.takeIf { it.origin == origin }?.state?.armed ?: true }
             .distinctUntilChanged()
         emitAll(
-            telemetryRepository.activeTelemetry.combine(armed) { telemetry, isArmed ->
-                telemetry?.let { AlertInput(it, BatteryThresholds.UNKNOWN, isArmed, evaluatingSince) }
+            combine(
+                telemetryRepository.activeTelemetry,
+                armed,
+                batteryThresholdRepository.activeThresholds,
+            ) { telemetry, isArmed, battery ->
+                telemetry?.let { AlertInput(it, battery, isArmed, evaluatingSince) }
             },
         )
     }

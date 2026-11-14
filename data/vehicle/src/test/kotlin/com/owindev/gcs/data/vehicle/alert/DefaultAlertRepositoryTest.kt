@@ -6,6 +6,14 @@ import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.alert.Alerts
 import com.owindev.gcs.core.domain.alert.EnergyLimitSource
+import com.owindev.gcs.core.domain.battery.BatteryFailsafeLevel
+import com.owindev.gcs.core.domain.battery.BatteryMonitor
+import com.owindev.gcs.core.domain.battery.BatteryThreshold
+import com.owindev.gcs.core.domain.battery.BatteryThresholdRepository
+import com.owindev.gcs.core.domain.battery.BatteryThresholds
+import com.owindev.gcs.core.domain.battery.FailsafeAction
+import com.owindev.gcs.core.domain.battery.LowVoltageTimer
+import com.owindev.gcs.core.domain.battery.SentVoltage
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GpsFixType
@@ -33,6 +41,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +69,8 @@ class DefaultAlertRepositoryTest {
     private val activeSystemId = MutableStateFlow<SystemId?>(VEHICLE)
     private val vehicles = MutableStateFlow(mapOf(VEHICLE to vehicle(VEHICLE, clock.markNow())))
     private val session = MutableStateFlow(FIRST_SESSION)
+    private val batteryThresholdRepository: BatteryThresholdRepository = mockk()
+    private val batteryThresholds = MutableStateFlow(BatteryThresholds.UNKNOWN)
 
     private lateinit var repository: DefaultAlertRepository
 
@@ -70,9 +81,11 @@ class DefaultAlertRepositoryTest {
         every { telemetryRepository.activeTelemetry } returns activeTelemetry
         every { vehicleRepository.activeSystemId } returns activeSystemId
         every { vehicleRepository.vehicles } returns vehicles
+        every { batteryThresholdRepository.activeThresholds } returns batteryThresholds
         repository = DefaultAlertRepository(
             telemetryRepository,
             vehicleRepository,
+            batteryThresholdRepository,
             sessionOn(session),
             AlertRule(timeSource = clock),
             clock,
@@ -409,6 +422,46 @@ class DefaultAlertRepositoryTest {
             result shouldBeEqualTo 1
         }
 
+    @Test
+    fun `GIVEN an energy above the GCS's low threshold WHEN the vehicle's higher one is read THEN is low at it`() =
+        testScope.runTest {
+            activeTelemetry.value = telemetry(remaining = VEHICLE_LOW_PERCENT - 1)
+            repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
+
+            batteryThresholds.value = VEHICLE_THRESHOLDS
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(Alert.BatteryLow(EnergyLimitSource.VEHICLE).raised(1)))
+        }
+
+    @Test
+    fun `GIVEN a voltage below the vehicle's threshold WHEN its timer passes with nothing new THEN low is raised`() =
+        testScope.runTest {
+            batteryThresholds.value = VEHICLE_THRESHOLDS
+            activeTelemetry.value =
+                telemetry(battery(remaining = 100).copy(voltage = BELOW_LOW), clock.markNow() + LONG_AFTER)
+            repository.activeAlerts.launchIn(backgroundScope)
+            runCurrent()
+
+            advanceTimeBy(LOW_TIMER)
+            runCurrent()
+            val result = repository.activeAlerts.value
+
+            result shouldBeEqualTo Alerts.Evaluated(listOf(Alert.BatteryVoltageLow.raised(1)))
+        }
+
+    @Test
+    fun `GIVEN the alerts observed WHEN reading the battery settings THEN are observed too`() = testScope.runTest {
+        repository.activeAlerts.launchIn(backgroundScope)
+
+        runCurrent()
+        val result = batteryThresholds.subscriptionCount.value
+
+        result shouldBeEqualTo 1
+    }
+
     /** Active as [occurrence], raised now unless [raisedAt] says otherwise. */
     private fun Alert.raised(occurrence: Long, acknowledged: Boolean = false, raisedAt: TimeMark = clock.markNow()) =
         ActiveAlert(
@@ -442,6 +495,20 @@ private val CRITICAL = Alert.BatteryCritical(EnergyLimitSource.GCS_UNREAD)
 private val STALE_GPS = Alert.TelemetryStale(TelemetryKind.GPS)
 private val UNKNOWN = Alert.BatteryUnknown
 private val UNHEALTHY = Alert.BatteryUnhealthy
+
+private const val VEHICLE_LOW_PERCENT = 30
+private const val BELOW_LOW = 10.4
+private val LOW_TIMER = 10.seconds
+
+/** `BATT_LOW_VOLT` 10.5 with its 10 s timer, and `BATT_LOW_MAH` 990 of 3300 mAh: 30 %. */
+private val VEHICLE_THRESHOLDS = BatteryThresholds(
+    monitor = BatteryMonitor.Present(4),
+    low = BatteryFailsafeLevel(BatteryThreshold.At(10.5f), BatteryThreshold.At(990f), FailsafeAction.WarnOnly),
+    critical = BatteryFailsafeLevel(BatteryThreshold.Disabled, BatteryThreshold.Disabled, FailsafeAction.WarnOnly),
+    lowVoltageTimer = LowVoltageTimer.Seconds(10),
+    capacityMah = 3300,
+    sentVoltage = SentVoltage.NEVER_ABOVE_COMPARED,
+)
 
 /** As TelemetryMapper maps the real boot frame `truncated/sys_status.bin` (TelemetryMapperTest). */
 private val BOOT_BATTERY = Battery(voltage = null, current = null, remaining = null, monitored = true, healthy = false)
