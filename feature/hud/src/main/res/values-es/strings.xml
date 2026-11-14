@@ -81,6 +81,10 @@
     <string name="hud_alert_battery_critical_percent">Batería crítica (%1$d %%)</string>
     <string name="hud_alert_battery_low">Batería baja</string>
     <string name="hud_alert_battery_low_percent">Batería baja (%1$d %%)</string>
+    <string name="hud_alert_battery_critical_gcs">Batería crítica (límite de la GCS)</string>
+    <string name="hud_alert_battery_critical_percent_gcs">Batería crítica (%1$d %%, límite de la GCS)</string>
+    <string name="hud_alert_battery_low_gcs">Batería baja (límite de la GCS)</string>
+    <string name="hud_alert_battery_low_percent_gcs">Batería baja (%1$d %%, límite de la GCS)</string>
     <string name="hud_alert_battery_critical_volts">Batería crítica (%1$.2f V)</string>
     <string name="hud_alert_battery_low_volts">Batería baja (%1$.2f V)</string>
     <string name="hud_alert_battery_voltage_not_judged">Voltaje de batería sin juzgar: el vehículo envía su voltaje en reposo</string>

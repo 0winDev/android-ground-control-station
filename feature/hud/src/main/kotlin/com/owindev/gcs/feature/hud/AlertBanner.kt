@@ -4,6 +4,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -26,7 +27,8 @@ sealed interface AlertBanner {
      * of them, `null` with none: an acknowledged caution is still a caution, even under a newer advisory.
      * [batteryRemaining] is the battery's fresh remaining energy, in percent, for a low or critical energy, and
      * [batteryVoltage] its fresh voltage, in volts, for a low or critical voltage; each `null` otherwise or when not
-     * known. [recorded] when a replay raised it, so it never passes for a live one (REQ-037).
+     * known. [gcsLimit] when an energy alert was raised at the GCS's own threshold, the vehicle's not read or not set.
+     * [recorded] when a replay raised it, so it never passes for a live one (REQ-037).
      */
     data class Showing(
         val alert: Alert,
@@ -36,6 +38,7 @@ sealed interface AlertBanner {
         val othersLevel: AlertLevel? = null,
         val batteryRemaining: Int? = null,
         val batteryVoltage: Double? = null,
+        val gcsLimit: Boolean = false,
         val recorded: Boolean = false,
     ) : AlertBanner
 
@@ -70,6 +73,7 @@ internal fun alertBannerOf(alerts: Alerts, panel: TelemetryPanel): AlertBanner {
             othersLevel = active.filter { it !== shown }.maxOfOrNull { it.alert.level },
             batteryRemaining = shown.batteryRemaining(panel),
             batteryVoltage = shown.batteryVoltage(panel),
+            gcsLimit = shown.alert.isAtGcsLimit(),
             recorded = shown.origin == DataOrigin.REPLAY,
         )
     }
@@ -78,6 +82,12 @@ internal fun alertBannerOf(alerts: Alerts, panel: TelemetryPanel): AlertBanner {
 private fun ActiveAlert.batteryRemaining(panel: TelemetryPanel): Int? {
     if (alert !is Alert.BatteryLow && alert !is Alert.BatteryCritical) return null
     return panel.battery?.takeUnless(Reading<*>::stale)?.value?.remaining
+}
+
+private fun Alert.isAtGcsLimit(): Boolean = when (this) {
+    is Alert.BatteryCritical -> source != EnergyLimitSource.VEHICLE
+    is Alert.BatteryLow -> source != EnergyLimitSource.VEHICLE
+    else -> false
 }
 
 /** A voltage of 0 is no reading, as for the alert (`AlertRule`). */
