@@ -12,11 +12,14 @@ import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.message.MessageStore
+import com.owindev.gcs.data.vehicle.parameter.BatteryParameterRequester
 import com.owindev.gcs.data.vehicle.parameter.ParameterStore
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
+import io.mockk.coEvery
+import io.mockk.mockk
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import kotlin.time.TimeSource
@@ -45,6 +48,7 @@ internal fun TestScope.repositoryOn(
     messageStore: MessageStore = MessageStore(activeVehicle, PreArmRule()),
     parameterStore: ParameterStore = ParameterStore(activeVehicle),
     scope: CoroutineScope = backgroundScope,
+    parameterRequester: BatteryParameterRequester = idleParameterRequester(),
 ) = DefaultVehicleRepository(
     session = session,
     timeSource = timeSource,
@@ -52,12 +56,20 @@ internal fun TestScope.repositoryOn(
     heartbeatSender = heartbeatSender,
     uplink = uplink,
     telemetryRequester = telemetryRequester,
+    parameterRequester = parameterRequester,
     telemetryStore = telemetryStore,
     messageStore = messageStore,
     parameterStore = parameterStore,
     activeVehicle = activeVehicle,
     scope = scope,
 )
+
+/** A parameter requester that asks nothing, for the tests about something else. */
+internal fun idleParameterRequester(): BatteryParameterRequester {
+    val requester: BatteryParameterRequester = mockk()
+    coEvery { requester.run(any(), any()) } coAnswers { awaitCancellation() }
+    return requester
+}
 
 /** A link session on [transport] in this scope's virtual time, recording nothing. */
 internal fun TestScope.sessionOn(transport: UdpTransport, activeVehicle: ActiveVehicle) = LinkSession(

@@ -66,6 +66,7 @@ class ActiveVehicleFromLinkTest {
                 uplinkOnTestClock(),
             ),
             telemetryRequester = telemetryRequester,
+            parameterRequester = idleParameterRequester(),
             telemetryStore = TelemetryStore(TrailRule(StalenessRule()), activeVehicle),
             messageStore = MessageStore(activeVehicle, PreArmRule()),
             parameterStore = ParameterStore(activeVehicle),

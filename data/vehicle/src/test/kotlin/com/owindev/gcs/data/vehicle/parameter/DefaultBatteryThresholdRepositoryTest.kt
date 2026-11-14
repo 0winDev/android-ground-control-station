@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.battery.BatteryMonitor
 import com.owindev.gcs.core.domain.battery.BatteryThreshold
 import com.owindev.gcs.core.domain.battery.BatteryThresholds
 import com.owindev.gcs.core.domain.battery.FailsafeAction
+import com.owindev.gcs.core.domain.battery.LowVoltageTimer
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
@@ -54,7 +55,7 @@ class DefaultBatteryThresholdRepositoryTest {
     }
 
     @Test
-    fun `GIVEN the active vehicle's eight parameters WHEN observing THEN they are its battery settings`() =
+    fun `GIVEN the active vehicle's nine parameters WHEN observing THEN they are its battery settings`() =
         testScope.runTest {
             activate(MESSAGE_SYSTEM_1)
             SITL_BATTERY_PARAMETERS.forEach(::record)
@@ -181,6 +182,7 @@ class DefaultBatteryThresholdRepositoryTest {
         const val ACTION_RTL = 2
         const val MONITOR_VOLTAGE_AND_CURRENT = 4
         const val CAPACITY_MAH = 3300
+        const val LOW_TIMER_SECONDS = 10
         val SITL_THRESHOLDS = BatteryThresholds(
             monitor = BatteryMonitor.Present(MONITOR_VOLTAGE_AND_CURRENT),
             low = BatteryFailsafeLevel(
@@ -193,6 +195,7 @@ class DefaultBatteryThresholdRepositoryTest {
                 BatteryThreshold.Disabled,
                 FailsafeAction.WarnOnly,
             ),
+            lowVoltageTimer = LowVoltageTimer.Seconds(LOW_TIMER_SECONDS),
             capacityMah = CAPACITY_MAH,
         )
     }

@@ -217,6 +217,7 @@ the issue number to an existing one.
 - Rejecting a value never erases state: drop the frame; compare ±π as float32 and integers with `in` (#49).
 - A base class default is not the vehicle's: read the override (ArduCopter's `vtol_state` is MC, not UNDEFINED) (#112).
 - ArduPilot cuts a `PreArm:` format at 50 bytes before its arguments: a fixed text never comes in chunks (#100).
+- An enable parameter hides its group from the list, not from a request by name: test a source's claim in SITL (#101).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -266,6 +267,7 @@ the issue number to an existing one.
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
 - A display staleness threshold is no safety gate: give the gate its own bound and the stream the rate it needs (#112).
 - A gate of two checks needs a test where each fails alone, or one hides the other: mutate them one at a time (#99).
+- A threshold set is no failsafe armed: read every condition the vehicle's code checks before it acts (#101).
 - A clear and the text it closes can arrive together: apply the clear last, it is the newer (#100).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
@@ -292,6 +294,7 @@ the issue number to an existing one.
 
 **Emulator, Windows and tooling**
 - `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first (#13, #14).
+- Name the emulator before changing it (`adb -s <serial> emu avd name`): an install failing for space may be the wrong one (#101).
 - QGroundControl's UDP AutoConnect holds host port 14550: redirect a free port; find holders with `netstat -ano` (#6).
 - The emulator's clock can run seconds behind the host: match logcat to the relay log by events (#39).
 - On Windows `NUL` claims to be a terminal and Python writes CRLF unless `newline="\n"` (#14, #56).

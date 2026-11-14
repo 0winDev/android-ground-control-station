@@ -16,11 +16,11 @@ import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
+import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
-import com.owindev.gcs.data.vehicle.telemetry.TelemetryTarget
 import io.mockk.CapturingSlot
 import io.mockk.coEvery
 import io.mockk.every
@@ -77,7 +77,7 @@ class DefaultVehicleRepositoryTest {
     private val testScope = TestScope()
     private val transport: UdpTransport = mockk()
     private val telemetryRequester: TelemetryRequester = mockk()
-    private val telemetryTargets: CapturingSlot<Flow<TelemetryTarget?>> = slot()
+    private val telemetryTargets: CapturingSlot<Flow<VehicleTarget?>> = slot()
     private val telemetryStore = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
 
     private lateinit var repository: DefaultVehicleRepository
@@ -665,7 +665,7 @@ class DefaultVehicleRepositoryTest {
 
             val result = telemetryTargets.captured.take(1).toList()
 
-            result shouldBeEqualTo listOf(TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS))
+            result shouldBeEqualTo listOf(VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS))
         }
 
     @Tag("REQ-023")
@@ -682,7 +682,7 @@ class DefaultVehicleRepositoryTest {
 
             val result = telemetryTargets.captured.take(2).toList()
 
-            result shouldBeEqualTo listOf(TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS), null)
+            result shouldBeEqualTo listOf(VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS), null)
         }
 
     @Tag("REQ-023")
@@ -700,9 +700,9 @@ class DefaultVehicleRepositoryTest {
             val result = telemetryTargets.captured.take(3).toList()
 
             result shouldBeEqualTo listOf(
-                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
                 null,
-                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
             )
         }
 
@@ -723,8 +723,8 @@ class DefaultVehicleRepositoryTest {
             val result = telemetryTargets.captured.take(2).toList()
 
             result shouldBeEqualTo listOf(
-                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
-                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
             )
         }
 
@@ -747,9 +747,9 @@ class DefaultVehicleRepositoryTest {
             val result = telemetryTargets.captured.onEach { delay(BUSY_PAST_RECOVERY) }.take(3).toList()
 
             result shouldBeEqualTo listOf(
-                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
                 null,
-                TelemetryTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
+                VehicleTarget(SYSTEM_1, SYSTEM_1_ADDRESS),
             )
         }
 

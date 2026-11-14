@@ -118,3 +118,20 @@ Byte-identical copy of `core/mavlink/src/test/resources/derived/param-value-batt
 | File | Origin | Raw values (pymavlink) | Used for |
 |---|---|---|---|
 | `derived/param-value-batt-low-volt.bin` | real `MOT_THST_HOVER` re-packed as `BATT_LOW_VOLT` | system 1, component 1, `BATT_LOW_VOLT` 10.5, type 9 (REAL32), count 1370, index 65535, LEN 25 | a battery parameter through the link into the store |
+
+Real PARAM_VALUEs of ArduCopter 4.7.3 SITL (AUTOPILOT_VERSION type 128 `FIRMWARE_VERSION_TYPE_BETA`, git `bf693f31`,
+Mission Planner's simulator, 2026-11-13), cut from the relay's `.down.tlog`: the app's second round, after a reboot
+with `BATT_LOW_VOLT` 10.8 and `BATT_FS_LOW_ACT` 2 set from QGroundControl 5.0.8, and `BATT_LOW_TIMER` from a later round
+of the same build once the app asked for it; MAVLink 2, unsigned, decoded with pymavlink 2.4.50. With `BATT_MONITOR` 0 the count fell to 1351: the group leaves the list, yet each name still answers.
+
+| File | Origin | Raw values (pymavlink) | Used for |
+|---|---|---|---|
+| `param/batt-monitor.bin` | real | `BATT_MONITOR` 4.0, type 2 (INT8), count 1370, index 65535, LEN 25 | a whole round into the store |
+| `param/batt-low-volt.bin` | real | `BATT_LOW_VOLT` 10.800000190734863, type 9 (REAL32), count 1370, index 65535, LEN 25 | same |
+| `param/batt-crt-volt.bin` | real | `BATT_CRT_VOLT` 0.0, type 9 (REAL32), count 1370, index 65535, LEN 25 | same |
+| `param/batt-low-mah.bin` | real | `BATT_LOW_MAH` 0.0, type 9 (REAL32), count 1370, index 65535, LEN 25 | same |
+| `param/batt-crt-mah.bin` | real | `BATT_CRT_MAH` 0.0, type 9 (REAL32), count 1370, index 65535, LEN 25 | same |
+| `param/batt-low-timer.bin` | real, later round | `BATT_LOW_TIMER` 10.0, type 2 (INT8), count 1370, index 65535, LEN 25 | same |
+| `param/batt-capacity.bin` | real | `BATT_CAPACITY` 3000.0, type 6 (INT32), count 1370, index 65535, LEN 25 | same |
+| `param/batt-fs-low-act.bin` | real | `BATT_FS_LOW_ACT` 2.0, type 2 (INT8), count 1370, index 65535, LEN 25 | same |
+| `param/batt-fs-crt-act.bin` | real | `BATT_FS_CRT_ACT` 0.0, type 2 (INT8), count 1370, index 65535, LEN 25 | same |
