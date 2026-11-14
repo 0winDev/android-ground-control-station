@@ -6,6 +6,7 @@ import com.owindev.gcs.core.domain.battery.BatteryThreshold
 import com.owindev.gcs.core.domain.battery.BatteryThresholds
 import com.owindev.gcs.core.domain.battery.FailsafeAction
 import com.owindev.gcs.core.domain.battery.LowVoltageTimer
+import com.owindev.gcs.core.domain.battery.SentVoltage
 
 /**
  * A parameter of the first battery that this GCS reads (REQ-028), with the `MAV_PARAM_TYPE` ArduPilot sends it with:
@@ -22,6 +23,8 @@ internal enum class BatteryParameter(val id: String, val type: Int) {
     CAPACITY("BATT_CAPACITY", MAV_PARAM_TYPE_INT32),
     FS_LOW_ACT("BATT_FS_LOW_ACT", MAV_PARAM_TYPE_INT8),
     FS_CRT_ACT("BATT_FS_CRT_ACT", MAV_PARAM_TYPE_INT8),
+    OPTIONS("BATT_OPTIONS", MAV_PARAM_TYPE_INT32),
+    FS_VOLTSRC("BATT_FS_VOLTSRC", MAV_PARAM_TYPE_INT8),
     ;
 
     /**
@@ -66,6 +69,10 @@ internal fun batteryThresholdsOf(values: Map<BatteryParameter, Float>) = Battery
     ),
     lowVoltageTimer = LowVoltageTimer.of(values[BatteryParameter.LOW_TIMER]?.toInt()),
     capacityMah = values[BatteryParameter.CAPACITY]?.toInt(),
+    sentVoltage = SentVoltage.of(
+        options = values[BatteryParameter.OPTIONS]?.toInt(),
+        failsafeSource = values[BatteryParameter.FS_VOLTSRC]?.toInt(),
+    ),
 )
 
 // MAV_PARAM_TYPE (common.xml).
