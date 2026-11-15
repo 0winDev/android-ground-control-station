@@ -8,6 +8,7 @@ import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.Home
 import com.owindev.gcs.core.domain.telemetry.LandedState
+import com.owindev.gcs.core.domain.telemetry.PreArmStatus
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.mavlink.MavlinkMessage
@@ -96,7 +97,10 @@ internal object TelemetryMapper {
 
             is VfrHud -> telemetry.copy(airData = Timed(message.toAirData(), receivedAt))
 
-            is SysStatus -> telemetry.copy(battery = Timed(message.toBattery(), receivedAt))
+            is SysStatus -> telemetry.copy(
+                battery = Timed(message.toBattery(), receivedAt),
+                preArm = Timed(message.preArmStatus(), receivedAt),
+            )
 
             is GpsRawInt -> telemetry.copy(gps = Timed(message.toGpsStatus(), receivedAt))
 
@@ -205,3 +209,12 @@ internal object TelemetryMapper {
         else -> GpsFixType.Unknown(fixType)
     }
 }
+
+/** `MAV_SYS_STATUS_PREARM_CHECK` (`common.xml`): "pre-arm check status. Always healthy when armed". */
+private const val MAV_SYS_STATUS_PREARM_CHECK = 0x1000_0000L
+
+internal fun SysStatus.preArmStatus() = PreArmStatus(
+    present = onboardControlSensorsPresent and MAV_SYS_STATUS_PREARM_CHECK != 0L,
+    enabled = onboardControlSensorsEnabled and MAV_SYS_STATUS_PREARM_CHECK != 0L,
+    healthy = onboardControlSensorsHealth and MAV_SYS_STATUS_PREARM_CHECK != 0L,
+)

@@ -9,6 +9,7 @@ import com.owindev.gcs.data.vehicle.link.ReceivedMessage
 import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.HeartbeatMapper
+import com.owindev.gcs.data.vehicle.telemetry.preArmStatus
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.TimeMark
@@ -102,11 +103,7 @@ internal class MessageStore @Inject constructor(
 
     private fun clearsPreArm(received: ReceivedMessage): Boolean = when (val message = received.message) {
         is MavlinkMessage.Heartbeat -> HeartbeatMapper.vehicleStateOf(received)?.armed == true
-
-        is MavlinkMessage.SysStatus ->
-            message.onboardControlSensorsEnabled and MAV_SYS_STATUS_PREARM_CHECK != 0L &&
-                message.onboardControlSensorsHealth and MAV_SYS_STATUS_PREARM_CHECK != 0L
-
+        is MavlinkMessage.SysStatus -> message.preArmStatus().let { it.enabled && it.healthy }
         else -> false
     }
 
@@ -114,9 +111,6 @@ internal class MessageStore @Inject constructor(
         const val MAX_MESSAGES = 100
 
         private const val MAV_COMP_ID_AUTOPILOT1 = 1
-
-        /** `common.xml`: "pre-arm check status. Always healthy when armed". */
-        private const val MAV_SYS_STATUS_PREARM_CHECK = 0x10000000L
     }
 }
 
