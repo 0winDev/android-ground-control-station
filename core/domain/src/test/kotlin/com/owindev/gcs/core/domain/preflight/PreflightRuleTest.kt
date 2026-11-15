@@ -525,6 +525,19 @@ class PreflightRuleTest {
         result[PreflightKind.ALERTS] shouldBeEqualTo
             PreflightItem(PreflightKind.ALERTS, GREEN, PreflightReason.AlertsNotEvaluated)
     }
+
+    @Test
+    fun `GIVEN its amber items acknowledged WHEN the voltage and its age change THEN they stay acknowledged`() {
+        val first = rule.check(VOLTAGE_UNJUDGED)
+        val acknowledged = first.ambers.fold(PreflightAcknowledgements()) { acks, item ->
+            acks.acknowledge(item, first)
+        }
+        val next = rule.check(VOLTAGE_UNJUDGED.withTelemetry { copy(battery = Timed(LOWER_VOLTAGE, NOW - 1.seconds)) })
+
+        val result = next.verdict(acknowledged.keptFor(next))
+
+        result shouldBeEqualTo PreflightVerdict.Clear
+    }
 }
 
 private operator fun PreflightCheck.get(kind: PreflightKind): PreflightItem = items.single { it.kind == kind }
@@ -634,6 +647,14 @@ private val ALL_GREEN = PreflightInput(
     preArmReason = null,
     alerts = Alerts.Evaluated(emptyList()),
 )
+
+/** A voltage and no remaining energy, with nothing read to compare it with: the battery and its limits amber. */
+private val VOLTAGE_UNJUDGED = ALL_GREEN.copy(
+    telemetry = ALL_GREEN.telemetry?.copy(battery = Timed(FULL_BATTERY.copy(remaining = null), NOW)),
+    battery = BatteryThresholds.UNKNOWN,
+)
+
+private val LOWER_VOLTAGE = FULL_BATTERY.copy(voltage = 12.4, remaining = null)
 
 private fun PreflightInput.withTelemetry(change: Telemetry.() -> Telemetry) = copy(telemetry = telemetry?.change())
 
