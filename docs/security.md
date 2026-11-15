@@ -39,9 +39,9 @@ Status: ✅ done · 🚧 in progress · ⏳ pending · ➖ not applicable (with 
 
 | # | Control | Phase | Status | Evidence / notes |
 |---|---|---|---|---|
-| A-1 | When signing is required, unsigned packets are rejected and logged. | v0.6 | ⏳ | Until then a forged STATUSTEXT from the vehicle's system ID can plant a `PreArm:` text or push the real ones out (#100); the arm veto reads the SYS_STATUS bit, never the text (#102). |
+| A-1 | When signing is required, unsigned packets are rejected and logged. | v0.6 | ⏳ | Until then a forged STATUSTEXT from the vehicle's system ID can plant a `PreArm:` text or push the real ones out (#100); the arm veto reads the SYS_STATUS bit, never the text (#102). A forged SYS_STATUS from that system ID can still turn the pre-arm and battery checks green, and a forged COMMAND_ACK from the pinned route can confirm the uplink; ArduPilot still refuses to arm on its own checks (#102, REQ-048). |
 | A-2 | Replayed packets are rejected (monotonic timestamps per system/component/link). | v0.6 | ⏳ | |
-| A-3 | Dangerous commands (arm, takeoff, mission change in flight) require explicit operator confirmation. | v0.4 | ⏳ | |
+| A-3 | Dangerous commands (arm, takeoff, mission change in flight) require explicit operator confirmation. | v0.4 | ⏳ | The command service refuses arm and take off while a pre-flight check is red (`NotSent(PreflightRed)`), and arm while an amber one is not acknowledged (`NotSent(PreflightUnacknowledged)`), judged again under the sender's lock right before each send; RTL and land never pass through it (#102, REQ-048). An uplink not confirmed is asked again every 5 s, so the check never locks itself red. The debug-only `SitlCommandReceiver` (debug source set, `DUMP` permission) can acknowledge every amber at once for SITL; the checklist (#106) acknowledges each item. The confirmation itself comes with #103 and #104. |
 
 ## MASVS-NETWORK
 
