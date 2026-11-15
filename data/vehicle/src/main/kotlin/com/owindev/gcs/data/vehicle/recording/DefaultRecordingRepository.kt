@@ -49,7 +49,8 @@ internal class DefaultRecordingRepository(
     private val summaries = RecordingSummaries(folder)
 
     override val recordings: Flow<List<RecordingSummary>> =
-        combine(changes, recorder.status, replay.state) { _, _, _ -> summaries.all() }.flowOn(ioDispatcher)
+        combine(changes, recorder.status, recorder.closed, replay.state) { _, _, _, _ -> summaries.all() }
+            .flowOn(ioDispatcher)
 
     override suspend fun fileOf(name: String): File? = withContext(ioDispatcher) {
         folder.recordingAt(File(folder.directory, name))

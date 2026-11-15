@@ -953,6 +953,7 @@ class FlightRecorderTest {
     fun `GIVEN armed when the session stopped WHEN the next one hears it disarmed THEN its log stays open`() =
         testScope.runTest {
             receive(ARMED_GUIDED)
+            runCurrent()
             stopAndWrite()
             clock.advance(LATER)
             receive(DISARMED_STABILIZE)
@@ -999,6 +1000,98 @@ class FlightRecorderTest {
             runCurrent()
 
             logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a log closed for a disarm WHEN the next opens at once THEN the close is counted`() = testScope.runTest {
+        receive(ARMED_GUIDED)
+        receive(DISARMED_STABILIZE)
+        advanceTimeBy(DISARM_MARGIN)
+        runCurrent()
+
+        receive(SCALED_PRESSURE)
+        runCurrent()
+
+        recorder.closed.value shouldBeEqualTo 1L
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a disk failure at the disarm close WHEN the vehicle arms again THEN its next HEARTBEAT opens a log`() =
+        testScope.runTest {
+            var syncs = 0
+            val failingOnce = recorder(syncOutput = { if (syncs++ == 0) throw IOException("No space left on device") })
+            receive(ARMED_GUIDED, failingOnce)
+            receive(DISARMED_STABILIZE, failingOnce)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+
+            receive(ARMED_GUIDED, failingOnce)
+            runCurrent()
+            receive(ARMED_GUIDED, failingOnce)
+            runCurrent()
+
+            (logs() to failingOnce.status.value) shouldBeEqualTo
+                (listOf(START_NAME, MARGIN_LATER_NAME) to RecorderStatus.RECORDING)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN armed and disarmed HEARTBEATs flipping faster than the writer WHEN it catches up THEN the last wins`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            runCurrent()
+            repeat(FLIPS) {
+                receive(DISARMED_STABILIZE)
+                receive(ARMED_GUIDED)
+            }
+            advanceTimeBy(FORTY_SECONDS)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the vehicle disarmed WHEN a ground station's HEARTBEAT is received THEN it does not count`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(TWENTY_SECONDS)
+            receive(MISSION_PLANNER)
+            advanceTimeBy(TWENTY_SECONDS)
+            runCurrent()
+            clock.advance(FORTY_SECONDS)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, FORTY_SECONDS_LATER_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN an arm still queued when the session stops WHEN the next one arms and disarms THEN its log closes`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            recorder.sessionStopped()
+            clock.advance(LATER)
+            receive(ARMED_GUIDED)
+            runCurrent()
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, LATER_NAME, LATER_AND_MARGIN_NAME)
         }
 
     @Tag("REQ-038")
@@ -1160,6 +1253,9 @@ class FlightRecorderTest {
         const val FORTY_SECONDS_LATER_NAME = "2026-10-20_14-30-45.tlog"
         const val TWO_MARGINS_LATER_NAME = "2026-10-20_14-31-05.tlog"
         const val OLD_NAME = "2026-10-01_10-00-00.tlog"
+
+        /** Twice as many arm changes as the queue holds records: the last one must still decide. */
+        const val FLIPS = MAX_PENDING_RECORDS
         const val TEN_MINUTES_AND_MARGIN_LATER_NAME = "2026-10-20_14-40-35.tlog"
         const val LATER_AND_MARGIN_NAME = "2026-10-20_14-32-35.tlog"
         val BEFORE_EPOCH: Instant = Instant.parse("1969-12-31T23:59:59Z")

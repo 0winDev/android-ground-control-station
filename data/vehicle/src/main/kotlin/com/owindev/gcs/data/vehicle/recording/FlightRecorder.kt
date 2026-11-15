@@ -18,6 +18,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -32,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Records not yet written beyond which new ones are dropped and counted: a few seconds of a busy link. */
@@ -93,6 +95,20 @@ internal class FlightRecorder(
     /** Each vehicle's armed state as its last HEARTBEAT said; only the receive loop touches it. */
     private val armedBySystem = mutableMapOf<Int, Boolean>()
 
+    /** Which session the receive loop is in, so a change still queued from one is never taken in the next. */
+    private var generation = 0
+
+    /**
+     * The latest arm change of each system ID not yet taken by the writer: one event per system ID at most in the
+     * queue, however fast its HEARTBEATs flip, as [latestHeard] does for the active vehicle (at most 255 system IDs).
+     */
+    private val pendingArmed = PendingArmed()
+
+    private val closedCount = MutableStateFlow(0L)
+
+    /** How many logs have closed since the app started: a close followed at once by the next log still changes it. */
+    val closed: StateFlow<Long> = closedCount.asStateFlow()
+
     private val writer: Job by lazy { scope.launch { write() } }
 
     /** Whether a log is being written now; [RecorderStatus.FAILED] from a disk failure until a log opens again. */
@@ -113,10 +129,9 @@ internal class FlightRecorder(
             // Marked on arrival, as the vehicle repository marks it, not when the writer gets to it.
             val mark = timeSource.markNow()
             if (state.systemId == activeVehicle.liveSystemId) heard(HeardAt(atMillis, mark))
-            // Only a change is queued: a slow disk holds one event per arm or disarm, not one per HEARTBEAT.
-            if (armedBySystem.put(state.systemId.value, state.armed) != state.armed) {
-                control(Control.Armed(state.systemId.value, state.armed, mark))
-            }
+            // Only a change is queued, after the HEARTBEAT that may open a log, so the log sees it.
+            val systemId = state.systemId.value
+            if (armedBySystem.put(systemId, state.armed) != state.armed) armedChanged(systemId, state.armed, mark)
         }
         offer(frame.bytes, micros(atMillis))
     }
@@ -127,6 +142,8 @@ internal class FlightRecorder(
     fun sessionStopped() {
         latestHeard = AtomicReference()
         armedBySystem.clear()
+        pendingArmed.clear()
+        generation++
         control(Control.SessionStopped)
     }
 
@@ -151,6 +168,12 @@ internal class FlightRecorder(
         }
         writer.start()
         events.trySend(record)
+    }
+
+    private fun armedChanged(systemId: Int, armed: Boolean, mark: ComparableTimeMark) {
+        if (pendingArmed.offer(systemId, armed, mark, generation)) {
+            control(Control.Armed(systemId, generation))
+        }
     }
 
     // The writer needs the first HEARTBEAT's time, to name a log, and the latest one's mark, to close it: a slow disk
@@ -224,17 +247,22 @@ internal class FlightRecorder(
         /** The log closed for the vehicles' disarm: the next record opens the next one. */
         private var openOnNextRecord = false
 
-        /** Applies [change] and returns since when the open log has had no vehicle armed, `null` when it has one. */
-        fun armedChanged(change: Control.Armed): ComparableTimeMark? {
-            if (change.armed) armedSystems += change.systemId else armedSystems -= change.systemId
-            when {
-                armedSystems.isNotEmpty() -> {
-                    armedSeen = open != null
-                    disarmedSince = null
-                }
-
-                open != null && armedSeen && disarmedSince == null -> disarmedSince = change.at
+        /**
+         * Applies [event]'s change and returns since when the open log has had no vehicle armed, `null` when it has
+         * one. An arm after a disk failure lets the vehicle's next HEARTBEAT open a log again: a new flight is worth
+         * recording.
+         */
+        fun armedChanged(event: Control.Armed): ComparableTimeMark? {
+            val systemId = event.systemId
+            val change = pendingArmed.take(event) ?: return disarmedSince
+            if (change.wasArmed) {
+                if (armedSystems.isEmpty()) blocked = false
+                armedSeen = open != null
+                disarmedSince = null
             }
+            if (change.armed) armedSystems += systemId else armedSystems -= systemId
+            val closable = open != null && armedSeen
+            if (closable && armedSystems.isEmpty() && disarmedSince == null) disarmedSince = change.mark
             return disarmedSince
         }
 
@@ -298,6 +326,7 @@ internal class FlightRecorder(
                 recording.stream.close()
                 open = null
                 status = RecorderStatus.IDLE
+                closedCount.update { it + 1 }
                 Log.i(TAG, "Recording ${recording.file.name} closed; left out so far: $stats")
                 // Protected as the one recorded until the marker names it, so an import in between never deletes it.
                 folder.locked {
@@ -381,14 +410,51 @@ internal class FlightRecorder(
     /** A HEARTBEAT of the active vehicle, with when it arrived on both clocks. */
     private class HeardAt(val atMillis: Long, val mark: ComparableTimeMark)
 
+    /** A vehicle's armed state as its latest HEARTBEAT said, when it arrived, and whether it was armed in between. */
+    private class ArmedAt(val armed: Boolean, val mark: ComparableTimeMark, val wasArmed: Boolean, val generation: Int)
+
+    /** Shared by the receive loop, which offers, and the writer, which takes. */
+    private class PendingArmed {
+        private val changes = ConcurrentHashMap<Int, ArmedAt>()
+
+        /**
+         * Folds the change into the one still waiting, if any, so an arm between two disarms is never lost to the
+         * coalescing; `true` when none was waiting and the writer must be told.
+         */
+        fun offer(systemId: Int, armed: Boolean, mark: ComparableTimeMark, generation: Int): Boolean {
+            var queued = false
+            changes.compute(systemId) { _, waiting ->
+                queued = waiting != null
+                ArmedAt(armed, mark, wasArmed = armed || waiting?.wasArmed == true, generation)
+            }
+            return !queued
+        }
+
+        /** [event]'s change, unless the receive loop has moved to the next session since it was queued. */
+        fun take(event: Control.Armed): ArmedAt? {
+            var taken: ArmedAt? = null
+            changes.compute(event.systemId) { _, waiting ->
+                if (waiting?.generation == event.generation) {
+                    taken = waiting
+                    null
+                } else {
+                    waiting
+                }
+            }
+            return taken
+        }
+
+        fun clear() = changes.clear()
+    }
+
     private sealed interface Control {
         /** The active vehicle was heard, first at [firstAtMillis]; [latest] holds its latest HEARTBEAT. */
         class Heard(val firstAtMillis: Long, val latest: AtomicReference<HeardAt?>) : Control
 
         data object TimedOut : Control
 
-        /** [systemId]'s HEARTBEAT changed to [armed], received [at]. */
-        class Armed(val systemId: Int, val armed: Boolean, val at: ComparableTimeMark) : Control
+        /** [systemId]'s armed state changed in session [generation]; the change waits in [pendingArmed]. */
+        class Armed(val systemId: Int, val generation: Int) : Control
 
         data object DisarmedTimedOut : Control
 

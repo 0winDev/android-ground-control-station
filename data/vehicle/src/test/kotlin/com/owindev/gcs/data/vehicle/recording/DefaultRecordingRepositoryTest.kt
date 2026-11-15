@@ -54,6 +54,7 @@ class DefaultRecordingRepositoryTest {
     private val recorder: FlightRecorder = mockk()
     private val replay: ReplayRepository = mockk()
     private val recorderStatus = MutableStateFlow(RecorderStatus.IDLE)
+    private val recorderClosed = MutableStateFlow(0L)
     private val replayState = MutableStateFlow<ReplayState>(ReplayState.Off)
     private val qgroundcontrolLog = readFixture(QGROUNDCONTROL_LOG)
     private val directory get() = File(temp, RECORDINGS_FOLDER).apply { mkdirs() }
@@ -68,6 +69,7 @@ class DefaultRecordingRepositoryTest {
         every { Log.w(any(), any<String>()) } returns 0
         every { Log.w(any(), any<String>(), any()) } returns 0
         every { recorder.status } returns recorderStatus
+        every { recorder.closed } returns recorderClosed
         every { replay.state } returns replayState
         repository = DefaultRecordingRepository(
             folder = folder,
@@ -154,6 +156,25 @@ class DefaultRecordingRepositoryTest {
             result shouldBeEqualTo listOf(summary(OLDEST).copy(inProgress = true))
         }
     }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a log in progress WHEN it closes and the next opens at once THEN the list shows both`() =
+        testScope.runTest {
+            log(OLDEST, qgroundcontrolLog)
+            folder.recording = OLDEST
+            recorderStatus.value = RecorderStatus.RECORDING
+            repository.recordings.test {
+                awaitItem()
+
+                log(NEWEST, shiftedLog())
+                folder.recording = NEWEST
+                recorderClosed.value = 1
+                val result = awaitItem()
+
+                result.map { it.name to it.inProgress } shouldBeEqualTo listOf(NEWEST to true, OLDEST to false)
+            }
+        }
 
     @Tag("REQ-037")
     @Test
