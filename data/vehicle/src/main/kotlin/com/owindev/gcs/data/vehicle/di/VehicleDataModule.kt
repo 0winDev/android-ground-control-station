@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.di
 import android.content.Context
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.AlertRule
+import com.owindev.gcs.core.domain.alert.GcsEnergyThresholds
 import com.owindev.gcs.core.domain.attention.FlightAttentionRule
 import com.owindev.gcs.core.domain.background.BackgroundLinkRule
 import com.owindev.gcs.core.domain.battery.BatteryThresholdRepository
@@ -11,6 +12,8 @@ import com.owindev.gcs.core.domain.link.UplinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRule
 import com.owindev.gcs.core.domain.message.MessageRepository
 import com.owindev.gcs.core.domain.message.PreArmRule
+import com.owindev.gcs.core.domain.preflight.PreflightRepository
+import com.owindev.gcs.core.domain.preflight.PreflightRule
 import com.owindev.gcs.core.domain.recording.ImportRule
 import com.owindev.gcs.core.domain.recording.RecordingRepository
 import com.owindev.gcs.core.domain.recording.RecordingRule
@@ -31,6 +34,8 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
 import com.owindev.gcs.data.vehicle.command.CommandRoutes
 import com.owindev.gcs.data.vehicle.command.DefaultCommandRepository
+import com.owindev.gcs.data.vehicle.command.PreflightGate
+import com.owindev.gcs.data.vehicle.command.PreflightVeto
 import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
@@ -78,6 +83,12 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindCommandRoutes(impl: DefaultVehicleRepository): CommandRoutes
+
+    @Binds
+    internal abstract fun bindPreflightVeto(impl: PreflightGate): PreflightVeto
+
+    @Binds
+    internal abstract fun bindPreflightRepository(impl: PreflightGate): PreflightRepository
 
     @Binds
     internal abstract fun bindTelemetryRepository(impl: DefaultTelemetryRepository): TelemetryRepository
@@ -169,6 +180,16 @@ abstract class VehicleDataModule {
         /** A pre-arm reason current for 35 s (REQ-047), as QGroundControl reads it. */
         @Provides
         fun providePreArmRule(): PreArmRule = PreArmRule()
+
+        /** With the alerts' own energy thresholds, so the check and the alerts judge the battery alike (REQ-048). */
+        @Provides
+        fun providePreflightRule(
+            linkLoss: LinkLossRule,
+            staleness: StalenessRule,
+            preArm: PreArmRule,
+            uplink: UplinkRule,
+            background: BackgroundLinkRule,
+        ): PreflightRule = PreflightRule(linkLoss, staleness, preArm, uplink, background, GcsEnergyThresholds())
 
         /** The recording thresholds decided for v0.3 (REQ-036, REQ-039: 10 min, 256 MiB); change them here. */
         @Provides

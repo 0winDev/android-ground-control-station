@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.state
 
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -10,11 +11,17 @@ import kotlinx.coroutines.flow.receiveAsFlow
  * CONNECTED or reboots while CONNECTED, `null` when it is lost. One channel per consumer, not a state: two changes in a
  * row must both arrive, and each has a single consumer, so nothing is replayed to a late one.
  *
- * Consumers are added while the owner is built, before the first change; only the watchdog announces.
+ * Consumers are added while the owner is built, before the first change; only the watchdog announces. [connection]
+ * counts the changes, so it names the active vehicle's current connection: it moves on every CONNECTED, LOST, reboot and
+ * session (REQ-048).
  */
 internal class ActiveLinkChanges {
 
     private val channels = mutableListOf<Channel<VehicleTarget?>>()
+    private val changes = AtomicLong()
+
+    val connection: Long
+        get() = changes.get()
 
     fun newConsumer(): Flow<VehicleTarget?> {
         val channel = Channel<VehicleTarget?>(Channel.UNLIMITED)
@@ -23,6 +30,7 @@ internal class ActiveLinkChanges {
     }
 
     fun announce(target: VehicleTarget?) {
+        changes.incrementAndGet()
         channels.forEach { channel -> channel.trySend(target) }
     }
 

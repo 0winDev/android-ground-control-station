@@ -23,6 +23,27 @@ class ActiveLinkChangesTest {
         changes = ActiveLinkChanges()
     }
 
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a CONNECTED, a LOST and a reboot announced WHEN reading the connection THEN it moved on each`() {
+        val before = changes.connection
+
+        listOf(target, null, target).forEach(changes::announce)
+
+        changes.connection shouldBeEqualTo before + 3
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a connection WHEN the session restarts THEN it moves on`() {
+        changes.announce(target)
+        val before = changes.connection
+
+        changes.restart()
+
+        (changes.connection > before) shouldBeEqualTo true
+    }
+
     @Test
     fun `GIVEN changes announced to two consumers WHEN consuming THEN each gets every change in order`() = runTest {
         val first = changes.newConsumer()

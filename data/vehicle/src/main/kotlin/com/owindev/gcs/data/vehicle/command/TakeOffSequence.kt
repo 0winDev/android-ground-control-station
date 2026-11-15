@@ -21,9 +21,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  * ArduCopter takes off only in a mode that allows it, GUIDED here (`handle_MAV_CMD_NAV_TAKEOFF`, Copter-4.7.2), and an
  * ACCEPTED mode change is not yet the mode: NAV_TAKEOFF waits for a HEARTBEAT showing GUIDED (REQ-044). Each step is
  * sent only while the HEARTBEAT shows the vehicle armed and both its landed state and its position say it is on the
- * ground, checked with the route under the sender's lock: a mode change would abort a flying vehicle's landing or
- * return before ArduCopter refused the take off (#112).
+ * ground and no pre-flight item is red (REQ-048), checked with the route under the sender's lock: a mode change would
+ * abort a flying vehicle's landing or return before ArduCopter refused the take off (#112).
  */
+// One collaborator per check each step passes before it leaves; grouping them would only rename them.
+@Suppress("LongParameterList")
 internal class TakeOffSequence @Inject constructor(
     private val exchange: CommandExchange,
     private val vehicles: VehicleRepository,
@@ -31,6 +33,7 @@ internal class TakeOffSequence @Inject constructor(
     private val telemetry: TelemetryStore,
     private val landedRule: LandedRule,
     private val groundRule: GroundPositionRule,
+    private val preflight: PreflightVeto,
 ) {
 
     private val takeOffRoutes = CommandRoutes(::takeOffRouteTo)
@@ -87,7 +90,7 @@ internal class TakeOffSequence @Inject constructor(
             !landedRule.isOnGround(telemetry) || !groundRule.isNearGround(telemetry) ->
                 CommandRoute.Closed(NotSentReason.NotLanded)
 
-            else -> route
+            else -> preflight.refusalToTakeOff(systemId)?.let(CommandRoute::Closed) ?: route
         }
     }
 

@@ -2,6 +2,11 @@ package com.owindev.gcs.data.vehicle.command
 
 import android.util.Log
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.preflight.PreflightAcknowledgements
+import com.owindev.gcs.core.domain.preflight.PreflightColour
+import com.owindev.gcs.core.domain.preflight.PreflightItem
+import com.owindev.gcs.core.domain.preflight.PreflightKind
+import com.owindev.gcs.core.domain.preflight.PreflightReason
 import com.owindev.gcs.core.domain.telemetry.GroundPositionRule
 import com.owindev.gcs.core.domain.telemetry.LandedRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
@@ -41,6 +46,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -52,6 +58,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import org.amshove.kluent.shouldBeEmpty
 import org.amshove.kluent.shouldBeEqualTo
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -88,6 +95,20 @@ class DefaultCommandRepositoryTest {
     private var landedState = MAV_LANDED_STATE_ON_GROUND
     private var relativeAltMillimetres = 0
     private var vzCentimetresPerSecond = 0
+    private var armRefusal: (PreflightAcknowledgements) -> NotSentReason? = { null }
+    private var takeOffRefusal: () -> NotSentReason? = { null }
+    private var vetoAsked = 0
+    private val veto = object : PreflightVeto {
+        override fun refusalToArm(systemId: SystemId, acknowledged: PreflightAcknowledgements): NotSentReason? {
+            vetoAsked++
+            return armRefusal(acknowledged)
+        }
+
+        override fun refusalToTakeOff(systemId: SystemId): NotSentReason? {
+            vetoAsked++
+            return takeOffRefusal()
+        }
+    }
 
     private lateinit var repository: DefaultCommandRepository
 
@@ -110,8 +131,11 @@ class DefaultCommandRepositoryTest {
                 telemetry = telemetryStore,
                 landedRule = LandedRule(),
                 groundRule = GroundPositionRule(),
+                preflight = veto,
             ),
             altitudeRule = TakeOffAltitudeRule(),
+            routes = { route },
+            preflight = veto,
             scope = testScope.backgroundScope,
         )
     }
@@ -126,7 +150,12 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = listOf(repository.arm(SYSTEM), repository.returnToLaunch(SYSTEM), repository.land(SYSTEM))
+            val result =
+                listOf(
+                    repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS),
+                    repository.returnToLaunch(SYSTEM),
+                    repository.land(SYSTEM),
+                )
 
             result shouldBeEqualTo List(3) { CommandResult.Accepted }
             sent shouldBeEqualTo listOf(
@@ -165,7 +194,7 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN the vehicle never answers WHEN arming THEN it is sent once and never again`() = testScope.runTest {
         vehicleAnswers { null }
 
-        val result = repository.arm(SYSTEM)
+        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
         delay(LONG_AFTER)
 
         result shouldBeEqualTo noAnswer(attempts = 1)
@@ -243,7 +272,7 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { null }
             answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_COMPONENT_ARM_DISARM), after = PAST_ONE_ATTEMPT)
 
-            val result = repository.arm(SYSTEM)
+            val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
             delay(LONG_AFTER)
 
             result shouldBeEqualTo noAnswer(attempts = 1)
@@ -289,10 +318,10 @@ class DefaultCommandRepositoryTest {
     @Test
     fun `GIVEN an arm without answer 5 s ago WHEN arming again THEN it is not sent`() = testScope.runTest {
         vehicleAnswers { null }
-        repository.arm(SYSTEM)
+        repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
         delay(WITHIN_ARM_LATE_WINDOW)
 
-        val result = repository.arm(SYSTEM)
+        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
         sent.size shouldBeEqualTo 1
@@ -302,10 +331,10 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an arm without answer past its 10 s late window WHEN arming again THEN it is sent`() =
         testScope.runTest {
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command).takeIf { sent.size == 2 } }
-            repository.arm(SYSTEM)
+            repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
             delay(PAST_ARM_LATE_WINDOW)
 
-            val result = repository.arm(SYSTEM)
+            val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
 
             result shouldBeEqualTo CommandResult.Accepted
         }
@@ -348,7 +377,7 @@ class DefaultCommandRepositoryTest {
         val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
         delay(DURING_SECOND_ATTEMPT)
 
-        val result = listOf(repository.arm(SYSTEM), rtl.await())
+        val result = listOf(repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS), rtl.await())
 
         result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command }.distinct() shouldBeEqualTo listOf(MAV_CMD_NAV_RETURN_TO_LAUNCH)
@@ -358,7 +387,7 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an arm pending WHEN sending an RTL THEN the RTL is not sent and the arm goes on`() = testScope.runTest {
         vehicleAnswers { null }
         answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_COMPONENT_ARM_DISARM), after = HALF_AN_ATTEMPT)
-        val arm = async(start = CoroutineStart.UNDISPATCHED) { repository.arm(SYSTEM) }
+        val arm = async(start = CoroutineStart.UNDISPATCHED) { repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS) }
 
         val result = listOf(repository.returnToLaunch(SYSTEM), arm.await())
 
@@ -714,7 +743,7 @@ class DefaultCommandRepositoryTest {
         vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
         val takeOff = async(start = CoroutineStart.UNDISPATCHED) { repository.takeOff(SYSTEM, ALTITUDE) }
 
-        val result = listOf(repository.arm(SYSTEM), takeOff.await())
+        val result = listOf(repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS), takeOff.await())
 
         result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF)
@@ -990,6 +1019,119 @@ class DefaultCommandRepositoryTest {
             }
         }
 
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a red pre-flight item WHEN arming THEN nothing is sent, with the red items`() = testScope.runTest {
+        armRefusal = { GPS_LOST }
+        vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+
+        result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
+        sent.shouldBeEmpty()
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an amber item not acknowledged WHEN arming THEN nothing is sent, with that item`() = testScope.runTest {
+        armRefusal = { acknowledged -> UNACKNOWLEDGED.takeUnless { acknowledged == ACKNOWLEDGED } }
+        vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+
+        result shouldBeEqualTo CommandResult.NotSent(UNACKNOWLEDGED)
+        sent.shouldBeEmpty()
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN the amber items acknowledged WHEN arming THEN it is sent, judged on those acknowledgements`() =
+        testScope.runTest {
+            armRefusal = { acknowledged -> UNACKNOWLEDGED.takeUnless { acknowledged == ACKNOWLEDGED } }
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = repository.arm(SYSTEM, ACKNOWLEDGED)
+
+            result shouldBeEqualTo CommandResult.Accepted
+            sent shouldBeEqualTo listOf(commandLong(MAV_CMD_COMPONENT_ARM_DISARM, param1 = 1f))
+        }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an item that turns red after the arm was admitted WHEN the sender checks THEN nothing is sent`() =
+        testScope.runTest {
+            var checks = 0
+            armRefusal = { if (++checks > 1) GPS_LOST else null }
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+
+            result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
+            sent.shouldBeEmpty()
+        }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a red pre-flight item WHEN taking off THEN neither the mode change nor NAV_TAKEOFF is sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            takeOffRefusal = { GPS_LOST }
+            vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
+            sent.shouldBeEmpty()
+        }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an item that turns red after the mode change WHEN taking off THEN NAV_TAKEOFF is not sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            takeOffRefusal = { GPS_LOST.takeIf { sent.isNotEmpty() } }
+            vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = repository.takeOff(SYSTEM, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
+            sent shouldBeEqualTo listOf(
+                commandLong(MAV_CMD_DO_SET_MODE, param1 = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, param2 = GUIDED_MODE),
+            )
+        }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN in flight with the GPS fix lost WHEN sending RTL and then land THEN both are sent, never vetoed`() =
+        testScope.runTest {
+            vehicles.value = mapOf(SYSTEM to vehicle(LOITER, armed = true))
+            armRefusal = { GPS_LOST }
+            takeOffRefusal = { GPS_LOST }
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = listOf(repository.returnToLaunch(SYSTEM), repository.land(SYSTEM))
+
+            result shouldBeEqualTo List(2) { CommandResult.Accepted }
+            sent shouldBeEqualTo listOf(commandLong(MAV_CMD_NAV_RETURN_TO_LAUNCH), commandLong(MAV_CMD_NAV_LAND))
+            vetoAsked shouldBeEqualTo 0
+        }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN in flight with a critical battery WHEN sending RTL and then land THEN both are sent, never vetoed`() =
+        testScope.runTest {
+            vehicles.value = mapOf(SYSTEM to vehicle(LOITER, armed = true))
+            armRefusal = { BATTERY_CRITICAL }
+            takeOffRefusal = { BATTERY_CRITICAL }
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+
+            val result = listOf(repository.returnToLaunch(SYSTEM), repository.land(SYSTEM))
+
+            result shouldBeEqualTo List(2) { CommandResult.Accepted }
+            sent shouldBeEqualTo listOf(commandLong(MAV_CMD_NAV_RETURN_TO_LAUNCH), commandLong(MAV_CMD_NAV_LAND))
+            vetoAsked shouldBeEqualTo 0
+        }
+
     /**
      * The vehicle answers each COMMAND_LONG the sender lets out with [answer], [ANSWER_DELAY] later, or not at all when
      * it gives `null`. The sender reads the route as the real one does, under its lock, before each frame.
@@ -1104,6 +1246,22 @@ class DefaultCommandRepositoryTest {
     }
 
     private companion object {
+        val NO_ACKNOWLEDGEMENTS = PreflightAcknowledgements()
+        val LIMITS_NOT_READ =
+            PreflightItem(PreflightKind.BATTERY_LIMITS, PreflightColour.AMBER, PreflightReason.LimitsNotRead)
+        val ACKNOWLEDGED =
+            PreflightAcknowledgements(
+                connection = 1,
+                acknowledged = mapOf(LIMITS_NOT_READ to TestTimeSource().markNow()),
+            )
+        val UNACKNOWLEDGED = NotSentReason.PreflightUnacknowledged(listOf(LIMITS_NOT_READ))
+        val GPS_LOST = NotSentReason.PreflightRed(
+            listOf(PreflightItem(PreflightKind.GPS, PreflightColour.RED, PreflightReason.NoFix3d)),
+        )
+        val BATTERY_CRITICAL = NotSentReason.PreflightRed(
+            listOf(PreflightItem(PreflightKind.BATTERY, PreflightColour.RED, PreflightReason.BatteryCritical)),
+        )
+
         @JvmStatic
         fun closedRouteReasons(): List<NotSentReason> = listOf(
             NotSentReason.Replay,

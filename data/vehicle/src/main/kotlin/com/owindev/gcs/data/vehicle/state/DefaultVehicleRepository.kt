@@ -150,6 +150,10 @@ internal class DefaultVehicleRepository @Inject constructor(
         }
     }
 
+    /** The active vehicle's current connection ([ActiveLinkChanges.connection]), for the pre-flight check. */
+    val activeConnection: Long
+        get() = activeLinkChanges.connection
+
     override val activeSystemId: StateFlow<SystemId?> by lazy {
         // Starts the jobs: the active vehicle comes from the same HEARTBEATs as the map.
         vehicles
