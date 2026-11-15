@@ -222,7 +222,7 @@ the issue number to an existing one.
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
 - Decode every reused fixture with pymavlink and list the existing captures before planning a new one (#35, #38).
-- A log may hold a message only as MAVLink 1 (Mission Planner's parameter download): count its MAVLink 2 frames (#97).
+- A log may hold a message only as MAVLink 1 (Mission Planner's parameter download): count its MAVLink 2 frames (#97, #53).
 - A false start marker with a plausible header holds the parser: noise tests must keep the stream going (#9).
 - Adding a message breaks tests that borrowed it as "unknown": borrow one the roadmap will never decode (#37).
 - Kluent compares maps in iteration order: sort both sides (#10).
@@ -267,6 +267,7 @@ the issue number to an existing one.
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
 - A display staleness threshold is no safety gate: give the gate its own bound and the stream the rate it needs (#112).
 - A gate of two checks needs a test where each fails alone, or one hides the other: mutate them one at a time (#99).
+- An alert held because a value is not known must still get worse: judge it as well and keep the more urgent (#53).
 - A threshold set is no failsafe armed: read every condition the vehicle's code checks before it acts (#101).
 - A clear and the text it closes can arrive together: apply the clear last, it is the newer (#100).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
@@ -282,6 +283,8 @@ the issue number to an existing one.
 - Measure timings in SITL before documenting them: API 36 blocks a background app's network after about 5 s (#14).
 - In airplane mode the emulator's bound UDP socket never fails: a transport failure cannot be reproduced there (#25).
 - A SITL TCP port can stay silent for a whole session: count raw bytes on it first (#70).
+- With every SITL TCP port taken, send through the relay's UDP socket and read the answers in its `.down.tlog` (#53).
+- Mission Planner's simulator never drains with `SIM_BATT_CAP_AH` 0: step `SIM_BATT_VOLTAGE` down instead (#53).
 - Restarting the relay changes its port: restart the app too, or every command is refused as a route change (#99).
 - ArduCopter checks the GPS before arming only in a mode that needs position: fail it in LOITER, not STABILIZE (#100).
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).

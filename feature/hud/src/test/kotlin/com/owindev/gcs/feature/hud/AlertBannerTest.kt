@@ -109,6 +109,39 @@ class AlertBannerTest {
     }
 
     @Test
+    fun `GIVEN a low battery at the GCS's threshold, the vehicle's not read WHEN building the banner THEN says so`() {
+        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryLow(EnergyLimitSource.GCS_UNREAD), occurrence = 1)))
+
+        val result = alertBannerOf(alerts, TelemetryPanel(battery = Reading(LOW_BATTERY, stale = false, Duration.ZERO)))
+
+        result shouldBeEqualTo AlertBanner.Showing(
+            alert = Alert.BatteryLow(EnergyLimitSource.GCS_UNREAD),
+            occurrence = 1,
+            acknowledgeable = true,
+            others = 0,
+            batteryRemaining = LOW_REMAINING,
+            gcsLimit = true,
+        )
+    }
+
+    @Test
+    fun `GIVEN a critical battery at the GCS's threshold, none set WHEN building the banner THEN says so`() {
+        val alerts = Alerts.Evaluated(
+            listOf(raised(Alert.BatteryCritical(EnergyLimitSource.GCS_UNSET), occurrence = 1)),
+        )
+
+        val result = alertBannerOf(alerts, TelemetryPanel())
+
+        result shouldBeEqualTo AlertBanner.Showing(
+            alert = Alert.BatteryCritical(EnergyLimitSource.GCS_UNSET),
+            occurrence = 1,
+            acknowledgeable = false,
+            others = 0,
+            gcsLimit = true,
+        )
+    }
+
+    @Test
     fun `GIVEN a critical battery with a stale reading WHEN building the banner THEN gives no remaining energy`() {
         val alerts = Alerts.Evaluated(listOf(raised(VEHICLE_CRITICAL, occurrence = 1)))
 

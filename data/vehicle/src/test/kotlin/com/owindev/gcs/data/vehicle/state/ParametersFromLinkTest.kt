@@ -80,7 +80,19 @@ class ParametersFromLinkTest {
         }
 
     @Test
-    fun `GIVEN the active vehicle WHEN ArduCopter answers a whole round THEN the store keeps all nine`() =
+    fun `GIVEN the active vehicle WHEN ArduCopter announces BATT_OPTIONS set to its bit 6 THEN the store keeps 64`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE, GAP to BATT_OPTIONS_RESTING)
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(HEARD)
+            val result = parameterStore.parameters.value.values
+
+            result shouldBeEqualTo mapOf(BatteryParameter.OPTIONS to SEND_RESTING_VOLTAGE)
+        }
+
+    @Test
+    fun `GIVEN the active vehicle WHEN ArduCopter answers a whole round THEN the store keeps all eleven`() =
         testScope.runTest {
             every { transport.datagrams() } returns datagrams(
                 GAP to DISARMED_STABILIZE,
@@ -164,7 +176,15 @@ private fun emptySource(): DatagramSource = object : DatagramSource {
 private const val BATT_LOW_VOLT = "derived/param-value-batt-low-volt.bin"
 private const val LOW_VOLTS = 10.5f
 
-/** ArduCopter 4.7.3-beta's real answers, with the values pymavlink decodes (resources `README.md`). */
+/** `BATT_OPTIONS` 64.0, INT32, as ArduCopter 4.7.3 announced it once set (pymavlink, resources `README.md`). */
+private const val BATT_OPTIONS_RESTING = "param/batt-options-resting-voltage.bin"
+
+/** Bit 6, "Send resistance compensated voltage to GCS" (`AP_BattMonitor_Params.cpp`). */
+private const val SEND_RESTING_VOLTAGE = 64f
+
+/**
+ * ArduCopter 4.7.3's real answers (4.7.3-beta for the first nine), as pymavlink decodes them (resources `README.md`).
+ */
 private val SITL_ROUND = mapOf(
     "param/batt-monitor.bin" to (BatteryParameter.MONITOR to 4f),
     "param/batt-low-volt.bin" to (BatteryParameter.LOW_VOLT to 10.8f),
@@ -175,12 +195,14 @@ private val SITL_ROUND = mapOf(
     "param/batt-capacity.bin" to (BatteryParameter.CAPACITY to 3000f),
     "param/batt-fs-low-act.bin" to (BatteryParameter.FS_LOW_ACT to 2f),
     "param/batt-fs-crt-act.bin" to (BatteryParameter.FS_CRT_ACT to 0f),
+    "param/batt-options.bin" to (BatteryParameter.OPTIONS to 0f),
+    "param/batt-fs-voltsrc.bin" to (BatteryParameter.FS_VOLTSRC to 0f),
 )
 
 /** Every datagram delivered, well within the 3 s link-loss timeout (REQ-017). */
 private const val HEARD = 500L
 
-/** A HEARTBEAT and the nine answers, [GAP] apart, all delivered and still within the link-loss timeout. */
+/** A HEARTBEAT and the eleven answers, [GAP] apart, all delivered and still within the link-loss timeout. */
 private const val ROUND_HEARD = 1_500L
 
 /** `time_boot_ms` 4000000000 and then 397119 (pymavlink): back by far more than the reboot backstep. */
