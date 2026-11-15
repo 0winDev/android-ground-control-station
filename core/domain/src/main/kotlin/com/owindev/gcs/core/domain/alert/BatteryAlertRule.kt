@@ -95,12 +95,12 @@ internal class BatteryAlertRule(
         val wasCritical = wasActive.any { it is Alert.BatteryCritical }
         val wasLow = wasCritical || wasActive.any { it is Alert.BatteryLow }
         return when {
-            crosses(remaining, critical) -> Alert.BatteryCritical(critical.source)
+            critical.isCrossedBy(remaining) -> Alert.BatteryCritical(critical.source)
 
             wasCritical && remaining < critical.percent + thresholds.hysteresis ->
                 Alert.BatteryCritical(critical.source)
 
-            crosses(remaining, low) -> Alert.BatteryLow(low.source)
+            low.isCrossedBy(remaining) -> Alert.BatteryLow(low.source)
 
             wasLow && remaining < low.percent + thresholds.hysteresis -> Alert.BatteryLow(low.source)
 
@@ -193,8 +193,9 @@ private fun unreadAfterVehicle(limits: BatteryAlertLimits, wasActive: Set<Alert>
     return unread && wasActive.any { energySourceOf(it) == EnergyLimitSource.VEHICLE }
 }
 
-private fun crosses(remaining: Int, limit: EnergyLimit): Boolean =
-    if (limit.source == EnergyLimitSource.VEHICLE) remaining < limit.percent else remaining <= limit.percent
+/** As ArduPilot compares its own threshold, below it; the GCS's own, at or below it. */
+internal fun EnergyLimit.isCrossedBy(remaining: Int): Boolean =
+    if (source == EnergyLimitSource.VEHICLE) remaining < percent else remaining <= percent
 
 private fun energySourceOf(alert: Alert): EnergyLimitSource? = when (alert) {
     is Alert.BatteryCritical -> alert.source
