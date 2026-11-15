@@ -174,7 +174,7 @@ internal class CommandExchange @Inject constructor(
         CommandResult.NoAnswer(attempts, startedByVehicle = false, retriesStopped)
 
     private fun sessionEnded(): NotSentReason =
-        if (session.session.value.origin == DataOrigin.REPLAY) NotSentReason.REPLAY else NotSentReason.LINK_LOST
+        if (session.session.value.origin == DataOrigin.REPLAY) NotSentReason.Replay else NotSentReason.LinkLost
 
     private suspend fun dropLateAnswers(request: Request, acks: ReceiveChannel<CommandAck>) {
         withTimeoutOrNull(request.command.lateWindow) {
@@ -212,7 +212,7 @@ internal class CommandExchange @Inject constructor(
 
         /** The app stopped retrying because the link, the session or the route ended: that explains the silence. */
         private val SILENCE_EXPLAINED =
-            setOf(NotSentReason.LINK_LOST, NotSentReason.REPLAY, NotSentReason.ROUTE_CHANGED)
+            setOf(NotSentReason.LinkLost, NotSentReason.Replay, NotSentReason.RouteChanged)
 
         private const val TAG = "CommandExchange"
     }

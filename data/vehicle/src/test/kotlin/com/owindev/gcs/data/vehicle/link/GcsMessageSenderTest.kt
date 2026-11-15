@@ -186,11 +186,11 @@ class GcsMessageSenderTest {
     @Test
     fun `GIVEN a closed route WHEN sending a command THEN nothing leaves and the route's reason is returned`() =
         runTest {
-            val closed = CommandRoute.Closed(NotSentReason.ROUTE_CHANGED)
+            val closed = CommandRoute.Closed(NotSentReason.RouteChanged)
 
             val result = sender.send(COMMAND) { closed }
 
-            result shouldBeEqualTo CommandSendResult.NotSent(NotSentReason.ROUTE_CHANGED)
+            result shouldBeEqualTo CommandSendResult.NotSent(NotSentReason.RouteChanged)
             coVerifyNever {
                 transport.send(any(), any())
             }
@@ -212,7 +212,7 @@ class GcsMessageSenderTest {
                 OPEN_ROUTE
             }
 
-            result shouldBeEqualTo CommandSendResult.NotSent(NotSentReason.REPLAY)
+            result shouldBeEqualTo CommandSendResult.NotSent(NotSentReason.Replay)
             routeReads shouldBeEqualTo 0
             coVerifyNever {
                 transport.send(any(), any())
@@ -252,8 +252,8 @@ class GcsMessageSenderTest {
             val result = List(2) { sender.send(COMMAND) { OPEN_ROUTE } }
 
             result shouldBeEqualTo listOf(
-                CommandSendResult.NotSent(NotSentReason.LINK_LOST),
-                CommandSendResult.NotSent(NotSentReason.SEND_FAILED),
+                CommandSendResult.NotSent(NotSentReason.LinkLost),
+                CommandSendResult.NotSent(NotSentReason.SendFailed),
             )
         }
 

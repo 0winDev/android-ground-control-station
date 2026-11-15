@@ -150,6 +150,10 @@ internal class DefaultVehicleRepository @Inject constructor(
         }
     }
 
+    /** The active vehicle's current connection ([ActiveLinkChanges.connection]), for the pre-flight check. */
+    val activeConnection: Long
+        get() = activeLinkChanges.connection
+
     override val activeSystemId: StateFlow<SystemId?> by lazy {
         // Starts the jobs: the active vehicle comes from the same HEARTBEATs as the map.
         vehicles
@@ -278,9 +282,13 @@ internal class DefaultVehicleRepository @Inject constructor(
      */
     private fun update(systemId: SystemId, vehicle: Vehicle) {
         val before = mutableVehicles.value[systemId]?.link ?: VehicleLink.LOST
-        mutableVehicles.value += systemId to vehicle
         // Only the live vehicle is ever asked for anything: a replayed one has no address to send to.
-        if (systemId == activeVehicle.systemId.value && vehicle.origin == DataOrigin.LIVE && vehicle.link != before) {
+        val activeLinkChanged =
+            systemId == activeVehicle.systemId.value && vehicle.origin == DataOrigin.LIVE && vehicle.link != before
+        // Before the vehicle shows CONNECTED, so the pre-flight check never pairs it with the connection before.
+        if (activeLinkChanged) activeLinkChanges.nextConnection()
+        mutableVehicles.value += systemId to vehicle
+        if (activeLinkChanged) {
             val target = if (vehicle.link == VehicleLink.CONNECTED) {
                 VehicleTarget(systemId, addresses.getValue(systemId))
             } else {
@@ -333,10 +341,10 @@ internal class DefaultVehicleRepository @Inject constructor(
     override fun routeTo(systemId: SystemId): CommandRoute {
         val pinned = commandAddress
         return when {
-            session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.REPLAY)
-            systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NOT_ACTIVE_VEHICLE)
-            pinned == null || !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LINK_LOST)
-            addresses[systemId] != pinned -> CommandRoute.Closed(NotSentReason.ROUTE_CHANGED)
+            session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.Replay)
+            systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NotActiveVehicle)
+            pinned == null || !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LinkLost)
+            addresses[systemId] != pinned -> CommandRoute.Closed(NotSentReason.RouteChanged)
             else -> CommandRoute.Open(pinned)
         }
     }

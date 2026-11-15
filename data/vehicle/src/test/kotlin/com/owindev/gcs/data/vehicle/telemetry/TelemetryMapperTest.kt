@@ -273,12 +273,12 @@ class TelemetryMapperTest {
 
     @Tag("REQ-048")
     @Test
-    fun `GIVEN a SYS_STATUS with the pre-arm bit not enabled WHEN mapping it THEN is present, not enabled`() {
-        val received = received(preArmNotEnabled())
+    fun `GIVEN a real SYS_STATUS skipping every arming check WHEN mapping it THEN is present, not enabled`() {
+        val received = receivedFixture(SYS_STATUS_ARMING_CHECKS_SKIPPED)
 
         val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
 
-        result?.preArm?.value shouldBeEqualTo PreArmStatus(present = true, enabled = false, healthy = true)
+        result?.preArm?.value shouldBeEqualTo PreArmStatus(present = true, enabled = false, healthy = false)
     }
 
     @Tag("REQ-048")
@@ -599,6 +599,7 @@ private const val VFR_HUD = "telemetry/vfr-hud.bin"
 private const val VFR_HUD_EDGES = "derived/vfr-hud-edges.bin"
 private const val SYS_STATUS = "telemetry/sys-status.bin"
 private const val SYS_STATUS_PREARM_UNHEALTHY = "statustext/sys-status-prearm-unhealthy.bin"
+private const val SYS_STATUS_ARMING_CHECKS_SKIPPED = "statustext/sys-status-arming-checks-skipped.bin"
 
 /** `MAV_SYS_STATUS_PREARM_CHECK` in `common.xml`. */
 private const val PREARM_CHECK_BIT = 0x1000_0000L
@@ -664,10 +665,6 @@ private val UNHEALTHY_WITHOUT_READING = Battery(
 private fun realSysStatus() = MavlinkDecoder.decode(
     MavlinkParser(MavlinkMessages).parse(readFixture(SYS_STATUS)).single(),
 ) as MavlinkMessage.SysStatus
-
-private fun preArmNotEnabled() = realSysStatus().let {
-    it.copy(onboardControlSensorsEnabled = it.onboardControlSensorsEnabled and PREARM_CHECK_BIT.inv())
-}
 
 private fun preArmNotPresent() = realSysStatus().let {
     it.copy(onboardControlSensorsPresent = it.onboardControlSensorsPresent and PREARM_CHECK_BIT.inv())

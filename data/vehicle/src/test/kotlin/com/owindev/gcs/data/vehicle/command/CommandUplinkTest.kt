@@ -153,7 +153,7 @@ class CommandUplinkTest {
         sendResults = mutableListOf(
             CommandSendResult.Sent,
             CommandSendResult.Sent,
-            CommandSendResult.NotSent(NotSentReason.SEND_FAILED),
+            CommandSendResult.NotSent(NotSentReason.SendFailed),
         )
 
         exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
@@ -167,7 +167,7 @@ class CommandUplinkTest {
             sendResults = mutableListOf(
                 CommandSendResult.Sent,
                 CommandSendResult.Sent,
-                CommandSendResult.NotSent(NotSentReason.LINK_LOST),
+                CommandSendResult.NotSent(NotSentReason.LinkLost),
             )
 
             exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
@@ -181,7 +181,7 @@ class CommandUplinkTest {
             sendResults = mutableListOf(
                 CommandSendResult.Sent,
                 CommandSendResult.Sent,
-                CommandSendResult.NotSent(NotSentReason.ROUTE_CHANGED),
+                CommandSendResult.NotSent(NotSentReason.RouteChanged),
             )
 
             exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
@@ -195,7 +195,7 @@ class CommandUplinkTest {
             sendResults = mutableListOf(
                 CommandSendResult.Sent,
                 CommandSendResult.Sent,
-                CommandSendResult.NotSent(NotSentReason.NOT_LANDED),
+                CommandSendResult.NotSent(NotSentReason.NotLanded),
             )
 
             exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}

@@ -14,6 +14,12 @@ data class UplinkHealth(
     val answered: Boolean = false,
 ) {
 
+    /**
+     * Whether an answer from the vehicle is still needed: none since CONNECTED, or a command left without one since.
+     * Only an answer ends either, so the GCS must ask for one, or a check that needs it never passes (REQ-048).
+     */
+    val awaitsAnswer: Boolean get() = !answered || unansweredSince != null
+
     /** A sent HEARTBEAT ends a run of failed periods but never a command without answer. */
     fun afterHeartbeatSent(): UplinkHealth = copy(failedHeartbeatPeriods = 0)
 

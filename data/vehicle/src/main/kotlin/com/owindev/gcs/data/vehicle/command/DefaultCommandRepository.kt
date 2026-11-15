@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.command
 
 import android.util.Log
+import com.owindev.gcs.core.domain.preflight.PreflightAcknowledgements
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
@@ -31,6 +32,8 @@ internal class DefaultCommandRepository @Inject constructor(
     private val exchange: CommandExchange,
     private val takeOff: TakeOffSequence,
     private val altitudeRule: TakeOffAltitudeRule,
+    private val routes: CommandRoutes,
+    private val preflight: PreflightVeto,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : CommandRepository {
 
@@ -48,7 +51,12 @@ internal class DefaultCommandRepository @Inject constructor(
     private val mutablePending = MutableStateFlow<PendingCommand?>(null)
     override val pending: StateFlow<PendingCommand?> = mutablePending.asStateFlow()
 
-    override suspend fun arm(systemId: SystemId): CommandResult = submit(systemId, VehicleCommand.ARM, ARM_COMMAND)
+    override suspend fun arm(systemId: SystemId, acknowledged: PreflightAcknowledgements): CommandResult = submit(
+        Request(systemId, VehicleCommand.ARM) { onState, onResult ->
+            val vetoed = routes.vetoedBy { preflight.refusalToArm(it, acknowledged) }
+            exchange.run(systemId, VehicleCommand.ARM.name, ARM_COMMAND, onState, vetoed, onResult)
+        },
+    )
 
     override suspend fun returnToLaunch(systemId: SystemId): CommandResult =
         submit(systemId, VehicleCommand.RETURN_TO_LAUNCH, RETURN_TO_LAUNCH_COMMAND)
@@ -57,7 +65,7 @@ internal class DefaultCommandRepository @Inject constructor(
 
     override suspend fun takeOff(systemId: SystemId, altitudeMetres: Float): CommandResult {
         if (!altitudeRule.isValid(altitudeMetres)) {
-            val result = CommandResult.NotSent(NotSentReason.ALTITUDE_OUT_OF_RANGE)
+            val result = CommandResult.NotSent(NotSentReason.AltitudeOutOfRange)
             report(systemId, VehicleCommand.TAKE_OFF, result)
             return result
         }
@@ -80,8 +88,8 @@ internal class DefaultCommandRepository @Inject constructor(
         when (val admission = synchronized(lock) { admit(request) }) {
             Admission.Refused -> {
                 request.job.cancel()
-                report(request.systemId, request.command, CommandResult.NotSent(NotSentReason.BUSY))
-                return CommandResult.NotSent(NotSentReason.BUSY)
+                report(request.systemId, request.command, CommandResult.NotSent(NotSentReason.Busy))
+                return CommandResult.NotSent(NotSentReason.Busy)
             }
 
             is Admission.Admitted -> admission.superseded?.let { superseded ->

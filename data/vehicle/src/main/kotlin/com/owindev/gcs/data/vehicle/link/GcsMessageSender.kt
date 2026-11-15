@@ -67,7 +67,7 @@ internal class GcsMessageSender @Inject constructor(
      * lock while the link is lost, a replay starts or the route changes never leaves.
      */
     suspend fun send(commandLong: CommandLong, route: () -> CommandRoute): CommandSendResult = lock.withLock {
-        if (!isLive()) return@withLock CommandSendResult.NotSent(NotSentReason.REPLAY)
+        if (!isLive()) return@withLock CommandSendResult.NotSent(NotSentReason.Replay)
         when (val current = route()) {
             is CommandRoute.Closed -> CommandSendResult.NotSent(current.reason)
             is CommandRoute.Open -> sendCommandHoldingLock(commandLong, current.address)
@@ -87,8 +87,8 @@ internal class GcsMessageSender @Inject constructor(
         }
         return when (result) {
             SendResult.Sent -> CommandSendResult.Sent
-            SendResult.NotOpen -> CommandSendResult.NotSent(NotSentReason.LINK_LOST)
-            is SendResult.Failed -> CommandSendResult.NotSent(NotSentReason.SEND_FAILED)
+            SendResult.NotOpen -> CommandSendResult.NotSent(NotSentReason.LinkLost)
+            is SendResult.Failed -> CommandSendResult.NotSent(NotSentReason.SendFailed)
         }
     }
 

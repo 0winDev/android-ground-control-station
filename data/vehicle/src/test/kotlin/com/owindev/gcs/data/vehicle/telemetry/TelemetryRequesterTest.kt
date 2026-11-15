@@ -419,6 +419,66 @@ class TelemetryRequesterTest {
         sent.map { it.param1 } shouldBeEqualTo STREAM_IDS
     }
 
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN the round's answers lost and every stream arriving WHEN running THEN SYS_STATUS is asked again`() =
+        testScope.runTest {
+            mockLog()
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED).takeIf { sent.size > STREAMS } }
+            vehicleStreams(SYSTEM_1)
+
+            requester.run(isHeard = { true }, targets = connectedFor(TWENTY_SECONDS))
+
+            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + SYS_STATUS_ID
+            uplink.health.value.answered shouldBeEqualTo true
+        }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN no answer and every stream arriving WHEN running THEN SYS_STATUS is asked every 5 s`() =
+        testScope.runTest {
+            mockLog()
+            vehicleAnswers { null }
+            vehicleStreams(SYSTEM_1)
+
+            requester.run(isHeard = { true }, targets = connectedFor(TWENTY_SECONDS))
+
+            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + listOf(SYS_STATUS_ID, SYS_STATUS_ID)
+        }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN the round answered and then a command without answer WHEN running THEN SYS_STATUS is asked again`() =
+        testScope.runTest {
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+            vehicleStreams(SYSTEM_1)
+            backgroundScope.launch {
+                delay(TWO_SECONDS)
+                uplink.commandUnanswered()
+            }
+
+            requester.run(isHeard = { true }, targets = connectedFor(TWENTY_SECONDS))
+
+            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + SYS_STATUS_ID
+            uplink.health.value.awaitsAnswer shouldBeEqualTo false
+        }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN no answer and the vehicle not heard right now WHEN running THEN SYS_STATUS is not asked again`() =
+        testScope.runTest {
+            mockLog()
+            vehicleAnswers { null }
+            vehicleStreams(SYSTEM_1)
+
+            requester.run(isHeard = { false }, targets = connectedFor(TWENTY_SECONDS))
+
+            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS
+        }
+
     @Test
     fun `GIVEN one stream stops arriving WHEN running THEN only that stream is requested again`() = testScope.runTest {
         vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }

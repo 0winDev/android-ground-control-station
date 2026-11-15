@@ -147,6 +147,36 @@ class UplinkRuleTest {
         result shouldBeEqualTo true
     }
 
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN no answer since CONNECTED WHEN asking whether one is needed THEN it is`() {
+        val health = UplinkHealth.HEALTHY
+
+        val result = health.awaitsAnswer
+
+        result shouldBeEqualTo true
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an answer and nothing since WHEN asking whether one is needed THEN it is not`() {
+        val health = UplinkHealth.HEALTHY.afterCommandAnswered()
+
+        val result = health.awaitsAnswer
+
+        result shouldBeEqualTo false
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an answer and then a command without answer WHEN asking whether one is needed THEN it is`() {
+        val health = UplinkHealth.HEALTHY.afterCommandAnswered().afterCommandUnanswered(clock.markNow())
+
+        val result = health.awaitsAnswer
+
+        result shouldBeEqualTo true
+    }
+
     @Test
     fun `GIVEN zero failed periods to warn WHEN building the rule THEN it is refused`() {
         val periods = 0

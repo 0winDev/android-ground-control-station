@@ -218,6 +218,8 @@ the issue number to an existing one.
 - A base class default is not the vehicle's: read the override (ArduCopter's `vtol_state` is MC, not UNDEFINED) (#112).
 - ArduPilot cuts a `PreArm:` format at 50 bytes before its arguments: a fixed text never comes in chunks (#100).
 - An enable parameter hides its group from the list, not from a request by name: test a source's claim in SITL (#101).
+- ArduPilot 4.7 replaced `ARMING_CHECK` with `ARMING_SKIPCHK` (checks to skip, -1 all): ask the vehicle for each name (#102).
+- A PARAM_VALUE names no target and comes unrequested too: it never proves the vehicle heard this GCS (#102).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -267,6 +269,8 @@ the issue number to an existing one.
 - A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
 - A display staleness threshold is no safety gate: give the gate its own bound and the stream the rate it needs (#112).
 - A gate of two checks needs a test where each fails alone, or one hides the other: mutate them one at a time (#99).
+- A positive sign asked for once is lost for good with its answer: ask again until it comes, or the gate never opens (#102).
+- An acknowledgement must end on its own (connection, age): nothing prunes it while nobody looks (#102).
 - An alert held because a value is not known must still get worse: judge it as well and keep the more urgent (#53).
 - A threshold set is no failsafe armed: read every condition the vehicle's code checks before it acts (#101).
 - A clear and the text it closes can arrive together: apply the clear last, it is the newer (#100).
@@ -304,7 +308,8 @@ the issue number to an existing one.
 - `py -I` hides the user's site-packages, pymavlink included: run the repo's SITL tools without it (#100).
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
 - detekt measures tests too: a `when` over message types that grows with the codec becomes a table (#112).
-- Lint's ExperimentalDetector crashes on a fun-interface lambda held in a property: use a function reference (#99).
+- Lint's ExperimentalDetector crashes on a fun-interface lambda held or returned: use a class or a reference (#99, #102).
+- KSP's incremental run can drop a module's Hilt outputs: on a whole module missing, `kspDebugKotlin --rerun` (#102).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
 - On Windows `@TempDir` cannot delete a file left open: close what the SUT opened in `@AfterEach` (#70).
 - CI calls each module's `koverVerify` by name, never `check`: a module with a new minimum is added there (#63).
