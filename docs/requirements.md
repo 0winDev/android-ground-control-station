@@ -142,7 +142,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-023: an ACK that arrives late is taken as the next request's answer.
 - REQ-025: a `time_usec` of 2⁶³ or more reads as a negative `Long`.
 - REQ-027: at exactly 84°N the references disagree and the GCS says not available (#40, see the CSV README).
-- REQ-028: a voltage debounce counts from the readings received, so an alert can follow the vehicle's failsafe by up to one SYS_STATUS period (0.7 s in SITL).
+- REQ-028: a voltage debounce counts from the readings received, so an alert can follow the vehicle's failsafe by up to one SYS_STATUS period (1 s; 0.52 and 0.64 s measured), and can come before it, or without it, on a voltage that crosses back and forth faster than the stream.
 - REQ-028: with `BATT_LOW_TIMER` 0 the voltage still warns, though the vehicle never acts on it; with `BATT_FS_VOLTSRC` 1 and the raw voltage sent, it may warn of a sag the vehicle does not count.
 - REQ-028: the vehicle's percentage is truncated, so an energy alert at its threshold can come up to one point early.
 - REQ-028: an energy alert held while the vehicle's limits are not read again and then raised to critical at the GCS's no longer holds the vehicle's low limit if the energy rises.
@@ -150,7 +150,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-028: the armed state is not authenticated until signing (`docs/security.md`, K-2).
 - REQ-028: the battery parameters are read on each connection and reboot; a change from another GCS comes only in ArduPilot's PARAM_VALUE broadcast, and if that is lost the old value stays until the next round.
 - REQ-028: `BATT_MONITOR` acts only after the vehicle reboots: set to 0 from another GCS, the GCS shows no monitor while the vehicle still acts until then.
-- REQ-028: the battery settings are kept as last read while the vehicle is LOST; the alerts never judge them then, as the battery is stale, and #102 must combine them with the link state.
+- REQ-028: the battery settings are kept as last read while the vehicle is LOST; the battery is stale by then (3 s, as the LOST timeout) and stale readings judge nothing, and #102 must combine them with the link state.
 - REQ-028: a capacity threshold on a monitor type outside 4, 7, 8, 21 and 31 reads as unknown, though some others measure current too.
 - REQ-028: a failsafe level that is unknown never passes a gate or reads as protected (#53, #102).
 - REQ-028: an analog current pin that reads nothing still counts as measuring current; parameters cannot show it.

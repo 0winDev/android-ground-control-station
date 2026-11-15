@@ -80,6 +80,18 @@ class ParametersFromLinkTest {
         }
 
     @Test
+    fun `GIVEN the active vehicle WHEN ArduCopter announces BATT_OPTIONS set to its bit 6 THEN the store keeps 64`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(GAP to DISARMED_STABILIZE, GAP to BATT_OPTIONS_RESTING)
+            repository.vehicles.launchIn(backgroundScope)
+
+            delay(HEARD)
+            val result = parameterStore.parameters.value.values
+
+            result shouldBeEqualTo mapOf(BatteryParameter.OPTIONS to SEND_RESTING_VOLTAGE)
+        }
+
+    @Test
     fun `GIVEN the active vehicle WHEN ArduCopter answers a whole round THEN the store keeps all eleven`() =
         testScope.runTest {
             every { transport.datagrams() } returns datagrams(
@@ -163,6 +175,12 @@ private fun emptySource(): DatagramSource = object : DatagramSource {
 /** `BATT_LOW_VOLT` 10.5, REAL32, from system 1 component 1 (pymavlink, resources `README.md`). */
 private const val BATT_LOW_VOLT = "derived/param-value-batt-low-volt.bin"
 private const val LOW_VOLTS = 10.5f
+
+/** `BATT_OPTIONS` 64.0, INT32, as ArduCopter 4.7.3 announced it once set (pymavlink, resources `README.md`). */
+private const val BATT_OPTIONS_RESTING = "param/batt-options-resting-voltage.bin"
+
+/** Bit 6, "Send resistance compensated voltage to GCS" (`AP_BattMonitor_Params.cpp`). */
+private const val SEND_RESTING_VOLTAGE = 64f
 
 /**
  * ArduCopter 4.7.3's real answers (4.7.3-beta for the first nine), as pymavlink decodes them (resources `README.md`).

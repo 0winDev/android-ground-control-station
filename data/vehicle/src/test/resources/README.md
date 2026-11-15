@@ -136,4 +136,5 @@ of the same build once the app asked for it; MAVLink 2, unsigned, decoded with p
 | `param/batt-fs-low-act.bin` | real | `BATT_FS_LOW_ACT` 2.0, type 2 (INT8), count 1370, index 65535, LEN 25 | same |
 | `param/batt-fs-crt-act.bin` | real | `BATT_FS_CRT_ACT` 0.0, type 2 (INT8), count 1370, index 65535, LEN 25 | same |
 | `param/batt-options.bin` | real, ArduCopter 4.7.3 official (`d9c5097c`), the app's first round (#53) | `BATT_OPTIONS` 0.0, type 6 (INT32), count 1370, index 65535, LEN 25 | same |
+| `param/batt-options-resting-voltage.bin` | real, same session, announced once set to 64 (#53) | `BATT_OPTIONS` 64.0, type 6 (INT32), count 1370, index 65535, LEN 25 | bit 6 from the wire into the store |
 | `param/batt-fs-voltsrc.bin` | real, same round (#53) | `BATT_FS_VOLTSRC` 0.0, type 2 (INT8), count 1370, index 65535, LEN 25 | same |
