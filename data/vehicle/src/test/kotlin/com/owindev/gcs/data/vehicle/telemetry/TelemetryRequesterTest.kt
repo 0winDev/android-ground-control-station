@@ -11,6 +11,7 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.SendResult
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
@@ -59,6 +60,7 @@ class TelemetryRequesterTest {
     private val sent = mutableListOf<CommandLong>()
     private val testScope = TestScope()
     private val store = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
+    private val uplink = DefaultUplinkRepository(testScope.testScheduler.timeSource)
 
     private lateinit var requester: TelemetryRequester
 
@@ -68,6 +70,7 @@ class TelemetryRequesterTest {
         requester = TelemetryRequester(
             sender = sender,
             session = session,
+            uplink = uplink,
             store = store,
             rule = StalenessRule(),
             timeSource = testScope.testScheduler.timeSource,
@@ -192,6 +195,46 @@ class TelemetryRequesterTest {
 
         result shouldBeEqualTo List(STREAMS) { StreamResult.NoAck }
     }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @ParameterizedTest
+    @CsvSource("0", "2")
+    fun `GIVEN the vehicle accepts or denies the requests WHEN requesting THEN it has answered this GCS`(
+        mavResult: Int,
+    ) = testScope.runTest {
+        mockLog()
+        vehicleAnswers { ack(mavResult) }
+
+        requester.requestAll(TARGET)
+
+        uplink.health.value.answered shouldBeEqualTo true
+    }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN the vehicle never answers WHEN requesting THEN it has not answered this GCS`() = testScope.runTest {
+        mockLog()
+        vehicleAnswers { null }
+
+        requester.requestAll(TARGET)
+
+        uplink.health.value.answered shouldBeEqualTo false
+    }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN ACKs from another address WHEN requesting THEN the vehicle has not answered this GCS`() =
+        testScope.runTest {
+            mockLog()
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED).copy(sender = OTHER_ADDRESS) }
+
+            requester.requestAll(TARGET)
+
+            uplink.health.value.answered shouldBeEqualTo false
+        }
 
     /**
      * A known limit (see the class KDoc): the ACK names no message, so ATTITUDE's late DENIED (1.02 s) is taken

@@ -17,6 +17,7 @@ import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
+import com.owindev.gcs.data.vehicle.link.uplinkOnTestClock
 import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.ReplayClock
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester
@@ -768,6 +769,7 @@ class DefaultVehicleRepositoryTest {
             val requester = TelemetryRequester(
                 sender = GcsMessageSender(transport, ignoringRecorder(), session),
                 session = session,
+                uplink = uplinkOnTestClock(),
                 store = telemetryStore,
                 rule = StalenessRule(),
                 timeSource = testScheduler.timeSource,

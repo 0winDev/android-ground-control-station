@@ -7,6 +7,7 @@ import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.transport.SendResult
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
@@ -85,6 +86,7 @@ internal sealed interface StreamResult {
 internal class TelemetryRequester @Inject constructor(
     private val sender: GcsMessageSender,
     private val session: LinkSession,
+    private val uplink: DefaultUplinkRepository,
     private val store: TelemetryStore,
     private val rule: StalenessRule,
     private val timeSource: TimeSource.WithComparableMarks,
@@ -151,8 +153,11 @@ internal class TelemetryRequester @Inject constructor(
             withTimeoutOrNull(ACK_TIMEOUT) { session.messages.first { it.isFinalAckFrom(target) } }
         }
         when (sender.send(setMessageInterval(target.systemId, stream), target.address)) {
-            SendResult.Sent -> ack.await()?.let { received -> resultOf(received.message as CommandAck) }
-                ?: StreamResult.NoAck
+            SendResult.Sent -> ack.await()?.let { received ->
+                // Any final answer, a rejection too, shows the vehicle heard this GCS.
+                uplink.commandAnswered()
+                resultOf(received.message as CommandAck)
+            } ?: StreamResult.NoAck
 
             SendResult.NotOpen, is SendResult.Failed -> {
                 ack.cancel()

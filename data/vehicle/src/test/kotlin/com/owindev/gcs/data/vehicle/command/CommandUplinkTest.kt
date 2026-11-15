@@ -89,34 +89,34 @@ class CommandUplinkTest {
         }
 
     @Test
-    fun `GIVEN an arm without answer WHEN the next command is rejected THEN the uplink is healthy`() =
+    fun `GIVEN an arm without answer WHEN the next command is rejected THEN the vehicle has answered`() =
         testScope.runTest {
             exchange.run(SYSTEM, LABEL, ARM_COMMAND, onState = {}) {}
             answerLater(ack(MAV_RESULT_DENIED, MAV_CMD_NAV_RETURN_TO_LAUNCH), after = ANSWER_DELAY)
 
             exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
 
-            uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+            uplink.health.value shouldBeEqualTo ANSWERED
         }
 
     @Test
-    fun `GIVEN an arm without answer WHEN its late ACK arrives within the window THEN the uplink is healthy`() =
+    fun `GIVEN an arm without answer WHEN its late ACK arrives within the window THEN the vehicle has answered`() =
         testScope.runTest {
             answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_COMPONENT_ARM_DISARM), after = WITHIN_ARM_LATE_WINDOW)
 
             exchange.run(SYSTEM, LABEL, ARM_COMMAND, onState = {}) {}
 
-            uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+            uplink.health.value shouldBeEqualTo ANSWERED
         }
 
     @Test
-    fun `GIVEN an arm without answer WHEN its late ACK arrives right after the timeout THEN the uplink is healthy`() =
+    fun `GIVEN an arm without answer WHEN its late ACK arrives right after the timeout THEN it has answered`() =
         testScope.runTest {
             answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_COMPONENT_ARM_DISARM), after = RIGHT_AFTER_ARM_TIMEOUT)
 
             exchange.run(SYSTEM, LABEL, ARM_COMMAND, onState = {}) {}
 
-            uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+            uplink.health.value shouldBeEqualTo ANSWERED
         }
 
     @Test
@@ -131,21 +131,21 @@ class CommandUplinkTest {
         }
 
     @Test
-    fun `GIVEN an answered RTL WHEN it ends THEN the uplink is healthy`() = testScope.runTest {
+    fun `GIVEN an answered RTL WHEN it ends THEN the vehicle has answered`() = testScope.runTest {
         answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_NAV_RETURN_TO_LAUNCH), after = ANSWER_DELAY)
 
         exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
 
-        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+        uplink.health.value shouldBeEqualTo ANSWERED
     }
 
     @Test
-    fun `GIVEN an RTL in progress and then silent WHEN it ends THEN the uplink is healthy`() = testScope.runTest {
+    fun `GIVEN an RTL in progress and then silent WHEN it ends THEN the vehicle has answered`() = testScope.runTest {
         answerLater(ack(MAV_RESULT_IN_PROGRESS, MAV_CMD_NAV_RETURN_TO_LAUNCH), after = ANSWER_DELAY)
 
         exchange.run(SYSTEM, LABEL, RETURN_TO_LAUNCH_COMMAND, onState = {}) {}
 
-        uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+        uplink.health.value shouldBeEqualTo ANSWERED
     }
 
     @Test
@@ -259,3 +259,6 @@ class CommandUplinkTest {
         )
     }
 }
+
+/** Nothing against the uplink, and the vehicle answered this GCS. */
+private val ANSWERED = UplinkHealth(answered = true)
