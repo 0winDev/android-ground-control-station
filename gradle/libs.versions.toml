@@ -25,7 +25,7 @@ maplibreCompose = "0.20.0"
 
 # Tests
 junit = "5.14.4"
-mockk = "1.14.11"
+mockk = "1.14.12"
 kluent = "1.73"
 turbine = "1.2.1"
 coroutines = "1.11.0"
