@@ -25,7 +25,7 @@ class MavlinkParserRawTest {
     }
 
     @Tag("REQ-010")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a real HEARTBEAT WHEN parsing raw THEN it is valid with its exact bytes`() {
         val datagram = readFixture(DISARMED_STABILIZE)
@@ -36,7 +36,7 @@ class MavlinkParserRawTest {
     }
 
     @Tag("REQ-010")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a frame signed by pymavlink WHEN parsing raw THEN its bytes include the signature`() {
         val datagram = readFixture(SIGNED)
@@ -46,7 +46,7 @@ class MavlinkParserRawTest {
         result shouldBeEqualTo listOf(Valid(signedFrame, readFixture(SIGNED)))
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a real frame with an unknown message ID WHEN parsing raw THEN it is handed out whole and counted`() {
         val datagram = readFixture(POWER_STATUS)
@@ -58,7 +58,7 @@ class MavlinkParserRawTest {
     }
 
     @Tag("REQ-010")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN an unknown frame with 0xFD in its payload WHEN parsing raw THEN it is whole and the next follows`() {
         val datagram = readFixture(ATTITUDE_WITH_FD) + readFixture(DISARMED_STABILIZE)
@@ -73,7 +73,7 @@ class MavlinkParserRawTest {
     }
 
     @Tag("REQ-010")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed frame with an unknown message ID WHEN parsing raw THEN it is handed out with its signature`() {
         val datagram = readFixture(SIGNED_ATTITUDE) + readFixture(DISARMED_STABILIZE)
@@ -88,7 +88,7 @@ class MavlinkParserRawTest {
     }
 
     @Tag("REQ-011")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a known message with a bad checksum WHEN parsing raw THEN it is dropped and counted`() {
         val corrupted = readFixture(DISARMED_STABILIZE)
@@ -101,7 +101,7 @@ class MavlinkParserRawTest {
     }
 
     @Tag("REQ-010")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = [CORRUPTED_LEN_RAISED, CORRUPTED_LEN_LOWERED])
     fun `GIVEN a corrupted LEN before real frames WHEN parsing raw THEN every real frame after it comes out`(
@@ -118,7 +118,7 @@ class MavlinkParserRawTest {
 
     // parse() as the reference is the parser's own; MavlinkParserTest ties it to pymavlink.
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a megabyte of random bytes WHEN parsing raw THEN the valid frames and stats are parse's`() {
         val noise = chunks(Random(SEED).nextBytes(FUZZ_LENGTH), Random(SEED))

@@ -19,7 +19,7 @@ class MavlinkParserRawSessionTest {
     }
 
     @Tag("REQ-010")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the SITL session in random datagrams WHEN parsing raw THEN every MAVLink 2 frame comes out exactly`() {
         val datagrams = chunks(readFixture(SESSION_STREAM), Random(SEED))
@@ -37,7 +37,7 @@ class MavlinkParserRawSessionTest {
 
     // parse() as the reference is the parser's own; MavlinkParserTest ties it to pymavlink.
     @Tag("REQ-010")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the SITL session in random datagrams WHEN parsing raw THEN the valid frames and stats are parse's`() {
         val datagrams = chunks(readFixture(SESSION_STREAM), Random(SEED))

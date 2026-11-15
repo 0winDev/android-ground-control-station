@@ -79,7 +79,7 @@ class FlightRecorderTest {
         unmockkStatic(Log::class)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN no HEARTBEAT yet WHEN frames arrive THEN nothing is recorded`() = testScope.runTest {
         receive(SCALED_PRESSURE)
@@ -89,7 +89,7 @@ class FlightRecorderTest {
         logs().shouldBeEmpty()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the vehicle's first HEARTBEAT WHEN recording THEN a log named by the wall clock starts with it`() =
         testScope.runTest {
@@ -102,7 +102,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(SCALED_PRESSURE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN only a ground station's HEARTBEAT WHEN it arrives THEN nothing is recorded`() = testScope.runTest {
         receive(MISSION_PLANNER)
@@ -112,7 +112,7 @@ class FlightRecorderTest {
         logs().shouldBeEmpty()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN every kind of frame WHEN recorded THEN valid, unknown, unsigned and sent frames are written in order`() =
         testScope.runTest {
@@ -131,7 +131,7 @@ class FlightRecorderTest {
             )
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed unknown ID and a SETUP_SIGNING WHEN recorded THEN they are left out and counted`() =
         testScope.runTest {
@@ -145,7 +145,7 @@ class FlightRecorderTest {
             recorder.stats shouldBeEqualTo RecorderStats(dropped = 0, signedUnknownMessage = 1, setupSigning = 1)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN frames stamped before the writer runs WHEN written THEN each keeps the time it was handed over`() =
         testScope.runTest {
@@ -159,7 +159,7 @@ class FlightRecorderTest {
             timestamps(START_NAME) shouldBeEqualTo listOf(START_MICROS, START_MICROS + LATER_MICROS)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed frame sent WHEN recorded THEN it is written without its signature`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -170,7 +170,7 @@ class FlightRecorderTest {
         frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(DISARMED_STABILIZE))
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a wall clock before 1970 WHEN frames are recorded THEN they are stamped at the epoch`() =
         testScope.runTest {
@@ -182,7 +182,7 @@ class FlightRecorderTest {
             timestamps(BEFORE_EPOCH_NAME) shouldBeEqualTo listOf(0L)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN HEARTBEATs queued before the writer runs WHEN the log opens THEN it is named by the first`() =
         testScope.runTest {
@@ -195,7 +195,7 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(START_NAME)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a HEARTBEAT still queued when the session stops WHEN the next one hears the vehicle THEN it logs it`() =
         testScope.runTest {
@@ -210,7 +210,7 @@ class FlightRecorderTest {
             frames(LATER_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN HEARTBEATs queued before the writer runs WHEN timing the close THEN it counts from the latest`() =
         testScope.runTest {
@@ -234,7 +234,7 @@ class FlightRecorderTest {
             )
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the vehicle heard WHEN the log opens THEN the status is RECORDING`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -244,7 +244,7 @@ class FlightRecorderTest {
         recorder.status.value shouldBeEqualTo RecorderStatus.RECORDING
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a recording WHEN the session stops THEN the status is IDLE`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -254,7 +254,7 @@ class FlightRecorderTest {
         recorder.status.value shouldBeEqualTo RecorderStatus.IDLE
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN just under 10 minutes without HEARTBEAT WHEN a frame arrives THEN it joins the same log`() =
         testScope.runTest {
@@ -268,7 +268,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(SCALED_PRESSURE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN exactly 10 minutes without HEARTBEAT WHEN a frame arrives THEN the log is closed without it`() =
         testScope.runTest {
@@ -282,7 +282,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN HEARTBEATs within 10 minutes of each other WHEN 18 minutes pass THEN the log stays open`() =
         testScope.runTest {
@@ -302,7 +302,7 @@ class FlightRecorderTest {
             )
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a log closed after 10 minutes WHEN the vehicle's HEARTBEAT returns THEN a new log starts`() =
         testScope.runTest {
@@ -318,7 +318,7 @@ class FlightRecorderTest {
             frames(TEN_MINUTES_LATER_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a log closed after 10 minutes WHEN another vehicle's HEARTBEAT arrives THEN no log starts`() =
         testScope.runTest {
@@ -333,7 +333,7 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(START_NAME)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN another vehicle's HEARTBEAT WHEN the active one is silent THEN it does not keep the log open`() =
         testScope.runTest {
@@ -349,7 +349,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(SECOND_VEHICLE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a stopped session WHEN the next one hears the vehicle THEN a new log starts`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -363,7 +363,7 @@ class FlightRecorderTest {
         logs() shouldBeEqualTo listOf(START_NAME, LATER_NAME)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN two logs started in the same second WHEN naming the second THEN it gets a suffix`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -538,7 +538,7 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(OLDEST_NAME, START_NAME, IMPORTED_NAME)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN more frames than the queue holds WHEN the writer is behind THEN the surplus is dropped and counted`() =
         testScope.runTest {
@@ -551,7 +551,7 @@ class FlightRecorderTest {
             recorder.stats.dropped shouldBeEqualTo 1
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a disk that fails WHEN recording THEN it stops, is logged once and frames keep being taken`() =
         testScope.runTest {
@@ -567,7 +567,7 @@ class FlightRecorderTest {
             }
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a disk that failed WHEN frames keep arriving THEN they are taken and the status is FAILED`() =
         testScope.runTest {
@@ -581,7 +581,7 @@ class FlightRecorderTest {
             failing.status.value shouldBeEqualTo RecorderStatus.FAILED
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a disk that failed WHEN the next session hears the vehicle THEN it records again`() = testScope.runTest {
         var failures = 1
@@ -597,7 +597,7 @@ class FlightRecorderTest {
         frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a recording WHEN it closes THEN it is synced to the disk before it is closed`() = testScope.runTest {
         val events = mutableListOf<String>()
@@ -614,7 +614,7 @@ class FlightRecorderTest {
         events shouldBeEqualTo listOf(SYNCED, CLOSED)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a sync that fails WHEN the log closes THEN its file is closed and the status stays FAILED`() =
         testScope.runTest {
@@ -633,7 +633,7 @@ class FlightRecorderTest {
             failing.status.value shouldBeEqualTo RecorderStatus.FAILED
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a folder that cannot be created WHEN the vehicle is heard THEN nothing is recorded and it is logged`() =
         testScope.runTest {

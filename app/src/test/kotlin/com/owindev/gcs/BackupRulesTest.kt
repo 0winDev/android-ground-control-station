@@ -20,7 +20,7 @@ class BackupRulesTest {
         builder = DocumentBuilderFactory.newInstance().newDocumentBuilder()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the rules for Android 11 and lower WHEN reading what backup excludes THEN the flight logs are`() {
         val rules = builder.parse(File(RULES_FOLDER, "backup_rules.xml"))
@@ -30,7 +30,7 @@ class BackupRulesTest {
         result shouldContain RECORDINGS_FOLDER
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the rules for Android 12 and higher WHEN reading what cloud backup excludes THEN the flight logs are`() {
         val rules = builder.parse(File(RULES_FOLDER, "data_extraction_rules.xml"))
@@ -40,7 +40,7 @@ class BackupRulesTest {
         result shouldContain RECORDINGS_FOLDER
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the rules for Android 12 and higher WHEN reading what a transfer excludes THEN the flight logs are`() {
         val rules = builder.parse(File(RULES_FOLDER, "data_extraction_rules.xml"))

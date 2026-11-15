@@ -23,7 +23,7 @@ class BackgroundLinkRule(private val linkLoss: LinkLossRule, private val recordi
     /** Whether Disconnect or removing the app from recents may stop it, and so whether Disconnect is offered. */
     fun operatorMayStop(vehicles: Collection<Vehicle>): Boolean = !anyLiveArmed(vehicles)
 
-    /** Ends with no live vehicle, or once a disarmed one is silent for the recording's limit (REQ-036). */
+    /** Ends with no live vehicle, or once a disarmed one is silent for the recording's limit (REQ-049). */
     fun endsFor(vehicles: Collection<Vehicle>, active: Vehicle?): Boolean = when {
         anyLiveArmed(vehicles) -> false
         active == null || !active.isLive -> true

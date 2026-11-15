@@ -18,7 +18,7 @@ internal enum class ImportCopy { COPIED, TOO_LARGE, RECORDING, FAILED }
 
 /**
  * Copies this source into [temporary], stopping as soon as it counts more than [rule]'s limit or [isRecording] says a
- * flight is being recorded (REQ-036, REQ-038). A content provider's call can throw any exception a Binder parcel
+ * flight is being recorded (REQ-049, REQ-038). A content provider's call can throw any exception a Binder parcel
  * carries, not only [IOException]; every one fails the import, never the app, but cancellation. A source stalled in a
  * read (a cloud document) is closed when the import is cancelled, so it never holds the next import back.
  */

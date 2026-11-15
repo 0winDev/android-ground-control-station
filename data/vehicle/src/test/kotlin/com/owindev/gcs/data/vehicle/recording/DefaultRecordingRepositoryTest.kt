@@ -140,7 +140,7 @@ class DefaultRecordingRepositoryTest {
         }
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a listed log WHEN the recorder starts writing it THEN it is shown in progress`() = testScope.runTest {
         log(OLDEST, qgroundcontrolLog)
@@ -279,7 +279,7 @@ class DefaultRecordingRepositoryTest {
             (result to files()) shouldBeEqualTo (List(failures.size) { ImportResult.Failed } to emptyList())
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a flight being recorded WHEN importing THEN refused without opening the source`() = testScope.runTest {
         log(OLDEST, qgroundcontrolLog)
@@ -292,7 +292,7 @@ class DefaultRecordingRepositoryTest {
         (result to source.opened) shouldBeEqualTo (ImportResult.Recording to false)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a recording that opens while copying WHEN importing THEN refused and nothing is left`() =
         testScope.runTest {

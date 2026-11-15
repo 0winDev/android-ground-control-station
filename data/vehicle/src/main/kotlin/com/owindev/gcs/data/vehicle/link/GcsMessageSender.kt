@@ -36,7 +36,7 @@ import kotlinx.coroutines.withContext
  * replaced it. Once the socket write starts it finishes, even if the sender is cancelled meanwhile (a telemetry round
  * cut short by a lost link, a superseded RTL): a frame that left is always recorded and advances the number.
  *
- * Every frame sent goes to the [recorder] (REQ-036), under the same lock, so the log keeps them in sequence order.
+ * Every frame sent goes to the [recorder] (REQ-049), under the same lock, so the log keeps them in sequence order.
  *
  * Nothing is sent while the [session] plays a replay (REQ-037): [SendResult.NotOpen], as for a closed link. Its senders
  * never run then; this is the last guard, checked under the lock before every frame.

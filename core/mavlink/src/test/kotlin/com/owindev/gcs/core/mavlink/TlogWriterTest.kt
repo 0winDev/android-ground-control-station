@@ -18,7 +18,7 @@ class TlogWriterTest {
         writer = TlogWriter
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN QGroundControl's first record WHEN writing it THEN the bytes are the record as stored`() {
         val stored = readFixture(QGROUNDCONTROL).copyOfRange(0, TIMESTAMP_LENGTH + QGROUNDCONTROL_FIRST_FRAME)
@@ -29,7 +29,7 @@ class TlogWriterTest {
         result.asList() shouldBeEqualTo stored.asList()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a timestamp with its low two bits set WHEN writing a record THEN they are cleared, big-endian`() {
         val frame = readFixture(DISARMED_STABILIZE)
@@ -39,7 +39,7 @@ class TlogWriterTest {
         result.asList() shouldBeEqualTo (bytes(0x00, 0x06, 0x5D, 0xB1, 0x2E, 0x8A, 0x7F, 0x6C) + frame).asList()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the SITL session WHEN reading and writing it again THEN the bytes are the same but the low bits`() {
         val session = readFixture(SESSION)
@@ -50,7 +50,7 @@ class TlogWriterTest {
         result.asList() shouldBeEqualTo lowBitsCleared(session, sessionFrameSizes()).asList()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN two frames in one buffer WHEN writing a record THEN it is rejected`() {
         val datagram = readFixture(DISARMED_STABILIZE) + readFixture(DISARMED_LOITER)
@@ -60,7 +60,7 @@ class TlogWriterTest {
         result shouldThrow IllegalArgumentException::class
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN bytes that are not a whole frame WHEN writing a record THEN it is rejected`() {
         val cut = readFixture(DISARMED_STABILIZE).copyOfRange(0, CUT_FRAME_LENGTH)
@@ -70,7 +70,7 @@ class TlogWriterTest {
         result shouldThrow IllegalArgumentException::class
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN no bytes at all WHEN writing a record THEN it is rejected`() {
         val empty = ByteArray(0)
@@ -80,7 +80,7 @@ class TlogWriterTest {
         result shouldThrow IllegalArgumentException::class
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a negative timestamp WHEN writing a record THEN it is rejected`() {
         val frame = readFixture(DISARMED_STABILIZE)
@@ -90,7 +90,7 @@ class TlogWriterTest {
         result shouldThrow IllegalArgumentException::class
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN an unsigned real frame WHEN taking it for the log THEN it is the same array, unchanged`() {
         val frame = readFixture(DISARMED_STABILIZE)
@@ -100,7 +100,7 @@ class TlogWriterTest {
         result.written() shouldBe frame
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN an unsigned frame with an unknown message ID WHEN taking it for the log THEN it is kept unchanged`() {
         val frame = readFixture(SCALED_PRESSURE)
@@ -110,7 +110,7 @@ class TlogWriterTest {
         result.written() shouldBe frame
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed HEARTBEAT WHEN taking it for the log THEN it is the real frame it was signed from`() {
         val signed = readFixture(HEARTBEAT_SIGNED)
@@ -120,7 +120,7 @@ class TlogWriterTest {
         result.written().asList() shouldBeEqualTo readFixture(DISARMED_STABILIZE).asList()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed ATTITUDE with 0xFD inside WHEN taking it for the log THEN it is the real frame unsigned`() {
         val signed = readFixture(ATTITUDE_SIGNED)
@@ -130,7 +130,7 @@ class TlogWriterTest {
         result.written().asList() shouldBeEqualTo readFixture(ATTITUDE_FD_IN_PAYLOAD).asList()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed truncated VFR_HUD WHEN taking it for the log THEN it keeps its LEN without the signature`() {
         val signed = readFixture(VFR_HUD_SIGNED)
@@ -140,7 +140,7 @@ class TlogWriterTest {
         result.written().asList() shouldBeEqualTo readFixture(VFR_HUD).asList()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed frame with an unknown message ID WHEN taking it for the log THEN it is left out`() {
         val signed = readFixture(SCALED_PRESSURE_SIGNED)
@@ -150,7 +150,7 @@ class TlogWriterTest {
         result shouldBeEqualTo LogFrame.SignedUnknownMessage
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a SETUP_SIGNING WHEN taking it for the log THEN it is left out`() {
         val setupSigning = readFixture(SETUP_SIGNING)
@@ -160,7 +160,7 @@ class TlogWriterTest {
         result shouldBeEqualTo LogFrame.SetupSigning
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed SETUP_SIGNING whose CRC_EXTRA is known WHEN taking it for the log THEN it is left out`() {
         val setupSigning = readFixture(SETUP_SIGNING_SIGNED)
@@ -173,7 +173,7 @@ class TlogWriterTest {
         result shouldBeEqualTo LogFrame.SetupSigning
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a real MAVLink 1 frame with bit 0x01 set at index 2 WHEN taking it for the log THEN it is left out`() {
         val frame = TlogReader().read(readFixture(SESSION)).map { it.frame }.first(::mavlink1WithLowSeqBitSet)
@@ -183,7 +183,7 @@ class TlogWriterTest {
         result shouldBeEqualTo LogFrame.Mavlink1
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed frame with a known ID plus a high MSGID byte WHEN taking it for the log THEN it is left out`() {
         val signed = readFixture(HEARTBEAT_SIGNED).copyOf().also { it[MSGID_HIGH_INDEX] = 0x01 }
@@ -193,7 +193,7 @@ class TlogWriterTest {
         result shouldBeEqualTo LogFrame.SignedUnknownMessage
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN two frames in one buffer WHEN taking them for the log THEN they are rejected`() {
         val datagram = readFixture(HEARTBEAT_SIGNED) + readFixture(DISARMED_LOITER)
@@ -203,7 +203,7 @@ class TlogWriterTest {
         result shouldThrow IllegalArgumentException::class
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN bytes that are not a whole frame WHEN taking them for the log THEN they are rejected`() {
         val cut = readFixture(HEARTBEAT_SIGNED).copyOfRange(0, CUT_FRAME_LENGTH)

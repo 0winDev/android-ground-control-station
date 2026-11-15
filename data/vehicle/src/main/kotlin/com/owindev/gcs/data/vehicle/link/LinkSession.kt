@@ -95,7 +95,7 @@ internal val LINK_STABLE_AFTER: Duration = LINK_RETRY_MAX * 2
  * failure, is in [status].
  *
  * The first autopilot HEARTBEAT it decodes pins the [activeVehicle] (REQ-020), before any reader sees it. Every frame
- * it delimits, unknown message IDs included, then goes to the [recorder] as it arrives (REQ-036), and the recording
+ * it delimits, unknown message IDs included, then goes to the [recorder] as it arrives (REQ-049), and the recording
  * closes with the session.
  *
  * Instead of the live link it can play a recording ([replay], REQ-037), through the same parser and decoder, until

@@ -23,7 +23,7 @@ class RecordingRuleTest {
         rule = RecordingRule()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Tag("REQ-037")
     @Test
     fun `GIVEN the oldest recording being replayed WHEN over the limit THEN the next oldest goes and it stays`() {
@@ -68,7 +68,7 @@ class RecordingRuleTest {
         result shouldBeEqualTo 268_435_456L
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN exactly 10 minutes without a HEARTBEAT WHEN asking if the recording closes THEN it does`() {
         val sinceLastHeartbeat = 10.minutes
@@ -78,7 +78,7 @@ class RecordingRuleTest {
         result.shouldBeTrue()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN just under 10 minutes without a HEARTBEAT WHEN asking if the recording closes THEN it does not`() {
         val sinceLastHeartbeat = 10.minutes - 1.nanoseconds
@@ -256,7 +256,7 @@ class RecordingRuleTest {
         result shouldBeEqualTo listOf(oldest)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a zero close timeout WHEN creating the rule THEN is rejected`() {
         val creating = { RecordingRule(closeAfterLinkLoss = Duration.ZERO) }

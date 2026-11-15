@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.flowOn
 /**
  * The longest a replay waits between two records (REQ-037), whatever their timestamps say: longer than the link-loss
  * timeout, so a real gap in the recording still shows as a lost link, but short enough that a wall-clock jump forwards
- * (or a long outage kept in the log, up to 10 min by REQ-036) never stalls the replay.
+ * (or a long outage kept in the log, up to 10 min by REQ-049) never stalls the replay.
  */
 internal val MAX_RECORD_WAIT: Duration = 10.seconds
 
