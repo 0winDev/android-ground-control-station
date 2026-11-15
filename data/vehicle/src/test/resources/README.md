@@ -109,6 +109,7 @@ cut from the relay's `.down.tlog` (what the app received) and a pymavlink sessio
 | `statustext/prearm-serial-rcin.bin` | real, `SERIAL5_PROTOCOL` and `SERIAL6_PROTOCOL` 23 (RCIN) | severity 2, id 0, chunk_seq 0, `PreArm: Multiple SERIAL ports configured for RC in`, LEN 51 | a pre-arm text over 50 bytes cut by ArduPilot, never chunked |
 | `statustext/sys-status-prearm-unhealthy.bin` | real, same session as the SERIAL text | present `0x5371fc2f`, enabled `0x52619c2f`, health `0x47719c2f` | pre-arm bit enabled, not healthy |
 | `statustext/sys-status-prearm-healthy.bin` | real, STABILIZE with `SIM_GPS1_ENABLE` 0 | present `0x5371fc2f`, enabled `0x52619c2f`, health `0x57719c2f` | pre-arm bit enabled and healthy |
+| `statustext/sys-status-arming-checks-skipped.bin` | real (#102, git `d9c5097c`), `ARMING_SKIPCHK` -1 in LOITER, MAVLink 2, LEN 31 | present `0x5371fc2f`, enabled `0x4261fc2f`, health `0x4771fc2f` | pre-arm bit present, not enabled, not healthy |
 
 ## Battery parameters (#101)
 
