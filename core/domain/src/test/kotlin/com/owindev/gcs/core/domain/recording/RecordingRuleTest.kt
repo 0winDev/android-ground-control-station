@@ -3,6 +3,7 @@ package com.owindev.gcs.core.domain.recording
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.time.Duration.Companion.seconds
 import org.amshove.kluent.invoking
 import org.amshove.kluent.shouldBeEmpty
 import org.amshove.kluent.shouldBeEqualTo
@@ -85,6 +86,44 @@ class RecordingRuleTest {
         val result = rule.closesAfter(sinceLastHeartbeat)
 
         result.shouldBeFalse()
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the default rule WHEN reading its disarm margin THEN is 30 seconds`() {
+        val result = rule.closeAfterDisarmed
+
+        result shouldBeEqualTo 30.seconds
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN exactly 30 seconds with no live vehicle armed WHEN asking if the recording closes THEN it does`() {
+        val sinceDisarmed = 30.seconds
+
+        val result = rule.closesAfterDisarmed(sinceDisarmed)
+
+        result.shouldBeTrue()
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN just under 30 seconds with no live vehicle armed WHEN asking if it closes THEN it does not`() {
+        val sinceDisarmed = 30.seconds - 1.nanoseconds
+
+        val result = rule.closesAfterDisarmed(sinceDisarmed)
+
+        result.shouldBeFalse()
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a zero disarm margin WHEN building the rule THEN it is refused`() {
+        val margin = Duration.ZERO
+
+        val result = invoking { RecordingRule(closeAfterDisarmed = margin) }
+
+        result shouldThrow IllegalArgumentException::class
     }
 
     @Tag("REQ-039")
