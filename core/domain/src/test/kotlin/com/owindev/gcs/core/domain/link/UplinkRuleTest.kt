@@ -92,7 +92,59 @@ class UplinkRuleTest {
 
         val result = health.afterCommandAnswered()
 
-        result shouldBeEqualTo UplinkHealth(failedHeartbeatPeriods = 2)
+        result shouldBeEqualTo UplinkHealth(failedHeartbeatPeriods = 2, answered = true)
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an answer and nothing against the uplink WHEN confirming THEN it is confirmed`() {
+        val health = UplinkHealth.HEALTHY.afterCommandAnswered()
+
+        val result = rule.isConfirmed(health)
+
+        result shouldBeEqualTo true
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN no answer and nothing against the uplink WHEN confirming THEN it is not confirmed`() {
+        val health = UplinkHealth.HEALTHY
+
+        val result = rule.isConfirmed(health)
+
+        result shouldBeEqualTo false
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an answer and then a command without answer WHEN confirming THEN it is not confirmed`() {
+        val health = UplinkHealth.HEALTHY.afterCommandAnswered().afterCommandUnanswered(clock.markNow())
+
+        val result = rule.isConfirmed(health)
+
+        result shouldBeEqualTo false
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an answer and then three failed periods WHEN confirming THEN it is not confirmed`() {
+        val health = (1..3).fold(UplinkHealth.HEALTHY.afterCommandAnswered()) { health, _ ->
+            health.afterHeartbeatFailed()
+        }
+
+        val result = rule.isConfirmed(health)
+
+        result shouldBeEqualTo false
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN an answer and then two failed periods WHEN confirming THEN it is still confirmed`() {
+        val health = UplinkHealth.HEALTHY.afterCommandAnswered().afterHeartbeatFailed().afterHeartbeatFailed()
+
+        val result = rule.isConfirmed(health)
+
+        result shouldBeEqualTo true
     }
 
     @Test

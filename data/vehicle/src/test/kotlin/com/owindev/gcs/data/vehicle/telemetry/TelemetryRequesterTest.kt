@@ -11,10 +11,12 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.testing.verifyNever
 import com.owindev.gcs.core.testing.verifyOnce
 import com.owindev.gcs.core.transport.SendResult
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.coEvery
@@ -27,6 +29,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -59,15 +62,18 @@ class TelemetryRequesterTest {
     private val sent = mutableListOf<CommandLong>()
     private val testScope = TestScope()
     private val store = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
+    private val uplink = DefaultUplinkRepository(testScope.testScheduler.timeSource)
 
     private lateinit var requester: TelemetryRequester
 
     @BeforeEach
     fun setUp() {
         every { session.messages } returns messages
+        every { session.session } returns MutableStateFlow(FIRST_SESSION)
         requester = TelemetryRequester(
             sender = sender,
             session = session,
+            uplink = uplink,
             store = store,
             rule = StalenessRule(),
             timeSource = testScope.testScheduler.timeSource,
@@ -192,6 +198,72 @@ class TelemetryRequesterTest {
 
         result shouldBeEqualTo List(STREAMS) { StreamResult.NoAck }
     }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @ParameterizedTest
+    @CsvSource("0", "2")
+    fun `GIVEN the vehicle accepts or denies the requests WHEN requesting THEN it has answered this GCS`(
+        mavResult: Int,
+    ) = testScope.runTest {
+        mockLog()
+        vehicleAnswers { ack(mavResult) }
+
+        requester.requestAll(TARGET)
+
+        uplink.health.value.answered shouldBeEqualTo true
+    }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN the vehicle never answers WHEN requesting THEN it has not answered this GCS`() = testScope.runTest {
+        mockLog()
+        vehicleAnswers { null }
+
+        requester.requestAll(TARGET)
+
+        uplink.health.value.answered shouldBeEqualTo false
+    }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN ACKs from a session that ended WHEN requesting THEN they are ignored and nothing is answered`() =
+        testScope.runTest {
+            mockLog()
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED).copy(session = ENDED_SESSION) }
+
+            val result = requester.requestAll(TARGET)
+
+            result shouldBeEqualTo List(STREAMS) { StreamResult.NoAck }
+            uplink.health.value.answered shouldBeEqualTo false
+        }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a command without answer WHEN a stream request is answered THEN the command is no longer unanswered`() =
+        testScope.runTest {
+            uplink.commandUnanswered()
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+
+            requester.requestAll(TARGET)
+
+            uplink.health.value.unansweredSince shouldBeEqualTo null
+        }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN ACKs from another address WHEN requesting THEN the vehicle has not answered this GCS`() =
+        testScope.runTest {
+            mockLog()
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED).copy(sender = OTHER_ADDRESS) }
+
+            requester.requestAll(TARGET)
+
+            uplink.health.value.answered shouldBeEqualTo false
+        }
 
     /**
      * A known limit (see the class KDoc): the ACK names no message, so ATTITUDE's late DENIED (1.02 s) is taken
@@ -558,6 +630,7 @@ class TelemetryRequesterTest {
         const val REQUESTED_AGAIN_IN_SIXTEEN_SECONDS = 3
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
+        val ENDED_SESSION = SessionId(DataOrigin.LIVE, epoch = 7)
         val TARGET = VehicleTarget(SystemId(VEHICLE_SYSTEM_ID), VEHICLE_ADDRESS)
 
         // One message of each streamed kind; their values do not matter here, only when they arrive.

@@ -109,14 +109,16 @@ class SessionChangeTest {
         }
 
     @Tag("REQ-045")
+    @Tag("REQ-048")
     @Test
-    fun `GIVEN a command without answer on the live link WHEN a replay starts THEN the uplink is healthy`() =
+    fun `GIVEN an answer and a command without answer WHEN a replay starts THEN the uplink is healthy`() =
         testScope.runTest {
             coEvery { telemetryRequester.run(capture(targets), any()) } coAnswers { awaitCancellation() }
             coEvery { transport.send(any(), any()) } returns SendResult.Sent
             every { transport.datagrams() } returns liveSocketWith(HEARTBEAT)
             repository.vehicles.launchIn(backgroundScope)
             delay(HEARD)
+            uplink.commandAnswered()
             uplink.commandUnanswered()
 
             session.replay(emptySource(), ReplayClock(testScheduler.timeSource))

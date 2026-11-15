@@ -9,6 +9,7 @@ import com.owindev.gcs.core.domain.telemetry.GpsFixType
 import com.owindev.gcs.core.domain.telemetry.GpsStatus
 import com.owindev.gcs.core.domain.telemetry.Home
 import com.owindev.gcs.core.domain.telemetry.LandedState
+import com.owindev.gcs.core.domain.telemetry.PreArmStatus
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.mavlink.MavlinkDecoder
@@ -255,8 +256,39 @@ class TelemetryMapperTest {
 
         result shouldBeEqualTo Telemetry(
             battery = Timed(FULL_BATTERY, RECEIVED_AT),
+            preArm = Timed(PreArmStatus(present = true, enabled = true, healthy = true), RECEIVED_AT),
             origin = DataOrigin.LIVE,
         )
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a real SYS_STATUS with a pre-arm check failing WHEN mapping it THEN is enabled, not healthy`() {
+        val received = receivedFixture(SYS_STATUS_PREARM_UNHEALTHY)
+
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
+
+        result?.preArm shouldBeEqualTo Timed(PreArmStatus(present = true, enabled = true, healthy = false), RECEIVED_AT)
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a SYS_STATUS with the pre-arm bit not enabled WHEN mapping it THEN is present, not enabled`() {
+        val received = received(preArmNotEnabled())
+
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
+
+        result?.preArm?.value shouldBeEqualTo PreArmStatus(present = true, enabled = false, healthy = true)
+    }
+
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a SYS_STATUS with the pre-arm bit not present WHEN mapping it THEN is not present`() {
+        val received = received(preArmNotPresent())
+
+        val result = mapper.update(Telemetry(origin = DataOrigin.LIVE), received, RECEIVED_AT)
+
+        result?.preArm?.value shouldBeEqualTo PreArmStatus(present = false, enabled = true, healthy = true)
     }
 
     @Test
@@ -566,6 +598,10 @@ private const val ATTITUDE_EDGES = "derived/attitude-edges.bin"
 private const val VFR_HUD = "telemetry/vfr-hud.bin"
 private const val VFR_HUD_EDGES = "derived/vfr-hud-edges.bin"
 private const val SYS_STATUS = "telemetry/sys-status.bin"
+private const val SYS_STATUS_PREARM_UNHEALTHY = "statustext/sys-status-prearm-unhealthy.bin"
+
+/** `MAV_SYS_STATUS_PREARM_CHECK` in `common.xml`. */
+private const val PREARM_CHECK_BIT = 0x1000_0000L
 private const val SYS_STATUS_EDGES = "derived/sys-status-edges.bin"
 private const val SYS_STATUS_UNKNOWN_BATTERY = "derived/sys-status-unknown-battery.bin"
 private const val SYS_STATUS_BOOT = "truncated/sys_status.bin"
@@ -623,6 +659,19 @@ private val UNHEALTHY_WITHOUT_READING = Battery(
     monitored = true,
     healthy = false,
 )
+
+/** `telemetry/sys-status.bin`, whose pre-arm bit pymavlink decodes as present, enabled and healthy. */
+private fun realSysStatus() = MavlinkDecoder.decode(
+    MavlinkParser(MavlinkMessages).parse(readFixture(SYS_STATUS)).single(),
+) as MavlinkMessage.SysStatus
+
+private fun preArmNotEnabled() = realSysStatus().let {
+    it.copy(onboardControlSensorsEnabled = it.onboardControlSensorsEnabled and PREARM_CHECK_BIT.inv())
+}
+
+private fun preArmNotPresent() = realSysStatus().let {
+    it.copy(onboardControlSensorsPresent = it.onboardControlSensorsPresent and PREARM_CHECK_BIT.inv())
+}
 
 private fun received(message: MavlinkMessage) =
     ReceivedMessage(SYSTEM_ID, MAV_COMP_ID_AUTOPILOT1, message, SENDER, session = FIRST_SESSION)

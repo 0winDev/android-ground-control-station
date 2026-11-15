@@ -12,7 +12,8 @@ import kotlinx.coroutines.flow.update
 
 /**
  * Collects what the senders observe of the uplink (REQ-045): [GcsHeartbeatSender] reports its periods and resets it,
- * [com.owindev.gcs.data.vehicle.command.CommandExchange] reports commands without answer and answers.
+ * [com.owindev.gcs.data.vehicle.command.CommandExchange] reports commands without answer and answers, and
+ * [com.owindev.gcs.data.vehicle.telemetry.TelemetryRequester] the answers to its stream requests.
  */
 @Singleton
 internal class DefaultUplinkRepository @Inject constructor(private val timeSource: TimeSource.WithComparableMarks) :

@@ -7,9 +7,11 @@ import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.CommandLong
 import com.owindev.gcs.core.transport.SendResult
+import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.link.isForThisGcs
 import javax.inject.Inject
@@ -85,6 +87,7 @@ internal sealed interface StreamResult {
 internal class TelemetryRequester @Inject constructor(
     private val sender: GcsMessageSender,
     private val session: LinkSession,
+    private val uplink: DefaultUplinkRepository,
     private val store: TelemetryStore,
     private val rule: StalenessRule,
     private val timeSource: TimeSource.WithComparableMarks,
@@ -146,13 +149,17 @@ internal class TelemetryRequester @Inject constructor(
     }
 
     private suspend fun request(target: VehicleTarget, stream: TelemetryStream): StreamResult = coroutineScope {
+        val current = session.session.value
         // Listening before sending, so an answer faster than the send's return is not missed.
         val ack = async(start = CoroutineStart.UNDISPATCHED) {
-            withTimeoutOrNull(ACK_TIMEOUT) { session.messages.first { it.isFinalAckFrom(target) } }
+            withTimeoutOrNull(ACK_TIMEOUT) { session.messages.first { it.isFinalAckFrom(target, current) } }
         }
         when (sender.send(setMessageInterval(target.systemId, stream), target.address)) {
-            SendResult.Sent -> ack.await()?.let { received -> resultOf(received.message as CommandAck) }
-                ?: StreamResult.NoAck
+            SendResult.Sent -> ack.await()?.let { received ->
+                // Any final answer, a rejection too, shows the vehicle heard this GCS.
+                uplink.commandAnswered()
+                resultOf(received.message as CommandAck)
+            } ?: StreamResult.NoAck
 
             SendResult.NotOpen, is SendResult.Failed -> {
                 ack.cancel()
@@ -161,9 +168,11 @@ internal class TelemetryRequester @Inject constructor(
         }
     }
 
-    private fun ReceivedMessage.isFinalAckFrom(target: VehicleTarget): Boolean {
+    /** Only from [current]: an answer from a session that ended must not mark the next one as answered. */
+    private fun ReceivedMessage.isFinalAckFrom(target: VehicleTarget, current: SessionId): Boolean {
         val ack = message as? CommandAck ?: return false
-        return systemId == target.systemId.value &&
+        return session == current &&
+            systemId == target.systemId.value &&
             componentId == MAV_COMP_ID_AUTOPILOT1 &&
             sender == target.address &&
             ack.command == MAV_CMD_SET_MESSAGE_INTERVAL &&

@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.telemetry.Attitude
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.GlobalPosition
 import com.owindev.gcs.core.domain.telemetry.Home
+import com.owindev.gcs.core.domain.telemetry.PreArmStatus
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.Timed
@@ -49,7 +50,11 @@ class TelemetryStoreTest {
 
         result shouldBeEqualTo mapOf(
             SystemId(1) to Telemetry(attitude = Timed(LEVEL, FIRST), origin = DataOrigin.LIVE),
-            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND), origin = DataOrigin.LIVE),
+            SystemId(2) to Telemetry(
+                battery = Timed(FULL_BATTERY, SECOND),
+                preArm = Timed(NO_PRE_ARM_BIT, SECOND),
+                origin = DataOrigin.LIVE,
+            ),
         )
     }
 
@@ -65,7 +70,11 @@ class TelemetryStoreTest {
         val result = store.telemetry.value
 
         result shouldBeEqualTo mapOf(
-            SystemId(2) to Telemetry(battery = Timed(FULL_BATTERY, SECOND), origin = DataOrigin.REPLAY),
+            SystemId(2) to Telemetry(
+                battery = Timed(FULL_BATTERY, SECOND),
+                preArm = Timed(NO_PRE_ARM_BIT, SECOND),
+                origin = DataOrigin.REPLAY,
+            ),
         )
     }
 
@@ -254,6 +263,9 @@ private val LEVEL = Attitude(roll = 0.0, pitch = 0.0, yaw = 0.0)
 // The float closest to π/2, in degrees as Python's math.degrees gives it.
 private val ROLLED_90 = Attitude(roll = 90.00000250447816, pitch = 0.0, yaw = 0.0)
 private val FULL_BATTERY = Battery(voltage = 12.6, current = 0.0, remaining = 100, monitored = true, healthy = true)
+
+/** [sysStatus] sets only the battery bit. */
+private val NO_PRE_ARM_BIT = PreArmStatus(present = false, enabled = false, healthy = false)
 
 private fun received(systemId: Int, message: MavlinkMessage) =
     ReceivedMessage(systemId, MAV_COMP_ID_AUTOPILOT1, message, SENDER, session = FIRST_SESSION)

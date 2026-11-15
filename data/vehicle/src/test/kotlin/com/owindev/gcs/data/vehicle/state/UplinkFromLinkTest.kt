@@ -47,8 +47,9 @@ class UplinkFromLinkTest {
         )
     }
 
+    @Tag("REQ-048")
     @Test
-    fun `GIVEN a command without answer WHEN the vehicle is LOST for 50 ms THEN the uplink is healthy`() =
+    fun `GIVEN an answer and a command without answer WHEN LOST for 50 ms THEN the uplink is healthy`() =
         testScope.runTest {
             coEvery { transport.send(any(), any()) } returns SendResult.Sent
             coEvery { telemetryRequester.run(any(), any()) } coAnswers { awaitCancellation() }
@@ -58,6 +59,7 @@ class UplinkFromLinkTest {
             )
             repository.vehicles.launchIn(backgroundScope)
             delay(HEARD)
+            uplink.commandAnswered()
             uplink.commandUnanswered()
 
             delay(UNTIL_HEARD_AGAIN)

@@ -22,6 +22,12 @@ class UplinkRule(val failedPeriodsToWarn: Int = DEFAULT_FAILED_PERIODS_TO_WARN) 
         }
     }
 
+    /**
+     * Whether there is a positive sign that the vehicle hears this GCS: it has answered since it became CONNECTED and
+     * nothing observed since says otherwise. No warning alone is never one (REQ-045).
+     */
+    fun isConfirmed(health: UplinkHealth): Boolean = health.answered && warningOf(health) == null
+
     companion object {
         /**
          * Three 1 Hz periods: past one or two lost to a transient error, and within ArduCopter's default

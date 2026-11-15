@@ -19,6 +19,7 @@ data class Telemetry(
     val gps: Timed<GpsStatus>? = null,
     val home: Timed<Home>? = null,
     val landed: Timed<LandedState>? = null,
+    val preArm: Timed<PreArmStatus>? = null,
 ) {
 
     /** The part of [kind], to judge its age with [StalenessRule]; `null` until its first message. [home] has none. */
@@ -104,6 +105,14 @@ data class Battery(
     val monitored: Boolean,
     val healthy: Boolean,
 )
+
+/**
+ * The vehicle's own pre-arm checks, as SYS_STATUS's `MAV_SYS_STATUS_PREARM_CHECK` bit reports them (`common.xml`).
+ * ArduPilot always sets it [present], [enabled] when any arming check is enabled, and [healthy] while armed or while
+ * its checks pass (`libraries/GCS_MAVLink/GCS.cpp`), so it says nothing in flight. It comes with the battery, in the
+ * same SYS_STATUS, so its age is judged at [TelemetryKind.BATTERY]'s threshold.
+ */
+data class PreArmStatus(val present: Boolean, val enabled: Boolean, val healthy: Boolean)
 
 /**
  * The quality of the vehicle's GPS fix, as its GPS receiver reports it. Each reading is `null` when the
