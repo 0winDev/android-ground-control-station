@@ -83,7 +83,7 @@ class CommandRouteTest {
 
             val result = repository.routeTo(SYSTEM_1)
 
-            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.ROUTE_CHANGED)
+            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.RouteChanged)
         }
 
     @Tag("REQ-043")
@@ -126,7 +126,7 @@ class CommandRouteTest {
 
             val result = repository.routeTo(SYSTEM_1)
 
-            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.ROUTE_CHANGED)
+            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.RouteChanged)
         }
 
     @Tag("REQ-043")
@@ -168,7 +168,7 @@ class CommandRouteTest {
 
             val result = repository.routeTo(SYSTEM_2)
 
-            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.NOT_ACTIVE_VEHICLE)
+            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.NotActiveVehicle)
         }
 
     @Tag("REQ-043")
@@ -180,7 +180,7 @@ class CommandRouteTest {
 
         val result = repository.routeTo(SYSTEM_1)
 
-        result shouldBeEqualTo CommandRoute.Closed(NotSentReason.LINK_LOST)
+        result shouldBeEqualTo CommandRoute.Closed(NotSentReason.LinkLost)
     }
 
     @Tag("REQ-043")
@@ -196,7 +196,7 @@ class CommandRouteTest {
 
         val result = replaying.routeTo(SYSTEM_1)
 
-        result shouldBeEqualTo CommandRoute.Closed(NotSentReason.REPLAY)
+        result shouldBeEqualTo CommandRoute.Closed(NotSentReason.Replay)
     }
 }
 

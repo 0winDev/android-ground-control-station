@@ -1,5 +1,7 @@
 package com.owindev.gcs.core.domain.vehicle.command
 
+import com.owindev.gcs.core.domain.preflight.PreflightItem
+
 /** How a command ended: exactly one per command (REQ-042). */
 sealed interface CommandResult {
 
@@ -45,34 +47,40 @@ enum class Rejection {
     UNKNOWN,
 }
 
-/** Why a command never left (REQ-043). */
-enum class NotSentReason {
+/** Why a command never left (REQ-043, REQ-048). */
+sealed interface NotSentReason {
     /** A recording plays: nothing reaches a vehicle. */
-    REPLAY,
+    data object Replay : NotSentReason
 
     /** The system ID is not the active vehicle's, or there is none. */
-    NOT_ACTIVE_VEHICLE,
+    data object NotActiveVehicle : NotSentReason
 
     /** The active vehicle is not heard now. */
-    LINK_LOST,
+    data object LinkLost : NotSentReason
 
     /** The vehicle's HEARTBEATs come from another address than its first one. */
-    ROUTE_CHANGED,
+    data object RouteChanged : NotSentReason
 
     /** A take off for a vehicle whose HEARTBEAT does not show it armed. */
-    NOT_ARMED,
+    data object NotArmed : NotSentReason
 
     /** A take off for a vehicle not known to be on the ground, by its landed state and its position both. */
-    NOT_LANDED,
+    data object NotLanded : NotSentReason
 
     /** A take off altitude outside [TakeOffAltitudeRule]'s range. */
-    ALTITUDE_OUT_OF_RANGE,
+    data object AltitudeOutOfRange : NotSentReason
 
     /**
      * Another command is pending, or this one ended without answer moments ago and its late answer is still listened
      * for (ADR 0008); `pending` shows the first case only.
      */
-    BUSY,
+    data object Busy : NotSentReason
 
-    SEND_FAILED,
+    data object SendFailed : NotSentReason
+
+    /** An arm or a take off while these pre-flight items are red. */
+    data class PreflightRed(val items: List<PreflightItem>) : NotSentReason
+
+    /** An arm while these amber pre-flight items have no acknowledgement that still counts. */
+    data class PreflightUnacknowledged(val items: List<PreflightItem>) : NotSentReason
 }

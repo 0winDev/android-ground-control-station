@@ -82,10 +82,10 @@ internal class TakeOffSequence @Inject constructor(
         if (route !is CommandRoute.Open) return route
         val telemetry = telemetry.telemetry.value[systemId]
         return when {
-            vehicles.vehicles.value[systemId]?.state?.armed != true -> CommandRoute.Closed(NotSentReason.NOT_ARMED)
+            vehicles.vehicles.value[systemId]?.state?.armed != true -> CommandRoute.Closed(NotSentReason.NotArmed)
 
             !landedRule.isOnGround(telemetry) || !groundRule.isNearGround(telemetry) ->
-                CommandRoute.Closed(NotSentReason.NOT_LANDED)
+                CommandRoute.Closed(NotSentReason.NotLanded)
 
             else -> route
         }

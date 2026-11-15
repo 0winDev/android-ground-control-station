@@ -57,7 +57,7 @@ internal class DefaultCommandRepository @Inject constructor(
 
     override suspend fun takeOff(systemId: SystemId, altitudeMetres: Float): CommandResult {
         if (!altitudeRule.isValid(altitudeMetres)) {
-            val result = CommandResult.NotSent(NotSentReason.ALTITUDE_OUT_OF_RANGE)
+            val result = CommandResult.NotSent(NotSentReason.AltitudeOutOfRange)
             report(systemId, VehicleCommand.TAKE_OFF, result)
             return result
         }
@@ -80,8 +80,8 @@ internal class DefaultCommandRepository @Inject constructor(
         when (val admission = synchronized(lock) { admit(request) }) {
             Admission.Refused -> {
                 request.job.cancel()
-                report(request.systemId, request.command, CommandResult.NotSent(NotSentReason.BUSY))
-                return CommandResult.NotSent(NotSentReason.BUSY)
+                report(request.systemId, request.command, CommandResult.NotSent(NotSentReason.Busy))
+                return CommandResult.NotSent(NotSentReason.Busy)
             }
 
             is Admission.Admitted -> admission.superseded?.let { superseded ->

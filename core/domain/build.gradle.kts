@@ -20,7 +20,7 @@ kover {
             excludes {
                 classes(
                     "com.owindev.gcs.core.domain.vehicle.command.CommandResult*",
-                    "com.owindev.gcs.core.domain.vehicle.command.NotSentReason",
+                    "com.owindev.gcs.core.domain.vehicle.command.NotSentReason*",
                     "com.owindev.gcs.core.domain.vehicle.command.Rejection",
                     "com.owindev.gcs.core.domain.vehicle.command.PendingCommand",
                     "com.owindev.gcs.core.domain.vehicle.command.PendingState*",

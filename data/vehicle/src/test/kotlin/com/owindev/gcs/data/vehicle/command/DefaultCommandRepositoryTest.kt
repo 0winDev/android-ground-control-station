@@ -58,7 +58,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.EnumSource
+import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.ValueSource
 
 /**
@@ -259,7 +259,7 @@ class DefaultCommandRepositoryTest {
 
         val result = repository.returnToLaunch(SYSTEM)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
         sent.size shouldBeEqualTo 3
     }
 
@@ -294,7 +294,7 @@ class DefaultCommandRepositoryTest {
 
         val result = repository.arm(SYSTEM)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
         sent.size shouldBeEqualTo 1
     }
 
@@ -350,7 +350,7 @@ class DefaultCommandRepositoryTest {
 
         val result = listOf(repository.arm(SYSTEM), rtl.await())
 
-        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.BUSY), CommandResult.Accepted)
+        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command }.distinct() shouldBeEqualTo listOf(MAV_CMD_NAV_RETURN_TO_LAUNCH)
     }
 
@@ -362,7 +362,7 @@ class DefaultCommandRepositoryTest {
 
         val result = listOf(repository.returnToLaunch(SYSTEM), arm.await())
 
-        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.BUSY), CommandResult.Accepted)
+        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_COMPONENT_ARM_DISARM)
     }
 
@@ -409,13 +409,13 @@ class DefaultCommandRepositoryTest {
             val result = repository.returnToLaunch(SYSTEM)
 
             result shouldBeEqualTo
-                noAnswer(attempts = 1, startedByVehicle = true, retriesStopped = NotSentReason.REPLAY)
+                noAnswer(attempts = 1, startedByVehicle = true, retriesStopped = NotSentReason.Replay)
             currentTime shouldBeEqualTo PAST_TWO_ATTEMPTS
         }
 
     @Tag("REQ-043")
     @ParameterizedTest
-    @EnumSource(NotSentReason::class, names = ["REPLAY", "NOT_ACTIVE_VEHICLE", "LINK_LOST", "ROUTE_CHANGED"])
+    @MethodSource("closedRouteReasons")
     fun `GIVEN a closed route WHEN sending an RTL THEN nothing is sent, for the route's reason`(reason: NotSentReason) =
         testScope.runTest {
             vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
@@ -434,12 +434,12 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { null }
             backgroundScope.launch {
                 delay(DURING_SECOND_ATTEMPT)
-                route = CommandRoute.Closed(NotSentReason.LINK_LOST)
+                route = CommandRoute.Closed(NotSentReason.LinkLost)
             }
 
             val result = repository.returnToLaunch(SYSTEM)
 
-            result shouldBeEqualTo noAnswer(attempts = 2, retriesStopped = NotSentReason.LINK_LOST)
+            result shouldBeEqualTo noAnswer(attempts = 2, retriesStopped = NotSentReason.LinkLost)
             sent.size shouldBeEqualTo 2
         }
 
@@ -456,18 +456,18 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.returnToLaunch(SYSTEM)
 
-            result shouldBeEqualTo noAnswer(attempts = 1, retriesStopped = NotSentReason.REPLAY)
+            result shouldBeEqualTo noAnswer(attempts = 1, retriesStopped = NotSentReason.Replay)
             currentTime shouldBeEqualTo HALF_AN_ATTEMPT
         }
 
     @Test
     fun `GIVEN the socket fails to send WHEN sending an RTL THEN it is not sent`() = testScope.runTest {
         coEvery { sender.send(any<CommandLong>(), any<() -> CommandRoute>()) } returns
-            CommandSendResult.NotSent(NotSentReason.SEND_FAILED)
+            CommandSendResult.NotSent(NotSentReason.SendFailed)
 
         val result = repository.returnToLaunch(SYSTEM)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.SEND_FAILED)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.SendFailed)
     }
 
     @Test
@@ -630,12 +630,12 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { command -> switchesToGuided(command) }
             backgroundScope.launch {
                 delay(DURING_GUIDED_WAIT)
-                route = CommandRoute.Closed(NotSentReason.LINK_LOST)
+                route = CommandRoute.Closed(NotSentReason.LinkLost)
             }
 
             val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LINK_LOST)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LinkLost)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -651,7 +651,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_ARMED)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotArmed)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -664,7 +664,7 @@ class DefaultCommandRepositoryTest {
 
         val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_ARMED)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotArmed)
         sent shouldBeEqualTo emptyList()
     }
 
@@ -678,7 +678,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(SYSTEM, altitude)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.ALTITUDE_OUT_OF_RANGE)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.AltitudeOutOfRange)
             sent shouldBeEqualTo emptyList()
         }
 
@@ -716,7 +716,7 @@ class DefaultCommandRepositoryTest {
 
         val result = listOf(repository.arm(SYSTEM), takeOff.await())
 
-        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.BUSY), CommandResult.Accepted)
+        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF)
     }
 
@@ -731,7 +731,7 @@ class DefaultCommandRepositoryTest {
 
         val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
         sent.size shouldBeEqualTo 1
     }
 
@@ -745,7 +745,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -801,7 +801,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
             sent shouldBeEqualTo emptyList()
         }
 
@@ -814,7 +814,7 @@ class DefaultCommandRepositoryTest {
 
         val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
         sent shouldBeEqualTo emptyList()
     }
 
@@ -827,7 +827,7 @@ class DefaultCommandRepositoryTest {
 
         val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
         sent shouldBeEqualTo emptyList()
     }
 
@@ -840,7 +840,7 @@ class DefaultCommandRepositoryTest {
 
         val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
         sent shouldBeEqualTo emptyList()
     }
 
@@ -857,14 +857,14 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NOT_LANDED)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
     @Tag("REQ-044")
     @Tag("REQ-043")
     @ParameterizedTest
-    @EnumSource(NotSentReason::class, names = ["REPLAY", "LINK_LOST"])
+    @MethodSource("sessionEndReasons")
     fun `GIVEN a fresh ON_GROUND but a closed route WHEN taking off THEN nothing is sent, for the route's reason`(
         reason: NotSentReason,
     ) = testScope.runTest {
@@ -887,12 +887,12 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
             backgroundScope.launch {
                 delay(DURING_GUIDED_WAIT)
-                route = CommandRoute.Closed(NotSentReason.LINK_LOST)
+                route = CommandRoute.Closed(NotSentReason.LinkLost)
             }
 
             val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LINK_LOST)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LinkLost)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -915,7 +915,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(SYSTEM, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.BUSY)
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF, MAV_CMD_NAV_LAND)
         }
 
@@ -950,7 +950,7 @@ class DefaultCommandRepositoryTest {
 
         val result = listOf(repository.takeOff(SYSTEM, ALTITUDE), rtl.await())
 
-        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.BUSY), CommandResult.Accepted)
+        result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command }.distinct() shouldBeEqualTo listOf(MAV_CMD_NAV_RETURN_TO_LAUNCH)
     }
 
@@ -1104,6 +1104,17 @@ class DefaultCommandRepositoryTest {
     }
 
     private companion object {
+        @JvmStatic
+        fun closedRouteReasons(): List<NotSentReason> = listOf(
+            NotSentReason.Replay,
+            NotSentReason.NotActiveVehicle,
+            NotSentReason.LinkLost,
+            NotSentReason.RouteChanged,
+        )
+
+        @JvmStatic
+        fun sessionEndReasons(): List<NotSentReason> = listOf(NotSentReason.Replay, NotSentReason.LinkLost)
+
         const val REPOSITORY_TAG = "CommandRepository"
         const val EXCHANGE_TAG = "CommandExchange"
         const val VEHICLE_SYSTEM_ID = 1

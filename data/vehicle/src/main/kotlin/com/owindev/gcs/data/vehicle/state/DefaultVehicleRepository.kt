@@ -333,10 +333,10 @@ internal class DefaultVehicleRepository @Inject constructor(
     override fun routeTo(systemId: SystemId): CommandRoute {
         val pinned = commandAddress
         return when {
-            session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.REPLAY)
-            systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NOT_ACTIVE_VEHICLE)
-            pinned == null || !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LINK_LOST)
-            addresses[systemId] != pinned -> CommandRoute.Closed(NotSentReason.ROUTE_CHANGED)
+            session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.Replay)
+            systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NotActiveVehicle)
+            pinned == null || !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LinkLost)
+            addresses[systemId] != pinned -> CommandRoute.Closed(NotSentReason.RouteChanged)
             else -> CommandRoute.Open(pinned)
         }
     }
