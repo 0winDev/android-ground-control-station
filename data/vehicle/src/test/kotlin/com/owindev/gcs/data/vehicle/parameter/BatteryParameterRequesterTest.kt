@@ -1,6 +1,7 @@
 package com.owindev.gcs.data.vehicle.parameter
 
 import android.util.Log
+import com.owindev.gcs.core.domain.alert.AlertRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamRequestRead
 import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamValue
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldBeLessThan
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -71,6 +73,15 @@ class BatteryParameterRequesterTest {
             result shouldBeEqualTo ALL_IDS
             store.parameters.value.values shouldBeEqualTo SITL_VALUES
         }
+
+    @Test
+    fun `GIVEN every parameter answered on its last request WHEN a round lasts THEN ends before the alerts say so`() {
+        val parameters = BatteryParameter.entries
+
+        val result = BatteryParameterRequester.ANSWER_TIMEOUT * BatteryParameterRequester.MAX_ATTEMPTS * parameters.size
+
+        result shouldBeLessThan AlertRule.BATTERY_LIMITS_DUE
+    }
 
     @Test
     fun `GIVEN no battery monitor WHEN connected THEN nothing but BATT_MONITOR is asked for`() = testScope.runTest {
@@ -307,14 +318,15 @@ class BatteryParameterRequesterTest {
         // The first request times out at 1 s, so the second one is in flight when the vehicle is lost.
         const val ONE_AND_A_HALF_TIMEOUTS = 1_500L
 
-        // Nine answers of 50 ms each take 450 ms.
+        // Eleven answers of 50 ms each take 550 ms.
         const val AFTER_A_ROUND = 1_000L
 
-        // Past the longest round here, a reboot's second one after nine lost requests of 1 s each.
-        const val LONG_AFTER_EVERY_ROUND = 60_000L
+        // Past the longest round here: a reboot's second, with every request lost three times.
+        const val LONG_AFTER_EVERY_ROUND = 120_000L
 
         const val SITL_LINE = "BATT_MONITOR=4.0 BATT_LOW_VOLT=10.5 BATT_CRT_VOLT=0.0 BATT_LOW_MAH=0.0 " +
-            "BATT_CRT_MAH=0.0 BATT_LOW_TIMER=10.0 BATT_CAPACITY=3300.0 BATT_FS_LOW_ACT=0.0 BATT_FS_CRT_ACT=0.0"
+            "BATT_CRT_MAH=0.0 BATT_LOW_TIMER=10.0 BATT_CAPACITY=3300.0 BATT_FS_LOW_ACT=0.0 BATT_FS_CRT_ACT=0.0 " +
+            "BATT_OPTIONS=0.0 BATT_FS_VOLTSRC=0.0"
 
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val TARGET = VehicleTarget(SystemId(MESSAGE_SYSTEM_1), VEHICLE_ADDRESS)

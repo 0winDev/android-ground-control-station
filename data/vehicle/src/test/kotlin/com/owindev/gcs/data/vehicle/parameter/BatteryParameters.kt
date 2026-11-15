@@ -19,6 +19,8 @@ internal val SITL_BATTERY_PARAMETERS = listOf(
     paramValue("BATT_CAPACITY", 3300f, MAV_PARAM_TYPE_INT32),
     paramValue("BATT_FS_LOW_ACT", 0f, MAV_PARAM_TYPE_INT8),
     paramValue("BATT_FS_CRT_ACT", 0f, MAV_PARAM_TYPE_INT8),
+    paramValue("BATT_OPTIONS", 0f, MAV_PARAM_TYPE_INT32),
+    paramValue("BATT_FS_VOLTSRC", 0f, MAV_PARAM_TYPE_INT8),
 )
 
 /** An answer to a request by name: ArduPilot echoes `param_index` -1 (`GCS_Param.cpp`), 65535 on the wire. */

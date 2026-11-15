@@ -20,6 +20,7 @@ class BatteryThresholdsTest {
             critical = ARMED_LEVEL,
             lowVoltageTimer = LowVoltageTimer.Seconds(LOW_TIMER_SECONDS),
             capacityMah = CAPACITY_MAH,
+            sentVoltage = SentVoltage.NEVER_ABOVE_COMPARED,
         )
     }
 

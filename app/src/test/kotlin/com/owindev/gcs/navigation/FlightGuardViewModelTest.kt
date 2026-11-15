@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertRepository
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.attention.FlightAttentionRule
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.vehicle.FlightMode
@@ -108,7 +109,8 @@ class FlightGuardViewModelTest {
     fun `GIVEN a replay WHEN its recorded emergency and link loss come THEN the operator stays`() = runTest {
         viewModel.returnToFlight.test {
             vehicles.value = mapOf(SYSTEM_1 to vehicle(armed = true, VehicleLink.LOST, DataOrigin.REPLAY))
-            alerts.value = Alerts.Evaluated(listOf(alert(Alert.BatteryCritical, DataOrigin.REPLAY)))
+            alerts.value =
+                Alerts.Evaluated(listOf(alert(Alert.BatteryCritical(EnergyLimitSource.VEHICLE), DataOrigin.REPLAY)))
 
             val result = viewModel.mayLeaveFlight.value
 

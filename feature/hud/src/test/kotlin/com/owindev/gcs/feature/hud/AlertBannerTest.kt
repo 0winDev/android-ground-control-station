@@ -4,6 +4,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
@@ -41,7 +42,7 @@ class AlertBannerTest {
     fun `GIVEN an emergency first WHEN building the banner THEN shows it, not acknowledgeable, with the rest`() {
         val alerts = Alerts.Evaluated(
             listOf(
-                raised(Alert.BatteryCritical, occurrence = 3),
+                raised(VEHICLE_CRITICAL, occurrence = 3),
                 raised(Alert.GpsFixLost, occurrence = 2, acknowledged = true),
                 raised(Alert.BatteryUnknown, occurrence = 1),
             ),
@@ -50,7 +51,7 @@ class AlertBannerTest {
         val result = alertBannerOf(alerts, TelemetryPanel())
 
         result shouldBeEqualTo AlertBanner.Showing(
-            alert = Alert.BatteryCritical,
+            alert = VEHICLE_CRITICAL,
             occurrence = 3,
             acknowledgeable = false,
             others = 2,
@@ -82,7 +83,7 @@ class AlertBannerTest {
     fun `GIVEN every alert acknowledged WHEN building the banner THEN says how many are still active`() {
         val alerts = Alerts.Evaluated(
             listOf(
-                raised(Alert.BatteryLow, occurrence = 2, acknowledged = true),
+                raised(VEHICLE_LOW, occurrence = 2, acknowledged = true),
                 raised(Alert.TelemetryStale(TelemetryKind.GPS), occurrence = 1, acknowledged = true),
             ),
         )
@@ -94,12 +95,12 @@ class AlertBannerTest {
 
     @Test
     fun `GIVEN a low battery with a fresh reading WHEN building the banner THEN says its remaining energy`() {
-        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryLow, occurrence = 1)))
+        val alerts = Alerts.Evaluated(listOf(raised(VEHICLE_LOW, occurrence = 1)))
 
         val result = alertBannerOf(alerts, TelemetryPanel(battery = Reading(LOW_BATTERY, stale = false, Duration.ZERO)))
 
         result shouldBeEqualTo AlertBanner.Showing(
-            alert = Alert.BatteryLow,
+            alert = VEHICLE_LOW,
             occurrence = 1,
             acknowledgeable = true,
             others = 0,
@@ -109,14 +110,58 @@ class AlertBannerTest {
 
     @Test
     fun `GIVEN a critical battery with a stale reading WHEN building the banner THEN gives no remaining energy`() {
-        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryCritical, occurrence = 1)))
+        val alerts = Alerts.Evaluated(listOf(raised(VEHICLE_CRITICAL, occurrence = 1)))
 
         val result = alertBannerOf(alerts, TelemetryPanel(battery = Reading(LOW_BATTERY, stale = true, STALE_AGE)))
 
         result shouldBeEqualTo AlertBanner.Showing(
-            alert = Alert.BatteryCritical,
+            alert = VEHICLE_CRITICAL,
             occurrence = 1,
             acknowledgeable = false,
+            others = 0,
+        )
+    }
+
+    @Test
+    fun `GIVEN a low voltage with a fresh reading WHEN building the banner THEN says its voltage`() {
+        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryVoltageLow, occurrence = 1)))
+
+        val result = alertBannerOf(alerts, TelemetryPanel(battery = Reading(LOW_BATTERY, stale = false, Duration.ZERO)))
+
+        result shouldBeEqualTo AlertBanner.Showing(
+            alert = Alert.BatteryVoltageLow,
+            occurrence = 1,
+            acknowledgeable = true,
+            others = 0,
+            batteryVoltage = LOW_BATTERY.voltage,
+        )
+    }
+
+    @Test
+    fun `GIVEN a critical voltage with a reading of 0 V WHEN building the banner THEN gives no voltage`() {
+        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryVoltageCritical, occurrence = 1)))
+        val noVoltage = LOW_BATTERY.copy(voltage = 0.0)
+
+        val result = alertBannerOf(alerts, TelemetryPanel(battery = Reading(noVoltage, stale = false, Duration.ZERO)))
+
+        result shouldBeEqualTo AlertBanner.Showing(
+            alert = Alert.BatteryVoltageCritical,
+            occurrence = 1,
+            acknowledgeable = false,
+            others = 0,
+        )
+    }
+
+    @Test
+    fun `GIVEN a low voltage with a stale reading WHEN building the banner THEN gives no voltage`() {
+        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryVoltageLow, occurrence = 1)))
+
+        val result = alertBannerOf(alerts, TelemetryPanel(battery = Reading(LOW_BATTERY, stale = true, STALE_AGE)))
+
+        result shouldBeEqualTo AlertBanner.Showing(
+            alert = Alert.BatteryVoltageLow,
+            occurrence = 1,
+            acknowledgeable = true,
             others = 0,
         )
     }
@@ -138,12 +183,12 @@ class AlertBannerTest {
     @Tag("REQ-037")
     @Test
     fun `GIVEN an emergency raised by a replay WHEN building the banner THEN it is marked recorded`() {
-        val alerts = Alerts.Evaluated(listOf(raised(Alert.BatteryCritical, occurrence = 1, origin = DataOrigin.REPLAY)))
+        val alerts = Alerts.Evaluated(listOf(raised(VEHICLE_CRITICAL, occurrence = 1, origin = DataOrigin.REPLAY)))
 
         val result = alertBannerOf(alerts, TelemetryPanel())
 
         result shouldBeEqualTo AlertBanner.Showing(
-            alert = Alert.BatteryCritical,
+            alert = VEHICLE_CRITICAL,
             occurrence = 1,
             acknowledgeable = false,
             others = 0,
@@ -196,3 +241,6 @@ private val LOW_BATTERY = Battery(
     monitored = true,
     healthy = true,
 )
+
+private val VEHICLE_LOW = Alert.BatteryLow(EnergyLimitSource.VEHICLE)
+private val VEHICLE_CRITICAL = Alert.BatteryCritical(EnergyLimitSource.VEHICLE)

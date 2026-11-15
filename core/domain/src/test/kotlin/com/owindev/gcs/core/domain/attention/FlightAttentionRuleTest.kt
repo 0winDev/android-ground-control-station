@@ -3,6 +3,7 @@ package com.owindev.gcs.core.domain.attention
 import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.link.DataOrigin
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
@@ -54,7 +55,10 @@ class FlightAttentionRuleTest {
     @Test
     fun `GIVEN live alerts WHEN judging the attention THEN only the emergencies count`() {
         val alerts = Alerts.Evaluated(
-            listOf(alert(Alert.BatteryCritical, occurrence = 2), alert(Alert.GpsFixLost, occurrence = 1)),
+            listOf(
+                alert(Alert.BatteryCritical(EnergyLimitSource.VEHICLE), occurrence = 2),
+                alert(Alert.GpsFixLost, occurrence = 1),
+            ),
         )
 
         val result = rule.attentionOf(emptyList(), alerts)
@@ -65,7 +69,9 @@ class FlightAttentionRuleTest {
     @Test
     fun `GIVEN a replay's armed and lost vehicle and its emergency WHEN judging the attention THEN none counts`() {
         val vehicles = listOf(vehicle(armed = true, link = VehicleLink.LOST, origin = DataOrigin.REPLAY))
-        val alerts = Alerts.Evaluated(listOf(alert(Alert.BatteryCritical, occurrence = 1, origin = DataOrigin.REPLAY)))
+        val alerts = Alerts.Evaluated(
+            listOf(alert(Alert.BatteryCritical(EnergyLimitSource.VEHICLE), occurrence = 1, origin = DataOrigin.REPLAY)),
+        )
 
         val result = rule.attentionOf(vehicles, alerts)
 

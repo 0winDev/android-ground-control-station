@@ -13,6 +13,8 @@ data class BatteryThresholds(
     val lowVoltageTimer: LowVoltageTimer,
     /** `BATT_CAPACITY`, `null` until read. */
     val capacityMah: Int?,
+    /** `BATT_OPTIONS` and `BATT_FS_VOLTSRC`: whether the voltage the vehicle sends can be above the one it compares. */
+    val sentVoltage: SentVoltage,
 ) {
 
     /** Whether the [low] level would act, and how (see [statusOf]). */
@@ -78,7 +80,40 @@ data class BatteryThresholds(
             critical = BatteryFailsafeLevel.UNKNOWN,
             lowVoltageTimer = LowVoltageTimer.Unknown,
             capacityMah = null,
+            sentVoltage = SentVoltage.UNKNOWN,
         )
+    }
+}
+
+/**
+ * The voltage SYS_STATUS sends against the one the voltage failsafe compares. `AP_BattMonitor::gcs_voltage` sends the
+ * resting estimate with `BATT_OPTIONS` bit 6, the raw voltage otherwise; `check_failsafe_types` compares the resting
+ * estimate with `BATT_FS_VOLTSRC` 1, the raw voltage with any other value; and the resting estimate is never below the
+ * raw voltage (`AP_BattMonitor_Backend::voltage_resting_estimate`).
+ */
+enum class SentVoltage {
+    UNKNOWN,
+
+    /** The one compared, or the raw voltage while the resting estimate is compared. */
+    NEVER_ABOVE_COMPARED,
+
+    /** The resting estimate while the raw voltage is compared: a threshold the vehicle has crossed may not show. */
+    MAY_BE_ABOVE_COMPARED,
+    ;
+
+    companion object {
+        /** From `BATT_OPTIONS` and `BATT_FS_VOLTSRC` as read, each `null` until then. */
+        fun of(options: Int?, failsafeSource: Int?): SentVoltage = when {
+            options == null || failsafeSource == null -> UNKNOWN
+            options and SEND_RESTING_VOLTAGE != 0 && failsafeSource != SAG_COMPENSATED -> MAY_BE_ABOVE_COMPARED
+            else -> NEVER_ABOVE_COMPARED
+        }
+
+        /** `AP_BattMonitor_Params::Options::GCS_Resting_Voltage`. */
+        private const val SEND_RESTING_VOLTAGE = 1 shl 6
+
+        /** `BattMonitor_LowVoltageSource_SagCompensated`. */
+        private const val SAG_COMPENSATED = 1
     }
 }
 
