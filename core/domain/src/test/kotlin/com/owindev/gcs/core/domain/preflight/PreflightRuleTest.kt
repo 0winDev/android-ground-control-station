@@ -3,6 +3,7 @@ package com.owindev.gcs.core.domain.preflight
 import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.alert.GcsEnergyThresholds
 import com.owindev.gcs.core.domain.background.BackgroundLinkRule
 import com.owindev.gcs.core.domain.background.BackgroundLinkStatus
@@ -60,6 +61,7 @@ class PreflightRuleTest {
     @BeforeEach
     fun setUp() {
         rule = PreflightRule(
+            linkLoss = LinkLossRule(),
             staleness = StalenessRule(),
             preArm = PreArmRule(),
             uplinkRule = UplinkRule(),
@@ -100,6 +102,15 @@ class PreflightRuleTest {
     @Test
     fun `GIVEN a vehicle that is LOST WHEN checking THEN the link is red`() {
         val input = ALL_GREEN.copy(vehicle = VEHICLE.copy(link = VehicleLink.LOST))
+
+        val result = rule.check(input)
+
+        result[PreflightKind.LINK] shouldBeEqualTo red(PreflightKind.LINK, PreflightReason.LinkLost)
+    }
+
+    @Test
+    fun `GIVEN a vehicle still CONNECTED by the watchdog WHEN its HEARTBEAT is 3 s old THEN the link is red`() {
+        val input = ALL_GREEN.copy(vehicle = VEHICLE.copy(lastHeartbeat = NOW - LinkLossRule.DEFAULT_TIMEOUT))
 
         val result = rule.check(input)
 
@@ -176,8 +187,19 @@ class PreflightRuleTest {
     }
 
     @Test
-    fun `GIVEN a pre-arm state as old as the battery's threshold WHEN checking THEN it is red as stale`() {
-        val input = ALL_GREEN.withTelemetry { copy(preArm = Timed(PRE_ARM_HEALTHY, NOW - BATTERY_STALE)) }
+    fun `GIVEN a pre-arm state just under 3 s old WHEN checking THEN it is green`() {
+        val input = ALL_GREEN.withTelemetry {
+            copy(preArm = Timed(PRE_ARM_HEALTHY, NOW - (PRE_ARM_STALE - 1.milliseconds)))
+        }
+
+        val result = rule.check(input)
+
+        result[PreflightKind.VEHICLE_PREARM] shouldBeEqualTo green(PreflightKind.VEHICLE_PREARM)
+    }
+
+    @Test
+    fun `GIVEN a pre-arm state 3 s old WHEN checking THEN it is red as stale`() {
+        val input = ALL_GREEN.withTelemetry { copy(preArm = Timed(PRE_ARM_HEALTHY, NOW - PRE_ARM_STALE)) }
 
         val result = rule.check(input)
 
@@ -508,6 +530,15 @@ class PreflightRuleTest {
     }
 
     @Test
+    fun `GIVEN every emergency alert's cause WHEN checking with the alerts not evaluated THEN its item is red`() {
+        val causes = EMERGENCY_CAUSES
+
+        val result = causes.mapValues { (_, input) -> rule.check(input.copy(alerts = Alerts.NotEvaluated)) }
+
+        result.forEach { (alert, check) -> check[coveringKind(alert)].colour shouldBeEqualTo RED }
+    }
+
+    @Test
     fun `GIVEN only a caution alert WHEN checking THEN the alerts are green`() {
         val input = ALL_GREEN.copy(alerts = evaluated(Alert.GpsFixLost))
 
@@ -527,10 +558,23 @@ class PreflightRuleTest {
     }
 
     @Test
+    fun `GIVEN its amber items acknowledged WHEN the vehicle connects again THEN they need acknowledgement again`() {
+        val first = rule.check(VOLTAGE_UNJUDGED)
+        val acknowledged = first.ambers.fold(PreflightAcknowledgements()) { acks, item ->
+            acks.acknowledge(item, first, NOW)
+        }
+        val next = rule.check(VOLTAGE_UNJUDGED.copy(connection = 2))
+
+        val result = next.verdict(acknowledged)
+
+        result shouldBeEqualTo PreflightVerdict.NeedsAcknowledgement(first.ambers)
+    }
+
+    @Test
     fun `GIVEN its amber items acknowledged WHEN the voltage and its age change THEN they stay acknowledged`() {
         val first = rule.check(VOLTAGE_UNJUDGED)
         val acknowledged = first.ambers.fold(PreflightAcknowledgements()) { acks, item ->
-            acks.acknowledge(item, first)
+            acks.acknowledge(item, first, NOW)
         }
         val next = rule.check(VOLTAGE_UNJUDGED.withTelemetry { copy(battery = Timed(LOWER_VOLTAGE, NOW - 1.seconds)) })
 
@@ -557,6 +601,9 @@ private val ATTITUDE_STALE = 500.milliseconds
 private val POSITION_STALE = 1.seconds
 private val GPS_STALE = 2.seconds
 private val BATTERY_STALE = 3.seconds
+
+/** [PreflightRule.PRE_ARM_MAX_AGE], pinned so a change of the battery's display threshold never moves the gate. */
+private val PRE_ARM_STALE = 3.seconds
 private val PRE_ARM_MAX_AGE = 35.seconds
 
 private const val PRE_ARM_TEXT = "PreArm: GPS 1: Bad fix"
@@ -631,6 +678,7 @@ private val ANSWERED = UplinkHealth.HEALTHY.afterCommandAnswered()
 private val RUNNING = BackgroundLinkStatus(running = true)
 
 private val ALL_GREEN = PreflightInput(
+    connection = 1,
     vehicle = VEHICLE,
     telemetry = Telemetry(
         origin = DataOrigin.LIVE,
@@ -667,3 +715,22 @@ private fun preArmReason(receivedAt: TimeMark) =
 
 private fun evaluated(alert: Alert) =
     Alerts.Evaluated(listOf(ActiveAlert(alert, occurrence = 1, raisedAt = NOW, origin = DataOrigin.LIVE)))
+
+/**
+ * The item that judges each EMERGENCY alert's cause on its own, so the check needs no alert evaluation: a new
+ * emergency alert breaks this `when` until its item is named and its cause added to [EMERGENCY_CAUSES].
+ */
+private fun coveringKind(alert: Alert): PreflightKind = when (alert) {
+    is Alert.BatteryCritical, Alert.BatteryVoltageCritical, Alert.BatteryUnhealthy -> PreflightKind.BATTERY
+
+    is Alert.BatteryLow, Alert.BatteryVoltageLow, Alert.BatteryLimitsNotRead, Alert.BatteryVoltageNotJudged,
+    Alert.BatteryUnknown, Alert.GpsFixLost, is Alert.TelemetryStale,
+    -> error("$alert is no emergency")
+}
+
+/** One input raising each EMERGENCY alert's cause, at the vehicle's limits of [ARMED_LIMITS]. */
+private val EMERGENCY_CAUSES: Map<Alert, PreflightInput> = mapOf(
+    Alert.BatteryCritical(EnergyLimitSource.GCS_UNSET) to ALL_GREEN.withBattery(FULL_BATTERY.copy(remaining = 10)),
+    Alert.BatteryVoltageCritical to ALL_GREEN.withBattery(FULL_BATTERY.copy(voltage = 9.8)),
+    Alert.BatteryUnhealthy to ALL_GREEN.withBattery(FULL_BATTERY.copy(healthy = false)),
+)

@@ -27,8 +27,11 @@ enum class PreflightKind {
 /** One pre-flight item. An amber one's [reason] holds no live value, so its acknowledgement survives new readings. */
 data class PreflightItem(val kind: PreflightKind, val colour: PreflightColour, val reason: PreflightReason)
 
-/** The pre-flight items of the active vehicle at one moment, one per [PreflightKind] ([PreflightRule]). */
-data class PreflightCheck(val items: List<PreflightItem>) {
+/**
+ * The pre-flight items of the active vehicle at one moment, one per [PreflightKind] ([PreflightRule]), and the
+ * [connection] they were judged on ([PreflightInput.connection]).
+ */
+data class PreflightCheck(val items: List<PreflightItem>, val connection: Long) {
 
     val reds: List<PreflightItem> get() = items.filter { it.colour == PreflightColour.RED }
 

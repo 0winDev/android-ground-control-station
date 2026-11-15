@@ -202,8 +202,9 @@ class GcsHeartbeatSenderTest {
     }
 
     @Tag("REQ-045")
+    @Tag("REQ-048")
     @Test
-    fun `GIVEN failed periods and a command without answer WHEN the vehicle is not connected THEN all is cleared`() =
+    fun `GIVEN an answer, failed periods and a command without answer WHEN not connected THEN all is cleared`() =
         runTest {
             mockkStatic(Log::class)
             every { Log.w(any(), any<String>(), any()) } returns 0
@@ -211,6 +212,7 @@ class GcsHeartbeatSenderTest {
             var destination: InetSocketAddress? = PEER
             backgroundScope.launch { sender.run { destination } }
             delay(ONE_AND_A_HALF_SECONDS)
+            uplink.commandAnswered()
             uplink.commandUnanswered()
             destination = null
 
@@ -220,10 +222,12 @@ class GcsHeartbeatSenderTest {
         }
 
     @Tag("REQ-045")
+    @Tag("REQ-048")
     @Test
-    fun `GIVEN a command without answer WHEN the sender stops THEN the uplink is healthy`() = runTest {
+    fun `GIVEN an answer and a command without answer WHEN the sender stops THEN the uplink is healthy`() = runTest {
         val job = backgroundScope.launch { sender.run { PEER } }
         runCurrent()
+        uplink.commandAnswered()
         uplink.commandUnanswered()
 
         job.cancel()

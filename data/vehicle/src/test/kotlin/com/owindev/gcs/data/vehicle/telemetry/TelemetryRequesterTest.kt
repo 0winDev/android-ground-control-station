@@ -16,6 +16,7 @@ import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.link.SessionId
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.coEvery
@@ -28,6 +29,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -67,6 +69,7 @@ class TelemetryRequesterTest {
     @BeforeEach
     fun setUp() {
         every { session.messages } returns messages
+        every { session.session } returns MutableStateFlow(FIRST_SESSION)
         requester = TelemetryRequester(
             sender = sender,
             session = session,
@@ -222,6 +225,32 @@ class TelemetryRequesterTest {
 
         uplink.health.value.answered shouldBeEqualTo false
     }
+
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN ACKs from a session that ended WHEN requesting THEN they are ignored and nothing is answered`() =
+        testScope.runTest {
+            mockLog()
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED).copy(session = ENDED_SESSION) }
+
+            val result = requester.requestAll(TARGET)
+
+            result shouldBeEqualTo List(STREAMS) { StreamResult.NoAck }
+            uplink.health.value.answered shouldBeEqualTo false
+        }
+
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a command without answer WHEN a stream request is answered THEN the command is no longer unanswered`() =
+        testScope.runTest {
+            uplink.commandUnanswered()
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+
+            requester.requestAll(TARGET)
+
+            uplink.health.value.unansweredSince shouldBeEqualTo null
+        }
 
     @Tag("REQ-045")
     @Tag("REQ-048")
@@ -601,6 +630,7 @@ class TelemetryRequesterTest {
         const val REQUESTED_AGAIN_IN_SIXTEEN_SECONDS = 3
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
+        val ENDED_SESSION = SessionId(DataOrigin.LIVE, epoch = 7)
         val TARGET = VehicleTarget(SystemId(VEHICLE_SYSTEM_ID), VEHICLE_ADDRESS)
 
         // One message of each streamed kind; their values do not matter here, only when they arrive.

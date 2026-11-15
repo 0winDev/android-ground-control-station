@@ -29,14 +29,19 @@ import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryKind
 import com.owindev.gcs.core.domain.telemetry.Timed
 import com.owindev.gcs.core.domain.telemetry.isFix3d
+import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.Vehicle
-import com.owindev.gcs.core.domain.vehicle.VehicleLink
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * What [PreflightRule] judges: the active [vehicle] and its [telemetry] (`null` when there is none), its [battery]
- * settings as read, the [uplink], the [background] link, the latest [preArmReason] and the [alerts].
+ * settings as read, the [uplink], the [background] link, the latest [preArmReason] and the [alerts]. [connection]
+ * names the active vehicle's current connection and changes on every CONNECTED and every session, so that no
+ * acknowledgement outlives it ([PreflightAcknowledgements]).
  */
 data class PreflightInput(
+    val connection: Long,
     val vehicle: Vehicle?,
     val telemetry: Telemetry?,
     val battery: BatteryThresholds,
@@ -53,6 +58,7 @@ data class PreflightInput(
  * `PreArm:` text only names the reason.
  */
 class PreflightRule(
+    private val linkLoss: LinkLossRule,
     private val staleness: StalenessRule,
     private val preArm: PreArmRule,
     private val uplinkRule: UplinkRule,
@@ -61,10 +67,11 @@ class PreflightRule(
 ) {
 
     fun check(input: PreflightInput): PreflightCheck = PreflightCheck(
-        PreflightKind.entries.map { kind ->
+        items = PreflightKind.entries.map { kind ->
             val (colour, reason) = judge(kind, input)
             PreflightItem(kind, colour, reason)
         },
+        connection = input.connection,
     )
 
     private fun judge(kind: PreflightKind, input: PreflightInput): Judgement = when (kind) {
@@ -79,6 +86,14 @@ class PreflightRule(
         PreflightKind.POSITION -> fresh(input.telemetry, TelemetryKind.POSITION)
         PreflightKind.ATTITUDE -> fresh(input.telemetry, TelemetryKind.ATTITUDE)
         PreflightKind.ALERTS -> alerts(input.alerts)
+    }
+
+    /** The watchdog's verdict and the HEARTBEAT's age now: the watchdog's timer can run late after a sleep (#12). */
+    private fun link(vehicle: Vehicle?): Judgement = when {
+        vehicle == null -> RED to PreflightReason.NoActiveVehicle
+        vehicle.origin == DataOrigin.REPLAY -> RED to PreflightReason.Replay
+        linkLoss.isLost(vehicle) -> RED to PreflightReason.LinkLost
+        else -> OK
     }
 
     private fun uplink(health: UplinkHealth): Judgement = when (uplinkRule.warningOf(health)) {
@@ -97,21 +112,24 @@ class PreflightRule(
         else -> OK
     }
 
-    /** Its age is the battery's: both come in the same SYS_STATUS. */
     private fun vehiclePreArm(telemetry: Telemetry?, reason: VehicleMessage?): Judgement {
         val timed = telemetry?.preArm ?: return RED to PreflightReason.NotReceived
         val status = timed.value
         return when {
-            timed.isStale(TelemetryKind.BATTERY) -> RED to PreflightReason.Stale
+            timed.receivedAt.elapsedNow() >= PRE_ARM_MAX_AGE -> RED to PreflightReason.Stale
+
             !status.present -> RED to PreflightReason.PreArmStateUnknown
+
             !status.enabled -> AMBER to PreflightReason.ArmingChecksDisabled
-            !status.healthy -> RED to failing(reason)
+
+            !status.healthy -> RED to PreflightReason.PreArmFailing(
+                text = reason?.text,
+                current = reason?.let(preArm::isCurrent) == true,
+            )
+
             else -> OK
         }
     }
-
-    private fun failing(reason: VehicleMessage?) =
-        PreflightReason.PreArmFailing(reason?.text, current = reason?.let(preArm::isCurrent) == true)
 
     private fun gps(telemetry: Telemetry?): Judgement {
         val timed = telemetry?.gps ?: return RED to PreflightReason.NotReceived
@@ -143,13 +161,14 @@ class PreflightRule(
     }
 
     private fun Timed<*>.isStale(kind: TelemetryKind): Boolean = staleness.isStale(kind, receivedAt.elapsedNow())
-}
 
-private fun link(vehicle: Vehicle?): Judgement = when {
-    vehicle == null -> RED to PreflightReason.NoActiveVehicle
-    vehicle.origin == DataOrigin.REPLAY -> RED to PreflightReason.Replay
-    vehicle.link != VehicleLink.CONNECTED -> RED to PreflightReason.LinkLost
-    else -> OK
+    companion object {
+        /**
+         * The gate's own bound on the pre-arm state, never the display's (#112): three periods of the 1 Hz SYS_STATUS
+         * it comes in, so one or two lost frames never block, and no older than the link-loss timeout.
+         */
+        val PRE_ARM_MAX_AGE: Duration = 3.seconds
+    }
 }
 
 private fun batteryLimits(battery: BatteryThresholds): Judgement = when {
