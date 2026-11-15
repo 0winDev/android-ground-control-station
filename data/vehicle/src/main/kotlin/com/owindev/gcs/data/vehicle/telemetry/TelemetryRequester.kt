@@ -125,17 +125,32 @@ internal class TelemetryRequester @Inject constructor(
      * silent from the start. Sleeps until the next stream is due and then reads the store again, since a
      * message that arrived in the meantime moves that stream's turn later. A turn that comes while the vehicle
      * is not [isHeard] is skipped, not sent, and waits a whole interval again.
+     *
+     * While the vehicle has not answered this GCS since it became CONNECTED, [PROBE] is requested again every
+     * [REQUEST_AGAIN_INTERVAL] as well, though it flows: its answer is the uplink's positive sign (REQ-045), which
+     * the pre-flight check needs (REQ-048), and a round whose answers were lost would otherwise never give one,
+     * since streams that flow are never asked for again.
      */
     private suspend fun requestAgainWhenSilent(target: VehicleTarget, isHeard: () -> Boolean): Nothing {
         val requestedAt = watched.keys.associateWithTo(mutableMapOf()) { timeSource.markNow() }
+        var probedAt = timeSource.markNow()
         while (true) {
             val untilDue = watched.mapValues { (stream, kind) -> untilDue(target, kind, requestedAt.getValue(stream)) }
             val due = untilDue.entries.firstOrNull { it.value <= Duration.ZERO }?.key
-            if (due == null) {
-                delay(untilDue.values.min())
-            } else {
-                requestedAt[due] = timeSource.markNow()
-                if (isHeard()) report(due, request(target, due))
+            val untilProbe = (REQUEST_AGAIN_INTERVAL - probedAt.elapsedNow())
+                .takeUnless { uplink.health.value.answered }
+            when {
+                due != null -> {
+                    requestedAt[due] = timeSource.markNow()
+                    if (isHeard()) report(due, request(target, due))
+                }
+
+                untilProbe != null && untilProbe <= Duration.ZERO -> {
+                    probedAt = timeSource.markNow()
+                    if (isHeard()) report(PROBE, request(target, PROBE))
+                }
+
+                else -> delay(listOfNotNull(untilDue.values.min(), untilProbe).min())
             }
         }
     }
@@ -226,6 +241,9 @@ internal class TelemetryRequester @Inject constructor(
          * a stream the vehicle never sends costs 9 B/s, under 1 % of the budget in [TELEMETRY_STREAMS].
          */
         val REQUEST_AGAIN_INTERVAL: Duration = 5.seconds
+
+        /** SYS_STATUS at its own rate: asking again changes nothing the vehicle sends. */
+        private val PROBE: TelemetryStream = TELEMETRY_STREAMS.single { it.kind == TelemetryKind.BATTERY }
 
         /** `MAV_CMD_SET_MESSAGE_INTERVAL` (`common.xml`): param1 message ID, param2 interval in µs. */
         const val MAV_CMD_SET_MESSAGE_INTERVAL = 511
