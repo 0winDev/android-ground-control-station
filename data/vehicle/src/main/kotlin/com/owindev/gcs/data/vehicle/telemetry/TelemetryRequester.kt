@@ -126,10 +126,11 @@ internal class TelemetryRequester @Inject constructor(
      * message that arrived in the meantime moves that stream's turn later. A turn that comes while the vehicle
      * is not [isHeard] is skipped, not sent, and waits a whole interval again.
      *
-     * While the vehicle has not answered this GCS since it became CONNECTED, [PROBE] is requested again every
-     * [REQUEST_AGAIN_INTERVAL] as well, though it flows: its answer is the uplink's positive sign (REQ-045), which
-     * the pre-flight check needs (REQ-048), and a round whose answers were lost would otherwise never give one,
-     * since streams that flow are never asked for again.
+     * While the uplink [awaits an answer][com.owindev.gcs.core.domain.link.UplinkHealth.awaitsAnswer], [PROBE] is
+     * requested again every [REQUEST_AGAIN_INTERVAL] as well, though it flows: its answer is the uplink's positive sign
+     * (REQ-045), which the pre-flight check needs (REQ-048), and a round whose answers were lost, or a command left
+     * without one, would otherwise never get one, since streams that flow are never asked for again and an arm is
+     * refused before it leaves.
      */
     private suspend fun requestAgainWhenSilent(target: VehicleTarget, isHeard: () -> Boolean): Nothing {
         val requestedAt = watched.keys.associateWithTo(mutableMapOf()) { timeSource.markNow() }
@@ -138,7 +139,7 @@ internal class TelemetryRequester @Inject constructor(
             val untilDue = watched.mapValues { (stream, kind) -> untilDue(target, kind, requestedAt.getValue(stream)) }
             val due = untilDue.entries.firstOrNull { it.value <= Duration.ZERO }?.key
             val untilProbe = (REQUEST_AGAIN_INTERVAL - probedAt.elapsedNow())
-                .takeUnless { uplink.health.value.answered }
+                .takeIf { uplink.health.value.awaitsAnswer }
             when {
                 due != null -> {
                     requestedAt[due] = timeSource.markNow()

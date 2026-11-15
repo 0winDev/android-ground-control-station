@@ -84,6 +84,7 @@ class PreflightGateTest {
         every { vehicleRepository.activeConnection } returns CONNECTION
         every { session.session } returns MutableStateFlow(FIRST_SESSION)
         every { telemetryStore.telemetry } returns telemetry
+        every { telemetryStore.session } returns FIRST_SESSION
         every { parameterStore.parameters } returns parameters
         every { messageStore.messages } returns messages
         every { alertRepository.activeAlerts } returns MutableStateFlow(Alerts.NotEvaluated)
@@ -126,6 +127,19 @@ class PreflightGateTest {
         telemetry.value = mapOf(OTHER to telemetryWith(GpsFixType.Fix3d))
 
         val result = gate.checkFor(OTHER)
+
+        result.items.filter { it.kind in setOf(PreflightKind.LINK, PreflightKind.GPS) } shouldBeEqualTo listOf(
+            PreflightItem(PreflightKind.LINK, PreflightColour.RED, PreflightReason.NoActiveVehicle),
+            PreflightItem(PreflightKind.GPS, PreflightColour.RED, PreflightReason.NotReceived),
+        )
+    }
+
+    @Test
+    fun `GIVEN the stores not yet moved to the new session WHEN checking THEN nothing they hold is used`() {
+        telemetry.value = mapOf(ACTIVE to telemetryWith(GpsFixType.Fix3d))
+        every { telemetryStore.session } returns ENDED_SESSION
+
+        val result = gate.checkFor(ACTIVE)
 
         result.items.filter { it.kind in setOf(PreflightKind.LINK, PreflightKind.GPS) } shouldBeEqualTo listOf(
             PreflightItem(PreflightKind.LINK, PreflightColour.RED, PreflightReason.NoActiveVehicle),

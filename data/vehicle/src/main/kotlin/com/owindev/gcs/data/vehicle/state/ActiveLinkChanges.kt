@@ -29,8 +29,13 @@ internal class ActiveLinkChanges {
         return channel.receiveAsFlow()
     }
 
-    fun announce(target: VehicleTarget?) {
+    /** Moves [connection] on without announcing: the watchdog calls it before it publishes the change. */
+    fun nextConnection() {
         changes.incrementAndGet()
+    }
+
+    fun announce(target: VehicleTarget?) {
+        nextConnection()
         channels.forEach { channel -> channel.trySend(target) }
     }
 

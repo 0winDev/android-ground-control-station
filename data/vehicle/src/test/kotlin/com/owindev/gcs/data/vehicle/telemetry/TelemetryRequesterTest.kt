@@ -448,6 +448,24 @@ class TelemetryRequesterTest {
             sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + listOf(SYS_STATUS_ID, SYS_STATUS_ID)
         }
 
+    @Tag("REQ-045")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN the round answered and then a command without answer WHEN running THEN SYS_STATUS is asked again`() =
+        testScope.runTest {
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+            vehicleStreams(SYSTEM_1)
+            backgroundScope.launch {
+                delay(TWO_SECONDS)
+                uplink.commandUnanswered()
+            }
+
+            requester.run(isHeard = { true }, targets = connectedFor(TWENTY_SECONDS))
+
+            sent.map { it.param1 } shouldBeEqualTo STREAM_IDS + SYS_STATUS_ID
+            uplink.health.value.awaitsAnswer shouldBeEqualTo false
+        }
+
     @Tag("REQ-048")
     @Test
     fun `GIVEN no answer and the vehicle not heard right now WHEN running THEN SYS_STATUS is not asked again`() =

@@ -64,7 +64,9 @@ internal class PreflightGate @Inject constructor(
 
     override fun checkFor(systemId: SystemId): PreflightCheck {
         val current = session.session.value
-        val active = activeVehicle.systemId.value == systemId
+        // The watchdog resets the uplink and the vehicles before it moves the telemetry store to a new session: until
+        // then, nothing it holds is this session's.
+        val active = activeVehicle.systemId.value == systemId && telemetry.session == current
         val followedParameters = parameters.parameters.value
         val followedMessages = messages.messages.value
         val parametersFollowed = followedParameters.session == current && followedParameters.systemId == systemId
