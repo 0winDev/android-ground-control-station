@@ -4,6 +4,7 @@ import com.owindev.gcs.core.domain.alert.ActiveAlert
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
 import com.owindev.gcs.core.domain.alert.Alerts
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.link.DataOrigin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -24,8 +25,10 @@ sealed interface AlertBanner {
      * The most urgent [alert] not yet acknowledged, raised as [occurrence]; [acknowledgeable] unless it is an
      * emergency. [others] is how many more alerts are active, acknowledged or not, and [othersLevel] the most urgent
      * of them, `null` with none: an acknowledged caution is still a caution, even under a newer advisory.
-     * [batteryRemaining] is the battery's fresh remaining energy, in percent, for a low or critical battery, or
-     * `null` when not known. [recorded] when a replay raised it, so it never passes for a live one (REQ-037).
+     * [batteryRemaining] is the battery's fresh remaining energy, in percent, for a low or critical energy, and
+     * [batteryVoltage] its fresh voltage, in volts, for a low or critical voltage; each `null` otherwise or when not
+     * known. [gcsLimit] when an energy alert was raised at the GCS's own threshold, the vehicle's not read or not set.
+     * [recorded] when a replay raised it, so it never passes for a live one (REQ-037).
      */
     data class Showing(
         val alert: Alert,
@@ -34,6 +37,8 @@ sealed interface AlertBanner {
         val others: Int,
         val othersLevel: AlertLevel? = null,
         val batteryRemaining: Int? = null,
+        val batteryVoltage: Double? = null,
+        val gcsLimit: Boolean = false,
         val recorded: Boolean = false,
     ) : AlertBanner
 
@@ -46,7 +51,7 @@ sealed interface AlertBanner {
 
 /**
  * The banner for [alerts], ordered most urgent first and newest first within a level (`AlertRule`), with the
- * battery's remaining energy from [panel] when it is fresh.
+ * battery's remaining energy or voltage from [panel] when it is fresh.
  */
 internal fun alertBannerOf(alerts: Alerts, panel: TelemetryPanel): AlertBanner {
     val active = (alerts as? Alerts.Evaluated)?.active.orEmpty()
@@ -67,12 +72,26 @@ internal fun alertBannerOf(alerts: Alerts, panel: TelemetryPanel): AlertBanner {
             others = active.size - 1,
             othersLevel = active.filter { it !== shown }.maxOfOrNull { it.alert.level },
             batteryRemaining = shown.batteryRemaining(panel),
+            batteryVoltage = shown.batteryVoltage(panel),
+            gcsLimit = shown.alert.isAtGcsLimit(),
             recorded = shown.origin == DataOrigin.REPLAY,
         )
     }
 }
 
 private fun ActiveAlert.batteryRemaining(panel: TelemetryPanel): Int? {
-    if (alert != Alert.BatteryLow && alert != Alert.BatteryCritical) return null
+    if (alert !is Alert.BatteryLow && alert !is Alert.BatteryCritical) return null
     return panel.battery?.takeUnless(Reading<*>::stale)?.value?.remaining
+}
+
+private fun Alert.isAtGcsLimit(): Boolean = when (this) {
+    is Alert.BatteryCritical -> source != EnergyLimitSource.VEHICLE
+    is Alert.BatteryLow -> source != EnergyLimitSource.VEHICLE
+    else -> false
+}
+
+/** A voltage of 0 is no reading, as for the alert (`AlertRule`). */
+private fun ActiveAlert.batteryVoltage(panel: TelemetryPanel): Double? {
+    if (alert != Alert.BatteryVoltageLow && alert != Alert.BatteryVoltageCritical) return null
+    return panel.battery?.takeUnless(Reading<*>::stale)?.value?.voltage?.takeIf { it > 0.0 }
 }

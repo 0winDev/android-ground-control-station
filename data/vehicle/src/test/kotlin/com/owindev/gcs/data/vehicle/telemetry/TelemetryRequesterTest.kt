@@ -15,6 +15,7 @@ import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
 import com.owindev.gcs.data.vehicle.link.GcsMessageSender
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.link.ReceivedMessage
+import com.owindev.gcs.data.vehicle.link.VehicleTarget
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import io.mockk.coEvery
 import io.mockk.every
@@ -557,7 +558,7 @@ class TelemetryRequesterTest {
         const val REQUESTED_AGAIN_IN_SIXTEEN_SECONDS = 3
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
-        val TARGET = TelemetryTarget(SystemId(VEHICLE_SYSTEM_ID), VEHICLE_ADDRESS)
+        val TARGET = VehicleTarget(SystemId(VEHICLE_SYSTEM_ID), VEHICLE_ADDRESS)
 
         // One message of each streamed kind; their values do not matter here, only when they arrive.
         val ATTITUDE = MavlinkMessage.Attitude(

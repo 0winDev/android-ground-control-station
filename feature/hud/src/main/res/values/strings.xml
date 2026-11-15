@@ -90,6 +90,14 @@
     <string name="hud_alert_battery_critical_percent">Battery critical (%1$d %%)</string>
     <string name="hud_alert_battery_low">Battery low</string>
     <string name="hud_alert_battery_low_percent">Battery low (%1$d %%)</string>
+    <string name="hud_alert_battery_critical_gcs">Battery critical (GCS limit)</string>
+    <string name="hud_alert_battery_critical_percent_gcs">Battery critical (%1$d %%, GCS limit)</string>
+    <string name="hud_alert_battery_low_gcs">Battery low (GCS limit)</string>
+    <string name="hud_alert_battery_low_percent_gcs">Battery low (%1$d %%, GCS limit)</string>
+    <string name="hud_alert_battery_critical_volts">Battery critical (%1$.2f V)</string>
+    <string name="hud_alert_battery_low_volts">Battery low (%1$.2f V)</string>
+    <string name="hud_alert_battery_voltage_not_judged">Battery voltage not judged: the vehicle sends its resting voltage</string>
+    <string name="hud_alert_battery_limits_not_read">Battery limits not read: some battery alerts may not show</string>
     <string name="hud_alert_battery_unhealthy">Battery unhealthy or in failsafe</string>
     <string name="hud_alert_battery_unknown">Battery state unknown</string>
     <string name="hud_alert_gps_fix_lost">No 3D GPS fix</string>

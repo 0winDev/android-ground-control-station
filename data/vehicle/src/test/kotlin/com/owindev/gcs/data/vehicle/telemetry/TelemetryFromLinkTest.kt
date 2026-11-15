@@ -21,6 +21,7 @@ import com.owindev.gcs.data.vehicle.recording.ignoringRecorder
 import com.owindev.gcs.data.vehicle.replay.PipelineClock
 import com.owindev.gcs.data.vehicle.state.ActiveVehicle
 import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
+import com.owindev.gcs.data.vehicle.state.idleParameterRequester
 import io.mockk.CapturingSlot
 import io.mockk.coEvery
 import io.mockk.every
@@ -81,6 +82,7 @@ class TelemetryFromLinkTest {
                 uplinkOnTestClock(),
             ),
             telemetryRequester = telemetryRequester,
+            parameterRequester = idleParameterRequester(),
             telemetryStore = store,
             messageStore = MessageStore(activeVehicle, PreArmRule()),
             parameterStore = ParameterStore(activeVehicle),
@@ -179,6 +181,7 @@ class TelemetryFromLinkTest {
                     uplinkOnTestClock(),
                 ),
                 telemetryRequester = telemetryRequester,
+                parameterRequester = idleParameterRequester(),
                 telemetryStore = store,
                 messageStore = MessageStore(activeVehicle, PreArmRule()),
                 parameterStore = ParameterStore(activeVehicle),

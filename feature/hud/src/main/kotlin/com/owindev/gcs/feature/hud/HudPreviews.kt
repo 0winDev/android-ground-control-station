@@ -8,6 +8,7 @@ import com.owindev.gcs.core.designsystem.theme.GcsPalette
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import com.owindev.gcs.core.domain.alert.Alert
 import com.owindev.gcs.core.domain.alert.AlertLevel
+import com.owindev.gcs.core.domain.alert.EnergyLimitSource
 import com.owindev.gcs.core.domain.telemetry.Battery
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import kotlin.time.Duration
@@ -43,7 +44,7 @@ internal fun ConnectedPreview(palette: GcsPalette) {
                     otherVehicles = emptyList(),
                     telemetry = PreviewPanel.copy(battery = Reading(PreviewBattery, stale = false, Duration.ZERO)),
                     alert = AlertBanner.Showing(
-                        alert = Alert.BatteryLow,
+                        alert = Alert.BatteryLow(EnergyLimitSource.VEHICLE),
                         occurrence = 1,
                         acknowledgeable = true,
                         others = 1,

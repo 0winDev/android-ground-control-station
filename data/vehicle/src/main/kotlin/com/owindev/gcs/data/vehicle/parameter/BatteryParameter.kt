@@ -5,6 +5,8 @@ import com.owindev.gcs.core.domain.battery.BatteryMonitor
 import com.owindev.gcs.core.domain.battery.BatteryThreshold
 import com.owindev.gcs.core.domain.battery.BatteryThresholds
 import com.owindev.gcs.core.domain.battery.FailsafeAction
+import com.owindev.gcs.core.domain.battery.LowVoltageTimer
+import com.owindev.gcs.core.domain.battery.SentVoltage
 
 /**
  * A parameter of the first battery that this GCS reads (REQ-028), with the `MAV_PARAM_TYPE` ArduPilot sends it with:
@@ -17,9 +19,12 @@ internal enum class BatteryParameter(val id: String, val type: Int) {
     CRT_VOLT("BATT_CRT_VOLT", MAV_PARAM_TYPE_REAL32),
     LOW_MAH("BATT_LOW_MAH", MAV_PARAM_TYPE_REAL32),
     CRT_MAH("BATT_CRT_MAH", MAV_PARAM_TYPE_REAL32),
+    LOW_TIMER("BATT_LOW_TIMER", MAV_PARAM_TYPE_INT8),
     CAPACITY("BATT_CAPACITY", MAV_PARAM_TYPE_INT32),
     FS_LOW_ACT("BATT_FS_LOW_ACT", MAV_PARAM_TYPE_INT8),
     FS_CRT_ACT("BATT_FS_CRT_ACT", MAV_PARAM_TYPE_INT8),
+    OPTIONS("BATT_OPTIONS", MAV_PARAM_TYPE_INT32),
+    FS_VOLTSRC("BATT_FS_VOLTSRC", MAV_PARAM_TYPE_INT8),
     ;
 
     /**
@@ -62,7 +67,12 @@ internal fun batteryThresholdsOf(values: Map<BatteryParameter, Float>) = Battery
         remainingMah = BatteryThreshold.of(values[BatteryParameter.CRT_MAH]),
         action = FailsafeAction.of(values[BatteryParameter.FS_CRT_ACT]?.toInt()),
     ),
+    lowVoltageTimer = LowVoltageTimer.of(values[BatteryParameter.LOW_TIMER]?.toInt()),
     capacityMah = values[BatteryParameter.CAPACITY]?.toInt(),
+    sentVoltage = SentVoltage.of(
+        options = values[BatteryParameter.OPTIONS]?.toInt(),
+        failsafeSource = values[BatteryParameter.FS_VOLTSRC]?.toInt(),
+    ),
 )
 
 // MAV_PARAM_TYPE (common.xml).

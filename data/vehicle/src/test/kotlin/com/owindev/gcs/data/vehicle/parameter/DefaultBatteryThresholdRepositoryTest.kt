@@ -5,6 +5,8 @@ import com.owindev.gcs.core.domain.battery.BatteryMonitor
 import com.owindev.gcs.core.domain.battery.BatteryThreshold
 import com.owindev.gcs.core.domain.battery.BatteryThresholds
 import com.owindev.gcs.core.domain.battery.FailsafeAction
+import com.owindev.gcs.core.domain.battery.LowVoltageTimer
+import com.owindev.gcs.core.domain.battery.SentVoltage
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
@@ -54,7 +56,7 @@ class DefaultBatteryThresholdRepositoryTest {
     }
 
     @Test
-    fun `GIVEN the active vehicle's eight parameters WHEN observing THEN they are its battery settings`() =
+    fun `GIVEN the active vehicle's eleven parameters WHEN observing THEN they are its battery settings`() =
         testScope.runTest {
             activate(MESSAGE_SYSTEM_1)
             SITL_BATTERY_PARAMETERS.forEach(::record)
@@ -78,6 +80,33 @@ class DefaultBatteryThresholdRepositoryTest {
         result shouldBeEqualTo BatteryThresholds.UNKNOWN.copy(
             low = BatteryFailsafeLevel.UNKNOWN.copy(voltage = BatteryThreshold.At(LOW_VOLTS)),
         )
+    }
+
+    @Test
+    fun `GIVEN the resting voltage sent and the raw one compared WHEN observing THEN it may be above`() =
+        testScope.runTest {
+            activate(MESSAGE_SYSTEM_1)
+            record(paramValue("BATT_OPTIONS", SEND_RESTING_VOLTAGE, MAV_PARAM_TYPE_INT32))
+            record(paramValue("BATT_FS_VOLTSRC", RAW_VOLTAGE, MAV_PARAM_TYPE_INT8))
+            repository.activeThresholds.launchIn(backgroundScope)
+
+            runCurrent()
+            val result = repository.activeThresholds.value.sentVoltage
+
+            result shouldBeEqualTo SentVoltage.MAY_BE_ABOVE_COMPARED
+        }
+
+    @Test
+    fun `GIVEN the resting voltage sent and compared WHEN observing THEN it is never above`() = testScope.runTest {
+        activate(MESSAGE_SYSTEM_1)
+        record(paramValue("BATT_OPTIONS", SEND_RESTING_VOLTAGE, MAV_PARAM_TYPE_INT32))
+        record(paramValue("BATT_FS_VOLTSRC", SAG_COMPENSATED_VOLTAGE, MAV_PARAM_TYPE_INT8))
+        repository.activeThresholds.launchIn(backgroundScope)
+
+        runCurrent()
+        val result = repository.activeThresholds.value.sentVoltage
+
+        result shouldBeEqualTo SentVoltage.NEVER_ABOVE_COMPARED
     }
 
     @Test
@@ -181,6 +210,12 @@ class DefaultBatteryThresholdRepositoryTest {
         const val ACTION_RTL = 2
         const val MONITOR_VOLTAGE_AND_CURRENT = 4
         const val CAPACITY_MAH = 3300
+        const val LOW_TIMER_SECONDS = 10
+
+        /** `BATT_OPTIONS` bit 6, "Send resistance compensated voltage to GCS". */
+        const val SEND_RESTING_VOLTAGE = 64f
+        const val RAW_VOLTAGE = 0f
+        const val SAG_COMPENSATED_VOLTAGE = 1f
         val SITL_THRESHOLDS = BatteryThresholds(
             monitor = BatteryMonitor.Present(MONITOR_VOLTAGE_AND_CURRENT),
             low = BatteryFailsafeLevel(
@@ -193,7 +228,9 @@ class DefaultBatteryThresholdRepositoryTest {
                 BatteryThreshold.Disabled,
                 FailsafeAction.WarnOnly,
             ),
+            lowVoltageTimer = LowVoltageTimer.Seconds(LOW_TIMER_SECONDS),
             capacityMah = CAPACITY_MAH,
+            sentVoltage = SentVoltage.NEVER_ABOVE_COMPARED,
         )
     }
 }
