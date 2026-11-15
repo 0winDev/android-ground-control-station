@@ -38,13 +38,16 @@ import kotlinx.coroutines.launch
 internal const val MAX_PENDING_RECORDS = 1024
 
 /**
- * Records each flight to a .tlog in the [folder] (REQ-036): every frame received and sent while a recording is open,
+ * Records each flight to a .tlog in the [folder] (REQ-049): every frame received and sent while a recording is open,
  * each stamped on [clock] when it is handed over, signatures stripped and SETUP_SIGNING left out (ADR 0006).
  *
  * A recording opens with the first HEARTBEAT of the [activeVehicle] (REQ-020), as `yyyy-MM-dd_HH-mm-ss.tlog` in
  * [clock]'s zone. It stays open through link loss, so the gap stays in the log, and closes when the session stops or
  * after [RecordingRule.closeAfterLinkLoss] without a HEARTBEAT from that vehicle, measured on [timeSource]; its next
- * HEARTBEAT then opens a new one. A closed log is synced to the disk.
+ * HEARTBEAT then opens a new one. It also closes once it has seen a vehicle armed and then no vehicle has been armed
+ * for [RecordingRule.closeAfterDisarmed], by the HEARTBEATs received from each vehicle's autopilot (never this GCS's
+ * own); the next frame then opens a new one, in the same queue, so no frame falls between the two. A closed log is
+ * synced to the disk.
  *
  * The limit is applied when a recording opens and when it closes (REQ-039): the oldest logs in the [folder] are
  * deleted until all fit in [RecordingRule.maxTotalBytes], never the one being recorded nor the last one closed, named
@@ -87,6 +90,9 @@ internal class FlightRecorder(
     @Volatile
     private var latestHeard = AtomicReference<HeardAt?>()
 
+    /** Each vehicle's armed state as its last HEARTBEAT said; only the receive loop touches it. */
+    private val armedBySystem = mutableMapOf<Int, Boolean>()
+
     private val writer: Job by lazy { scope.launch { write() } }
 
     /** Whether a log is being written now; [RecorderStatus.FAILED] from a disk failure until a log opens again. */
@@ -105,7 +111,12 @@ internal class FlightRecorder(
         val atMillis = clock.millis()
         message?.let(HeartbeatMapper::vehicleStateOf)?.let { state ->
             // Marked on arrival, as the vehicle repository marks it, not when the writer gets to it.
-            if (state.systemId == activeVehicle.liveSystemId) heard(HeardAt(atMillis, timeSource.markNow()))
+            val mark = timeSource.markNow()
+            if (state.systemId == activeVehicle.liveSystemId) heard(HeardAt(atMillis, mark))
+            // Only a change is queued: a slow disk holds one event per arm or disarm, not one per HEARTBEAT.
+            if (armedBySystem.put(state.systemId.value, state.armed) != state.armed) {
+                control(Control.Armed(state.systemId.value, state.armed, mark))
+            }
         }
         offer(frame.bytes, micros(atMillis))
     }
@@ -115,6 +126,7 @@ internal class FlightRecorder(
     /** The link session has stopped: the recording closes. Called from the receive loop, after its last frame. */
     fun sessionStopped() {
         latestHeard = AtomicReference()
+        armedBySystem.clear()
         control(Control.SessionStopped)
     }
 
@@ -155,14 +167,7 @@ internal class FlightRecorder(
 
     private suspend fun write() = coroutineScope {
         val state = WriterState()
-        var timer: Job? = null
-        fun closeAfter(after: Duration) {
-            timer?.cancel()
-            timer = launch {
-                delay(after)
-                events.send(Control.TimedOut)
-            }
-        }
+        val timers = CloseTimers(this)
         for (event in events) {
             when (event) {
                 is ByteArray -> {
@@ -174,18 +179,21 @@ internal class FlightRecorder(
                     val latest = event.latest.getAndSet(null) ?: continue
                     state.lastHeartbeat = latest.mark
                     state.openIfIdle(event.firstAtMillis)
-                    closeAfter(rule.closeAfterLinkLoss - latest.mark.elapsedNow())
+                    timers.closeAfter(rule.closeAfterLinkLoss - latest.mark.elapsedNow())
                 }
 
                 Control.TimedOut -> {
                     val since = state.lastHeartbeat?.elapsedNow() ?: Duration.INFINITE
-                    if (rule.closesAfter(since)) state.close() else closeAfter(rule.closeAfterLinkLoss - since)
+                    if (rule.closesAfter(since)) state.close() else timers.closeAfter(rule.closeAfterLinkLoss - since)
                 }
 
+                is Control.Armed -> timers.closeAfterDisarmed(state.armedChanged(event))
+
+                Control.DisarmedTimedOut -> timers.closeAfterDisarmed(state.disarmedTimedOut())
+
                 Control.SessionStopped -> {
-                    timer?.cancel()
-                    state.close()
-                    state.blocked = false
+                    timers.cancel()
+                    state.sessionStopped()
                 }
             }
             // Written through once the queue holds no more records, so a crash loses at most what is queued.
@@ -203,8 +211,54 @@ internal class FlightRecorder(
         /** After a disk failure, until the session stops: no log opens. */
         var blocked = false
 
+        /** The vehicles whose last HEARTBEAT said armed. */
+        val armedSystems = mutableSetOf<Int>()
+
+        /** Whether the open log has seen a vehicle armed, so a disarm can close it. */
+        private var armedSeen = false
+
+        /** Since when no vehicle has been armed, in a log that has seen one; `null` otherwise. */
+        var disarmedSince: ComparableTimeMark? = null
+            private set
+
+        /** The log closed for the vehicles' disarm: the next record opens the next one. */
+        private var openOnNextRecord = false
+
+        /** Applies [change] and returns since when the open log has had no vehicle armed, `null` when it has one. */
+        fun armedChanged(change: Control.Armed): ComparableTimeMark? {
+            if (change.armed) armedSystems += change.systemId else armedSystems -= change.systemId
+            when {
+                armedSystems.isNotEmpty() -> {
+                    armedSeen = open != null
+                    disarmedSince = null
+                }
+
+                open != null && armedSeen && disarmedSince == null -> disarmedSince = change.at
+            }
+            return disarmedSince
+        }
+
+        /** Closes the log if no vehicle has been armed for the whole margin; otherwise since when, to wait again. */
+        fun disarmedTimedOut(): ComparableTimeMark? {
+            val since = disarmedSince
+            if (since != null && rule.closesAfterDisarmed(since.elapsedNow())) {
+                close()
+                openOnNextRecord = !blocked
+            }
+            return disarmedSince
+        }
+
+        fun sessionStopped() {
+            close()
+            blocked = false
+            armedSystems.clear()
+        }
+
         fun openIfIdle(atMillis: Long) {
             if (open != null || blocked) return
+            openOnNextRecord = false
+            armedSeen = armedSystems.isNotEmpty()
+            disarmedSince = null
             guarded {
                 // Under the folder's lock, so an import never takes the new log's name nor deletes it as it opens.
                 val file = folder.locked {
@@ -222,6 +276,7 @@ internal class FlightRecorder(
         }
 
         fun write(record: ByteArray) {
+            if (open == null && openOnNextRecord) openIfIdle(millisOf(record))
             val recording = open ?: return
             guarded { recording.stream.write(record) }
         }
@@ -232,6 +287,9 @@ internal class FlightRecorder(
         }
 
         fun close() {
+            openOnNextRecord = false
+            armedSeen = false
+            disarmedSince = null
             val recording = open ?: return
             guarded {
                 recording.stream.flush()
@@ -284,6 +342,33 @@ internal class FlightRecorder(
         }
     }
 
+    /** The writer's two close timers; only the writer coroutine touches them. */
+    private inner class CloseTimers(private val scope: CoroutineScope) {
+        private var linkLoss: Job? = null
+        private var disarmed: Job? = null
+
+        fun closeAfter(after: Duration) {
+            linkLoss?.cancel()
+            linkLoss = after(after, Control.TimedOut)
+        }
+
+        /** Times the disarm close from [since]; `null` cancels it. */
+        fun closeAfterDisarmed(since: ComparableTimeMark?) {
+            disarmed?.cancel()
+            disarmed = since?.let { after(rule.closeAfterDisarmed - it.elapsedNow(), Control.DisarmedTimedOut) }
+        }
+
+        fun cancel() {
+            linkLoss?.cancel()
+            disarmed?.cancel()
+        }
+
+        private fun after(delay: Duration, control: Control): Job = scope.launch {
+            delay(delay)
+            events.send(control)
+        }
+    }
+
     private fun newFile(atMillis: Long): File {
         val stamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(atMillis), clock.zone).format(FILE_NAME_FORMAT)
         return generateSequence(0) { it + 1 }
@@ -302,6 +387,11 @@ internal class FlightRecorder(
 
         data object TimedOut : Control
 
+        /** [systemId]'s HEARTBEAT changed to [armed], received [at]. */
+        class Armed(val systemId: Int, val armed: Boolean, val at: ComparableTimeMark) : Control
+
+        data object DisarmedTimedOut : Control
+
         data object SessionStopped : Control
     }
 
@@ -309,10 +399,21 @@ internal class FlightRecorder(
         const val TAG = "FlightRecorder"
         const val EXTENSION = ".tlog"
         const val MICROS_PER_MILLI = 1_000L
+        const val TIMESTAMP_BYTES = 8
+        const val BYTE_MASK = 0xFFL
         val FILE_NAME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
 
         // A .tlog cannot hold a time before the Unix epoch, and a clock set that far back must not stop the link.
         fun micros(atMillis: Long): Long = atMillis.coerceAtLeast(0) * MICROS_PER_MILLI
+
+        /** When [record] was handed over: its 8-byte big-endian timestamp in µs, as [TlogWriter.record] wrote it. */
+        fun millisOf(record: ByteArray): Long {
+            var micros = 0L
+            for (index in 0 until TIMESTAMP_BYTES) {
+                micros = (micros shl Byte.SIZE_BITS) or (record[index].toLong() and BYTE_MASK)
+            }
+            return micros / MICROS_PER_MILLI
+        }
 
         fun syncToDisk(output: OutputStream) {
             (output as? FileOutputStream)?.fd?.sync()
