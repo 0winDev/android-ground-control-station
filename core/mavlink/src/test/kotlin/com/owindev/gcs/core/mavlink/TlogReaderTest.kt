@@ -22,7 +22,7 @@ class TlogReaderTest {
         reader = TlogReader()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @ParameterizedTest(name = "{0}")
     @CsvSource(
         "tlog/qgroundcontrol.tlog, tlog/qgroundcontrol.records.csv, tlog/qgroundcontrol.frames.bin",
@@ -42,7 +42,7 @@ class TlogReaderTest {
         reader.stats shouldBeEqualTo TlogStats()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN QGroundControl's tlog fed one byte at a time WHEN reading THEN every record is what pymavlink reads`() {
         val bytes = readFixture(QGROUNDCONTROL)
@@ -54,7 +54,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN garbage between two records WHEN reading THEN every record is recovered and the garbage counted`() {
         val log = readFixture(GARBAGE_BETWEEN_RECORDS)
@@ -66,7 +66,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN garbage before the first record WHEN reading THEN the records after it come, garbage counted`() {
         val log = readFixture(GARBAGE_BEFORE_FIRST_RECORD)
@@ -78,7 +78,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a false start before the first record WHEN reading THEN it costs one record, never the rest`() {
         val log = readFixture(FALSE_START_BEFORE_FIRST_RECORD)
@@ -90,7 +90,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a timestamp without a frame between records WHEN reading THEN every record is recovered`() {
         val log = readFixture(TIMESTAMP_WITHOUT_FRAME)
@@ -102,7 +102,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a lone timestamp before one holding a start marker WHEN reading THEN no false record comes out`() {
         val log = readFixture(FALSE_START_AFTER_LONE_TIMESTAMP)
@@ -114,7 +114,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a last record cut inside its frame WHEN reading to the end THEN the whole ones come out, it counted`() {
         val log = readFixture(TRUNCATED_LAST_RECORD)
@@ -126,7 +126,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a lone timestamp at the end WHEN reading to the end THEN every record comes out and it is counted`() {
         val log = readFixture(TIMESTAMP_AT_END)
@@ -138,7 +138,7 @@ class TlogReaderTest {
     }
 
     @Tag("REQ-012")
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a false record start hiding real records at the end WHEN reading to the end THEN they are rescued`() {
         val log = readFixture(FALSE_START_AT_END)

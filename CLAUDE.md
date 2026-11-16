@@ -276,6 +276,7 @@ the issue number to an existing one.
 - A clear and the text it closes can arrive together: apply the clear last, it is the newer (#100).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
+- A close and the next log in one writer queue lose no frame; a gap between them would, until the next HEARTBEAT (#89).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
 
 **SITL and QGroundControl**
@@ -294,6 +295,7 @@ the issue number to an existing one.
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
 - pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
+- The relay's .up.tlog also holds a tool's frames sent through it: drop them before comparing with the app's log (#89).
 - A relay bound to 127.0.0.1 never reaches a phone on the LAN: bind the device's side to 0.0.0.0 (#28).
 - ColorOS refuses `pm grant` from adb, and Android 13 never lets a foreground notification be dismissed (#28).
 - ColorOS names battery settings its own way ("allow background activity"): a fix in the UI names both (#28).
@@ -310,6 +312,9 @@ the issue number to an existing one.
 - detekt measures tests too: a `when` over message types that grows with the codec becomes a table (#112).
 - Lint's ExperimentalDetector crashes on a fun-interface lambda held or returned: use a class or a reference (#99, #102).
 - KSP's incremental run can drop a module's Hilt outputs: on a whole module missing, `kspDebugKotlin --rerun` (#102).
+- A green `assembleDebug` can still ship an APK without a ViewModel's Hilt factory: `clean` before installing for SITL (#89).
+- A reboot can leave an uncommitted file all NUL bytes: rebuild it from the session's edits, check it by bytecode (#89).
+- PowerShell's `>` re-encodes binary output: pull a device file with bash or `adb pull`, never `exec-out ... >` there (#89).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
 - On Windows `@TempDir` cannot delete a file left open: close what the SUT opened in `@AfterEach` (#70).
 - CI calls each module's `koverVerify` by name, never `check`: a module with a new minimum is added there (#63).

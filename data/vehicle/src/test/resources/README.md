@@ -13,6 +13,8 @@ their provenance (ArduCopter V4.7.2-beta1 SITL, 2026-10-08), raw bytes and refer
 | `heartbeat/armed-guided.bin` | real | same | Guided, armed |
 | `derived/heartbeat-sysid-2.bin` | `disarmed-loiter.bin` re-packed by pymavlink with system ID 2 | system 2, component 1 | Loiter, disarmed |
 | `derived/heartbeat-gimbal-component.bin` | `disarmed-stabilize.bin` re-packed by pymavlink from component 154 (`MAV_COMP_ID_GIMBAL`) | system 1, component 154 | not the vehicle |
+| `derived/heartbeat-sysid-2-armed.bin` | `armed-guided.bin` re-packed by pymavlink with system ID 2 (#89) | system 2, component 1 | Guided, armed |
+| `derived/heartbeat-gimbal-component-armed.bin` | `armed-guided.bin` re-packed by pymavlink from component 154 (#89) | system 1, component 154 | not the vehicle, though its flags say armed |
 | `gcs/heartbeat-mission-planner.bin` | real (Mission Planner) | system 255, component 190, `MAV_TYPE_GCS` | not a vehicle |
 
 ## Telemetry (#39)

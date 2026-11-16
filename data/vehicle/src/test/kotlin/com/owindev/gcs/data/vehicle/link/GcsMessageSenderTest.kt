@@ -155,7 +155,7 @@ class GcsMessageSenderTest {
         sent.takeLast(2).map { headerOf(it).sequence } shouldBeEqualTo listOf(LAST_SEQUENCE, 0)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a closed link and then an open one WHEN sending THEN only the frames sent are recorded`() = runTest {
         val recorded = mutableListOf<ByteArray>()
@@ -270,7 +270,7 @@ class GcsMessageSenderTest {
         sent shouldBeEqualTo emptyList()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a sender cancelled during the socket write WHEN the frame leaves THEN it is recorded and numbered`() =
         runTest {

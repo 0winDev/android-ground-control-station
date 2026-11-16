@@ -8,7 +8,7 @@ import kotlin.time.Duration
 import kotlinx.coroutines.flow.Flow
 
 /**
- * The flight recordings on the device, recorded or imported (REQ-036, REQ-038). Implemented in `:data:vehicle` and
+ * The flight recordings on the device, recorded or imported (REQ-049, REQ-038). Implemented in `:data:vehicle` and
  * bound there with Hilt.
  *
  * The recording in progress and the one being replayed are never deleted, and nothing is imported while a flight is

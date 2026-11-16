@@ -191,11 +191,11 @@ abstract class VehicleDataModule {
             background: BackgroundLinkRule,
         ): PreflightRule = PreflightRule(linkLoss, staleness, preArm, uplink, background, GcsEnergyThresholds())
 
-        /** The recording thresholds decided for v0.3 (REQ-036, REQ-039: 10 min, 256 MiB); change them here. */
+        /** The recording thresholds decided for v0.3 (REQ-049, REQ-039: 10 min, 256 MiB); change them here. */
         @Provides
         fun provideRecordingRule(): RecordingRule = RecordingRule()
 
-        /** The background link ends with the recording, 10 min after the link is lost (REQ-046, REQ-036). */
+        /** The background link ends with the recording, 10 min after the link is lost (REQ-046, REQ-049). */
         @Provides
         fun provideBackgroundLinkRule(linkLossRule: LinkLossRule, recordingRule: RecordingRule): BackgroundLinkRule =
             BackgroundLinkRule(linkLossRule, recordingRule)

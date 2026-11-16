@@ -30,6 +30,7 @@ import java.time.ZoneOffset
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 import kotlin.time.TimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -47,6 +48,8 @@ import org.junit.jupiter.api.io.TempDir
 
 /** The real codec and files in a temporary folder; time is the test scheduler's, the wall clock a settable one. */
 @OptIn(ExperimentalCoroutinesApi::class)
+// Every case shares this recorder harness and its fixtures; split it when a close rule brings its own harness.
+@Suppress("LargeClass")
 class FlightRecorderTest {
 
     @TempDir
@@ -76,7 +79,7 @@ class FlightRecorderTest {
         unmockkStatic(Log::class)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN no HEARTBEAT yet WHEN frames arrive THEN nothing is recorded`() = testScope.runTest {
         receive(SCALED_PRESSURE)
@@ -86,7 +89,7 @@ class FlightRecorderTest {
         logs().shouldBeEmpty()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the vehicle's first HEARTBEAT WHEN recording THEN a log named by the wall clock starts with it`() =
         testScope.runTest {
@@ -99,7 +102,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(SCALED_PRESSURE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN only a ground station's HEARTBEAT WHEN it arrives THEN nothing is recorded`() = testScope.runTest {
         receive(MISSION_PLANNER)
@@ -109,7 +112,7 @@ class FlightRecorderTest {
         logs().shouldBeEmpty()
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN every kind of frame WHEN recorded THEN valid, unknown, unsigned and sent frames are written in order`() =
         testScope.runTest {
@@ -128,7 +131,7 @@ class FlightRecorderTest {
             )
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed unknown ID and a SETUP_SIGNING WHEN recorded THEN they are left out and counted`() =
         testScope.runTest {
@@ -142,7 +145,7 @@ class FlightRecorderTest {
             recorder.stats shouldBeEqualTo RecorderStats(dropped = 0, signedUnknownMessage = 1, setupSigning = 1)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN frames stamped before the writer runs WHEN written THEN each keeps the time it was handed over`() =
         testScope.runTest {
@@ -156,7 +159,7 @@ class FlightRecorderTest {
             timestamps(START_NAME) shouldBeEqualTo listOf(START_MICROS, START_MICROS + LATER_MICROS)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a signed frame sent WHEN recorded THEN it is written without its signature`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -167,7 +170,7 @@ class FlightRecorderTest {
         frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(DISARMED_STABILIZE))
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a wall clock before 1970 WHEN frames are recorded THEN they are stamped at the epoch`() =
         testScope.runTest {
@@ -179,7 +182,7 @@ class FlightRecorderTest {
             timestamps(BEFORE_EPOCH_NAME) shouldBeEqualTo listOf(0L)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN HEARTBEATs queued before the writer runs WHEN the log opens THEN it is named by the first`() =
         testScope.runTest {
@@ -192,7 +195,7 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(START_NAME)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a HEARTBEAT still queued when the session stops WHEN the next one hears the vehicle THEN it logs it`() =
         testScope.runTest {
@@ -207,7 +210,7 @@ class FlightRecorderTest {
             frames(LATER_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN HEARTBEATs queued before the writer runs WHEN timing the close THEN it counts from the latest`() =
         testScope.runTest {
@@ -231,7 +234,7 @@ class FlightRecorderTest {
             )
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN the vehicle heard WHEN the log opens THEN the status is RECORDING`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -241,7 +244,7 @@ class FlightRecorderTest {
         recorder.status.value shouldBeEqualTo RecorderStatus.RECORDING
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a recording WHEN the session stops THEN the status is IDLE`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -251,7 +254,7 @@ class FlightRecorderTest {
         recorder.status.value shouldBeEqualTo RecorderStatus.IDLE
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN just under 10 minutes without HEARTBEAT WHEN a frame arrives THEN it joins the same log`() =
         testScope.runTest {
@@ -265,7 +268,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(SCALED_PRESSURE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN exactly 10 minutes without HEARTBEAT WHEN a frame arrives THEN the log is closed without it`() =
         testScope.runTest {
@@ -279,7 +282,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN HEARTBEATs within 10 minutes of each other WHEN 18 minutes pass THEN the log stays open`() =
         testScope.runTest {
@@ -299,7 +302,7 @@ class FlightRecorderTest {
             )
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a log closed after 10 minutes WHEN the vehicle's HEARTBEAT returns THEN a new log starts`() =
         testScope.runTest {
@@ -315,7 +318,7 @@ class FlightRecorderTest {
             frames(TEN_MINUTES_LATER_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a log closed after 10 minutes WHEN another vehicle's HEARTBEAT arrives THEN no log starts`() =
         testScope.runTest {
@@ -330,7 +333,7 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(START_NAME)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN another vehicle's HEARTBEAT WHEN the active one is silent THEN it does not keep the log open`() =
         testScope.runTest {
@@ -346,7 +349,7 @@ class FlightRecorderTest {
             frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(SECOND_VEHICLE))
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a stopped session WHEN the next one hears the vehicle THEN a new log starts`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -360,7 +363,7 @@ class FlightRecorderTest {
         logs() shouldBeEqualTo listOf(START_NAME, LATER_NAME)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN two logs started in the same second WHEN naming the second THEN it gets a suffix`() = testScope.runTest {
         receive(DISARMED_STABILIZE)
@@ -535,7 +538,7 @@ class FlightRecorderTest {
             logs() shouldBeEqualTo listOf(OLDEST_NAME, START_NAME, IMPORTED_NAME)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN more frames than the queue holds WHEN the writer is behind THEN the surplus is dropped and counted`() =
         testScope.runTest {
@@ -548,7 +551,7 @@ class FlightRecorderTest {
             recorder.stats.dropped shouldBeEqualTo 1
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a disk that fails WHEN recording THEN it stops, is logged once and frames keep being taken`() =
         testScope.runTest {
@@ -564,7 +567,7 @@ class FlightRecorderTest {
             }
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a disk that failed WHEN frames keep arriving THEN they are taken and the status is FAILED`() =
         testScope.runTest {
@@ -578,7 +581,7 @@ class FlightRecorderTest {
             failing.status.value shouldBeEqualTo RecorderStatus.FAILED
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a disk that failed WHEN the next session hears the vehicle THEN it records again`() = testScope.runTest {
         var failures = 1
@@ -594,7 +597,7 @@ class FlightRecorderTest {
         frames(START_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER))
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a recording WHEN it closes THEN it is synced to the disk before it is closed`() = testScope.runTest {
         val events = mutableListOf<String>()
@@ -611,7 +614,7 @@ class FlightRecorderTest {
         events shouldBeEqualTo listOf(SYNCED, CLOSED)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a sync that fails WHEN the log closes THEN its file is closed and the status stays FAILED`() =
         testScope.runTest {
@@ -630,7 +633,7 @@ class FlightRecorderTest {
             failing.status.value shouldBeEqualTo RecorderStatus.FAILED
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a folder that cannot be created WHEN the vehicle is heard THEN nothing is recorded and it is logged`() =
         testScope.runTest {
@@ -643,6 +646,452 @@ class FlightRecorderTest {
             verifyOnce {
                 Log.w(TAG, any<String>(), any<IOException>())
             }
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN an armed vehicle WHEN 40 seconds pass THEN its recording never closes`() = testScope.runTest {
+        receive(ARMED_GUIDED)
+        advanceTimeBy(FORTY_SECONDS)
+        runCurrent()
+        receive(SCALED_PRESSURE)
+
+        stopAndWrite()
+
+        frames(START_NAME) shouldBeEqualTo listOf(fixture(ARMED_GUIDED), fixture(SCALED_PRESSURE))
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a vehicle disarmed after it was armed WHEN 30 seconds pass THEN the log closes, landed or not`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, MARGIN_LATER_NAME)
+            frames(START_NAME) shouldBeEqualTo listOf(fixture(ARMED_GUIDED), fixture(DISARMED_STABILIZE))
+            frames(MARGIN_LATER_NAME) shouldBeEqualTo listOf(fixture(SCALED_PRESSURE))
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a vehicle disarmed just under 30 seconds WHEN a frame arrives THEN it joins the same log`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN - 1.milliseconds)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a vehicle never armed WHEN 40 seconds pass THEN the log stays open`() = testScope.runTest {
+        receive(DISARMED_STABILIZE)
+        advanceTimeBy(FORTY_SECONDS)
+        runCurrent()
+        receive(SCALED_PRESSURE)
+
+        stopAndWrite()
+
+        logs() shouldBeEqualTo listOf(START_NAME)
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a disarmed vehicle armed again within 30 seconds WHEN 40 seconds pass THEN the log stays open`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(TWENTY_SECONDS)
+            receive(ARMED_GUIDED)
+            advanceTimeBy(TWENTY_SECONDS)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN system 2 still armed WHEN the active vehicle stays disarmed 40 seconds THEN the log stays open`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(SECOND_VEHICLE_ARMED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(FORTY_SECONDS)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the active vehicle disarmed WHEN system 2 arms within 30 seconds THEN the log stays open`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(TWENTY_SECONDS)
+            receive(SECOND_VEHICLE_ARMED)
+            advanceTimeBy(TWENTY_SECONDS)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the vehicle disarmed WHEN this GCS sends an armed-looking HEARTBEAT THEN it does not count`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(TWENTY_SECONDS)
+            recorder.sent(fixture(ARMED_GUIDED).toByteArray())
+            advanceTimeBy(TWENTY_SECONDS)
+            runCurrent()
+
+            stopAndWrite()
+
+            frames(START_NAME) shouldBeEqualTo listOf(
+                fixture(ARMED_GUIDED),
+                fixture(DISARMED_STABILIZE),
+                fixture(ARMED_GUIDED),
+            )
+            recorder.status.value shouldBeEqualTo RecorderStatus.IDLE
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the vehicle disarmed WHEN another component says armed THEN it does not count`() = testScope.runTest {
+        receive(ARMED_GUIDED)
+        receive(DISARMED_STABILIZE)
+        advanceTimeBy(TWENTY_SECONDS)
+        receive(GIMBAL_ARMED)
+        advanceTimeBy(TWENTY_SECONDS)
+        runCurrent()
+        clock.advance(FORTY_SECONDS)
+        receive(SCALED_PRESSURE)
+
+        stopAndWrite()
+
+        logs() shouldBeEqualTo listOf(START_NAME, FORTY_SECONDS_LATER_NAME)
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN frames received and sent across the close WHEN written THEN every one is in a log, in order`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN - 1.milliseconds)
+            receive(SCALED_PRESSURE)
+            recorder.sent(fixture(MISSION_PLANNER).toByteArray())
+            advanceTimeBy(1.milliseconds)
+            runCurrent()
+            receive(DISARMED_LOITER)
+            recorder.sent(fixture(MISSION_PLANNER).toByteArray())
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs().map(::frames) shouldBeEqualTo listOf(
+                listOf(ARMED_GUIDED, DISARMED_STABILIZE, SCALED_PRESSURE, MISSION_PLANNER).map(::fixture),
+                listOf(DISARMED_LOITER, MISSION_PLANNER, SCALED_PRESSURE).map(::fixture),
+            )
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the log closed for a disarm WHEN no frame arrives THEN no next log is created`() = testScope.runTest {
+        receive(ARMED_GUIDED)
+        receive(DISARMED_STABILIZE)
+
+        advanceTimeBy(FORTY_SECONDS)
+        runCurrent()
+
+        logs() shouldBeEqualTo listOf(START_NAME)
+        recorder.status.value shouldBeEqualTo RecorderStatus.IDLE
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the next log opened disarmed after the close WHEN two minutes pass THEN it stays open`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(DISARMED_LOITER)
+            advanceTimeBy(LATER)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            frames(MARGIN_LATER_NAME) shouldBeEqualTo listOf(fixture(DISARMED_LOITER), fixture(SCALED_PRESSURE))
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the vehicle armed again after a close WHEN it disarms for 30 seconds THEN that log closes too`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, MARGIN_LATER_NAME, TWO_MARGINS_LATER_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Tag("REQ-039")
+    @Test
+    fun `GIVEN a log closed for a disarm WHEN the next opens over the limit THEN the closed one is kept and named`() =
+        testScope.runTest {
+            val rule = RecordingRule(maxTotalBytes = 1)
+            val folder = RecordingsFolder(directory, rule)
+            val small = recorder(rule = rule, folder = folder)
+            oldLog(OLD_NAME, sizeBytes = 10, lastModifiedMillis = 0)
+            receive(ARMED_GUIDED, small)
+            receive(DISARMED_STABILIZE, small)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+
+            receive(SCALED_PRESSURE, small)
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(START_NAME, MARGIN_LATER_NAME)
+            folder.marker.read() shouldBeEqualTo START_NAME
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a session stopped within the margin WHEN frames arrive after it THEN no log opens`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(TWENTY_SECONDS)
+            recorder.sessionStopped()
+            advanceTimeBy(TWENTY_SECONDS)
+            runCurrent()
+
+            recorder.received(raw(SCALED_PRESSURE), message(SCALED_PRESSURE))
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a stale margin end queued behind an arm and a disarm WHEN written THEN the disarm waits again`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            runCurrent()
+            advanceTimeBy(DISARM_MARGIN)
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a 10-minute close with the vehicle armed WHEN it disarms in the next log THEN that one closes`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            advanceTimeBy(10.minutes)
+            runCurrent()
+            clock.advance(10.minutes)
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, TEN_MINUTES_LATER_NAME, TEN_MINUTES_AND_MARGIN_LATER_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN armed when the session stopped WHEN the next one hears it disarmed THEN its log stays open`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            runCurrent()
+            stopAndWrite()
+            clock.advance(LATER)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(FORTY_SECONDS)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            frames(LATER_NAME) shouldBeEqualTo listOf(fixture(DISARMED_STABILIZE), fixture(SCALED_PRESSURE))
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN armed when the session stopped WHEN the next one hears it armed THEN a disarm closes it`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            stopAndWrite()
+            clock.advance(LATER)
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, LATER_NAME, LATER_AND_MARGIN_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a disarm close and a session stop WHEN a frame arrives before a HEARTBEAT THEN no log opens`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            recorder.sessionStopped()
+            runCurrent()
+
+            recorder.received(raw(SCALED_PRESSURE), message(SCALED_PRESSURE))
+            runCurrent()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a log closed for a disarm WHEN the next opens at once THEN the close is counted`() = testScope.runTest {
+        receive(ARMED_GUIDED)
+        receive(DISARMED_STABILIZE)
+        advanceTimeBy(DISARM_MARGIN)
+        runCurrent()
+
+        receive(SCALED_PRESSURE)
+        runCurrent()
+
+        recorder.closed.value shouldBeEqualTo 1L
+    }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a disk failure at the disarm close WHEN the vehicle arms again THEN its next HEARTBEAT opens a log`() =
+        testScope.runTest {
+            var syncs = 0
+            val failingOnce = recorder(syncOutput = { if (syncs++ == 0) throw IOException("No space left on device") })
+            receive(ARMED_GUIDED, failingOnce)
+            receive(DISARMED_STABILIZE, failingOnce)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+
+            receive(ARMED_GUIDED, failingOnce)
+            runCurrent()
+            receive(ARMED_GUIDED, failingOnce)
+            runCurrent()
+
+            (logs() to failingOnce.status.value) shouldBeEqualTo
+                (listOf(START_NAME, MARGIN_LATER_NAME) to RecorderStatus.RECORDING)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN armed and disarmed HEARTBEATs flipping faster than the writer WHEN it catches up THEN the last wins`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            runCurrent()
+            repeat(FLIPS) {
+                receive(DISARMED_STABILIZE)
+                receive(ARMED_GUIDED)
+            }
+            advanceTimeBy(FORTY_SECONDS)
+            runCurrent()
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN the vehicle disarmed WHEN a ground station's HEARTBEAT is received THEN it does not count`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(TWENTY_SECONDS)
+            receive(MISSION_PLANNER)
+            advanceTimeBy(TWENTY_SECONDS)
+            runCurrent()
+            clock.advance(FORTY_SECONDS)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, FORTY_SECONDS_LATER_NAME)
+        }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN an arm still queued when the session stops WHEN the next one arms and disarms THEN its log closes`() =
+        testScope.runTest {
+            receive(ARMED_GUIDED)
+            recorder.sessionStopped()
+            clock.advance(LATER)
+            receive(ARMED_GUIDED)
+            runCurrent()
+            receive(DISARMED_STABILIZE)
+            advanceTimeBy(DISARM_MARGIN)
+            runCurrent()
+            clock.advance(DISARM_MARGIN)
+            receive(SCALED_PRESSURE)
+
+            stopAndWrite()
+
+            logs() shouldBeEqualTo listOf(START_NAME, LATER_NAME, LATER_AND_MARGIN_NAME)
         }
 
     @Tag("REQ-038")
@@ -775,6 +1224,9 @@ class FlightRecorderTest {
     private companion object {
         const val TAG = "FlightRecorder"
         const val DISARMED_STABILIZE = "heartbeat/disarmed-stabilize.bin"
+        const val ARMED_GUIDED = "heartbeat/armed-guided.bin"
+        const val SECOND_VEHICLE_ARMED = "derived/heartbeat-sysid-2-armed.bin"
+        const val GIMBAL_ARMED = "derived/heartbeat-gimbal-component-armed.bin"
         const val DISARMED_LOITER = "heartbeat/disarmed-loiter.bin"
         const val SECOND_VEHICLE = "derived/heartbeat-sysid-2.bin"
         const val MISSION_PLANNER = "gcs/heartbeat-mission-planner.bin"
@@ -792,6 +1244,20 @@ class FlightRecorderTest {
         const val LATER_NAME = "2026-10-20_14-32-05.tlog"
         const val TEN_MINUTES_LATER_NAME = "2026-10-20_14-40-05.tlog"
         val NINE_MINUTES = 9.minutes
+
+        /** [RecordingRule.DEFAULT_CLOSE_AFTER_DISARMED]. */
+        val DISARM_MARGIN = 30.seconds
+        val TWENTY_SECONDS = 20.seconds
+        val FORTY_SECONDS = 40.seconds
+        const val MARGIN_LATER_NAME = "2026-10-20_14-30-35.tlog"
+        const val FORTY_SECONDS_LATER_NAME = "2026-10-20_14-30-45.tlog"
+        const val TWO_MARGINS_LATER_NAME = "2026-10-20_14-31-05.tlog"
+        const val OLD_NAME = "2026-10-01_10-00-00.tlog"
+
+        /** Twice as many arm changes as the queue holds records: the last one must still decide. */
+        const val FLIPS = MAX_PENDING_RECORDS
+        const val TEN_MINUTES_AND_MARGIN_LATER_NAME = "2026-10-20_14-40-35.tlog"
+        const val LATER_AND_MARGIN_NAME = "2026-10-20_14-32-35.tlog"
         val BEFORE_EPOCH: Instant = Instant.parse("1969-12-31T23:59:59Z")
         const val BEFORE_EPOCH_NAME = "1969-12-31_23-59-59.tlog"
 

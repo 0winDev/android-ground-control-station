@@ -403,7 +403,7 @@ class LinkSessionTest {
             session.status.value shouldBeEqualTo LinkStatus.Running(datagrams = 0)
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN an unknown message and a HEARTBEAT in one datagram WHEN collecting THEN both are recorded`() =
         testScope.runTest {
@@ -420,7 +420,7 @@ class LinkSessionTest {
             }
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN an observed session WHEN the last subscriber leaves THEN the recorder is told it stopped`() =
         testScope.runTest {

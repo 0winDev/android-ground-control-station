@@ -54,6 +54,7 @@ class DefaultRecordingRepositoryTest {
     private val recorder: FlightRecorder = mockk()
     private val replay: ReplayRepository = mockk()
     private val recorderStatus = MutableStateFlow(RecorderStatus.IDLE)
+    private val recorderClosed = MutableStateFlow(0L)
     private val replayState = MutableStateFlow<ReplayState>(ReplayState.Off)
     private val qgroundcontrolLog = readFixture(QGROUNDCONTROL_LOG)
     private val directory get() = File(temp, RECORDINGS_FOLDER).apply { mkdirs() }
@@ -68,6 +69,7 @@ class DefaultRecordingRepositoryTest {
         every { Log.w(any(), any<String>()) } returns 0
         every { Log.w(any(), any<String>(), any()) } returns 0
         every { recorder.status } returns recorderStatus
+        every { recorder.closed } returns recorderClosed
         every { replay.state } returns replayState
         repository = DefaultRecordingRepository(
             folder = folder,
@@ -140,7 +142,7 @@ class DefaultRecordingRepositoryTest {
         }
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a listed log WHEN the recorder starts writing it THEN it is shown in progress`() = testScope.runTest {
         log(OLDEST, qgroundcontrolLog)
@@ -154,6 +156,25 @@ class DefaultRecordingRepositoryTest {
             result shouldBeEqualTo listOf(summary(OLDEST).copy(inProgress = true))
         }
     }
+
+    @Tag("REQ-049")
+    @Test
+    fun `GIVEN a log in progress WHEN it closes and the next opens at once THEN the list shows both`() =
+        testScope.runTest {
+            log(OLDEST, qgroundcontrolLog)
+            folder.recording = OLDEST
+            recorderStatus.value = RecorderStatus.RECORDING
+            repository.recordings.test {
+                awaitItem()
+
+                log(NEWEST, shiftedLog())
+                folder.recording = NEWEST
+                recorderClosed.value = 1
+                val result = awaitItem()
+
+                result.map { it.name to it.inProgress } shouldBeEqualTo listOf(NEWEST to true, OLDEST to false)
+            }
+        }
 
     @Tag("REQ-037")
     @Test
@@ -279,7 +300,7 @@ class DefaultRecordingRepositoryTest {
             (result to files()) shouldBeEqualTo (List(failures.size) { ImportResult.Failed } to emptyList())
         }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a flight being recorded WHEN importing THEN refused without opening the source`() = testScope.runTest {
         log(OLDEST, qgroundcontrolLog)
@@ -292,7 +313,7 @@ class DefaultRecordingRepositoryTest {
         (result to source.opened) shouldBeEqualTo (ImportResult.Recording to false)
     }
 
-    @Tag("REQ-036")
+    @Tag("REQ-049")
     @Test
     fun `GIVEN a recording that opens while copying WHEN importing THEN refused and nothing is left`() =
         testScope.runTest {

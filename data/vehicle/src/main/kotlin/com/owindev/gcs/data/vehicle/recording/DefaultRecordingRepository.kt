@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Nothing is imported while a flight is recorded, checked before, during and at the end of the copy, so an import never
- * fills the disk under the black box (REQ-036).
+ * fills the disk under the black box (REQ-049).
  *
  * An import is untrusted input (`docs/security.md` K-1, K-2). It is refused when its source declares more than the
  * limit, copied into a hidden temporary file in the folder while its bytes are counted against the limit, scanned as
@@ -49,7 +49,8 @@ internal class DefaultRecordingRepository(
     private val summaries = RecordingSummaries(folder)
 
     override val recordings: Flow<List<RecordingSummary>> =
-        combine(changes, recorder.status, replay.state) { _, _, _ -> summaries.all() }.flowOn(ioDispatcher)
+        combine(changes, recorder.status, recorder.closed, replay.state) { _, _, _, _ -> summaries.all() }
+            .flowOn(ioDispatcher)
 
     override suspend fun fileOf(name: String): File? = withContext(ioDispatcher) {
         folder.recordingAt(File(folder.directory, name))
