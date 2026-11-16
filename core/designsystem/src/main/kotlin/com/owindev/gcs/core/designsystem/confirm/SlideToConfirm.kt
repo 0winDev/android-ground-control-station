@@ -51,26 +51,33 @@ import com.owindev.gcs.core.designsystem.theme.GcsTheme
 import kotlin.math.roundToInt
 
 /**
- * The confirmation of a dangerous command (REQ-050): "Slide to [action] · SYS [systemId]". [onConfirm] runs once, when
- * the thumb is released at the end of the track; a slide whose [confirmKey] changes, that is disabled or whose gesture
- * is cancelled meanwhile is dropped. Disabled while [disabledReason] is set, which it shows. TalkBack confirms through
- * a custom action with the same label; a double tap does nothing. The caller checks its rules again in [onConfirm].
+ * The confirmation of a dangerous command (REQ-050): "Slide to [action] · SYS [systemId]". [onConfirm] runs once with
+ * the [confirmKey] the slide started on, when the thumb, grabbed where it is, is released at the end of a track
+ * allowing at least 160 dp of travel; a slide whose action, system ID or key changes, that is disabled or whose
+ * gesture is cancelled meanwhile is dropped. Disabled while [disabledReason] is set, which it shows. TalkBack confirms
+ * through a custom action with the same label, on the current key; a double tap does nothing. A second finger may
+ * carry a slide on after the first lifts: it still has to reach the end.
+ *
+ * [confirmKey] is a data value that changes only on what drops a slide (REQ-050: the active vehicle, the link, the
+ * replay state, the route), never with ages or clocks. A change reaches the control one recomposition late, so the
+ * sender compares the key it gets with its current one under its send lock and sends nothing when they differ.
  */
 @Composable
-fun SlideToConfirm(
+fun <K : Any> SlideToConfirm(
     action: String,
     systemId: Int,
-    confirmKey: Any,
-    onConfirm: () -> Unit,
+    confirmKey: K,
+    onConfirm: (K) -> Unit,
     modifier: Modifier = Modifier,
     disabledReason: String? = null,
 ) {
     val enabled = disabledReason == null
     val label = stringResource(R.string.slide_to_confirm, action, systemId)
-    val state = remember { SlideToConfirmState(confirmKey, enabled, onConfirm) }
-    SideEffect { state.update(confirmKey, enabled, onConfirm) }
+    val state = remember { SlideToConfirmState(action, systemId, confirmKey, enabled, onConfirm) }
+    SideEffect { state.update(action, systemId, confirmKey, enabled, onConfirm) }
     val thumbSize = GcsTheme.sizes.gloveButton
     val thumbPx = with(LocalDensity.current) { thumbSize.toPx() }
+    val minimumTravelPx = with(LocalDensity.current) { MinimumTravel.toPx() }
     val mirrored = LocalLayoutDirection.current == LayoutDirection.Rtl
     val colors = MaterialTheme.colorScheme
     Column(
@@ -94,13 +101,13 @@ fun SlideToConfirm(
                 .clip(CircleShape)
                 .background(colors.surfaceContainerHigh)
                 .border(TrackBorder, colors.outline, CircleShape)
-                .onSizeChanged { state.onTrackMeasured(it.width - thumbPx) }
-                .pointerInput(state, mirrored) { detectSlide(state, if (mirrored) -1f else 1f) },
+                .onSizeChanged { state.onTrackMeasured(it.width.toFloat(), thumbPx, minimumTravelPx) }
+                .pointerInput(state, mirrored) { detectSlide(state, mirrored) },
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = label,
-                modifier = Modifier.padding(horizontal = thumbSize),
+                modifier = Modifier.padding(start = thumbSize + GcsTheme.spacing.chip, end = GcsTheme.spacing.content),
                 color = if (enabled) colors.onSurface else colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = LABEL_MAX_LINES,
@@ -130,10 +137,14 @@ fun SlideToConfirm(
 
 // `draggable` reports a cancelled gesture as a stop (`onDragStopped` with zero velocity), so it could confirm a slide
 // the system cancelled: this detector calls onDragCancel apart, and a restart of the handler calls neither.
-private suspend fun PointerInputScope.detectSlide(state: SlideToConfirmState, direction: Float) {
+private suspend fun PointerInputScope.detectSlide(state: SlideToConfirmState<*>, mirrored: Boolean) {
+    val direction = if (mirrored) -1f else 1f
     try {
         detectHorizontalDragGestures(
-            onDragStart = { state.onDragStart() },
+            onDragStart = { position ->
+                val fromTrackStart = if (mirrored) size.width - position.x else position.x
+                state.onDragStart(fromTrackStart, viewConfiguration.touchSlop)
+            },
             onDragEnd = state::onDragEnd,
             onDragCancel = state::onDragCancel,
             onHorizontalDrag = { change, dragAmount ->
@@ -162,7 +173,11 @@ private fun DrawScope.drawChevron(color: Color, mirrored: Boolean) {
     }
 }
 
-private const val LABEL_MAX_LINES = 2
+// 160 dp is one inch (about 25 mm) on every screen: far longer than a brush or a fingertip's jitter with a glove,
+// while a 360 dp phone still leaves 264 dp of travel past the 72 dp thumb inside 12 dp margins.
+private val MinimumTravel = 160.dp
+
+private const val LABEL_MAX_LINES = 3
 private const val CHEVRON_HALF_HEIGHT = 0.18f
 private val TrackBorder = 1.dp
 private val ChevronStroke = 3.dp

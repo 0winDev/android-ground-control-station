@@ -6,68 +6,85 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * The rules of a slide-to-confirm control (REQ-050): a slide calls [onConfirm] only when released with the thumb at
- * the end of the track, enabled and on the key it started on, and at most once; a cancelled gesture, a key change or a
- * disable during the slide drops it and sends the thumb back.
+ * The rules of a slide-to-confirm control (REQ-050). A slide starts only on the thumb and calls [onConfirm] with the
+ * key it started on only when released with the thumb at the end of a track at least the minimum travel long, at most
+ * once. A cancelled gesture, a disable, a new track size or a change of the action, the system ID or the key during
+ * the slide drops it and sends the thumb back. A second pointer may carry a slide on after the first lifts.
  */
 @Stable
-class SlideToConfirmState(key: Any, enabled: Boolean, onConfirm: () -> Unit) {
+class SlideToConfirmState<K : Any>(
+    action: String,
+    systemId: Int,
+    confirmKey: K,
+    enabled: Boolean,
+    onConfirm: (K) -> Unit,
+) {
 
     /** How far the thumb is from the start, in pixels: read it in layout or draw, it changes every frame. */
     var offset by mutableFloatStateOf(0f)
         private set
 
-    private var key: Any = key
-    private var enabled: Boolean = enabled
-    private var onConfirm: () -> Unit = onConfirm
+    private var key = SlideKey(action, systemId, confirmKey)
+    private var enabled = enabled
+    private var onConfirm = onConfirm
+    private var thumb = 0f
     private var travel = 0f
-    private var slideKey: Any? = null
+    private var minimumTravel = 0f
+    private var startedOn: SlideKey<K>? = null
 
-    /** Takes the caller's latest values; a slide in progress is dropped if its key changed or it was disabled. */
-    fun update(key: Any, enabled: Boolean, onConfirm: () -> Unit) {
-        this.key = key
+    /** Takes the caller's latest values; a slide whose action, system ID or key changed, or that is disabled, drops. */
+    fun update(action: String, systemId: Int, confirmKey: K, enabled: Boolean, onConfirm: (K) -> Unit) {
+        key = SlideKey(action, systemId, confirmKey)
         this.enabled = enabled
         this.onConfirm = onConfirm
-        if (!enabled || (slideKey != null && slideKey != key)) reset()
+        if (!enabled || (startedOn != null && startedOn != key)) reset()
     }
 
-    /** The distance the thumb travels from the start to the end of the track, in pixels; a new one drops a slide. */
-    fun onTrackMeasured(travel: Float) {
-        val measured = travel.coerceAtLeast(0f)
-        if (measured != this.travel) reset()
-        this.travel = measured
+    /** Track and thumb widths and the shortest travel that may confirm, in pixels; a change drops a slide. */
+    fun onTrackMeasured(width: Float, thumb: Float, minimumTravel: Float) {
+        val travel = (width - thumb).coerceAtLeast(0f)
+        if (travel != this.travel || thumb != this.thumb || minimumTravel != this.minimumTravel) reset()
+        this.thumb = thumb
+        this.travel = travel
+        this.minimumTravel = minimumTravel
     }
 
-    fun onDragStart() {
+    /**
+     * A drag noticed [position] pixels from the start of the track, along the slide; [slop] is how far the pointer may
+     * have moved off the thumb before the drag was noticed.
+     */
+    fun onDragStart(position: Float, slop: Float) {
         reset()
-        if (enabled) slideKey = key
+        if (enabled && position <= thumb + slop) startedOn = key
     }
 
     fun onDrag(delta: Float) {
-        if (slideKey == null) return
+        if (startedOn == null) return
         offset = (offset + delta).coerceIn(0f, travel)
     }
 
-    /** The thumb leaves the start only during an enabled slide on the current key: [update] drops any other. */
     fun onDragEnd() {
-        val confirmed = travel > 0f && offset >= travel
+        val started = startedOn
+        val reachedTheEnd = travel > 0f && travel >= minimumTravel && offset >= travel
         reset()
-        if (confirmed) onConfirm()
+        if (started != null && reachedTheEnd) onConfirm(started.confirmKey)
     }
 
     fun onDragCancel() {
         reset()
     }
 
-    /** The accessibility action: the same as a completed slide, in one step. Returns whether it confirmed. */
+    /** The accessibility action: a completed slide in one step, on the current key. Returns whether it confirmed. */
     fun confirmByAccessibility(): Boolean {
         reset()
-        if (enabled) onConfirm()
+        if (enabled) onConfirm(key.confirmKey)
         return enabled
     }
 
     private fun reset() {
-        slideKey = null
+        startedOn = null
         offset = 0f
     }
+
+    private data class SlideKey<K : Any>(val action: String, val systemId: Int, val confirmKey: K)
 }
