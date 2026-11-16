@@ -1,0 +1,201 @@
+package com.owindev.gcs.core.designsystem.confirm
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import com.owindev.gcs.core.designsystem.R
+import com.owindev.gcs.core.designsystem.theme.GcsPalette
+import com.owindev.gcs.core.designsystem.theme.GcsTheme
+import kotlin.math.roundToInt
+
+/**
+ * The confirmation of a dangerous command (REQ-050): "Slide to [action] · SYS [systemId]". [onConfirm] runs once, when
+ * the thumb is released at the end of the track; a slide whose [confirmKey] changes, that is disabled or whose gesture
+ * is cancelled meanwhile is dropped. Disabled while [disabledReason] is set, which it shows. TalkBack confirms through
+ * a custom action with the same label; a double tap does nothing. The caller checks its rules again in [onConfirm].
+ */
+@Composable
+fun SlideToConfirm(
+    action: String,
+    systemId: Int,
+    confirmKey: Any,
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
+    disabledReason: String? = null,
+) {
+    val enabled = disabledReason == null
+    val label = stringResource(R.string.slide_to_confirm, action, systemId)
+    val state = remember { SlideToConfirmState(confirmKey, enabled, onConfirm) }
+    SideEffect { state.update(confirmKey, enabled, onConfirm) }
+    val thumbSize = GcsTheme.sizes.gloveButton
+    val thumbPx = with(LocalDensity.current) { thumbSize.toPx() }
+    val mirrored = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                contentDescription = label
+                if (disabledReason != null) {
+                    stateDescription = disabledReason
+                    disabled()
+                } else {
+                    customActions = listOf(CustomAccessibilityAction(label, state::confirmByAccessibility))
+                }
+            },
+        verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(thumbSize)
+                .clip(CircleShape)
+                .background(colors.surfaceContainerHigh)
+                .border(TrackBorder, colors.outline, CircleShape)
+                .onSizeChanged { state.onTrackMeasured(it.width - thumbPx) }
+                .pointerInput(state, mirrored) { detectSlide(state, if (mirrored) -1f else 1f) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.padding(horizontal = thumbSize),
+                color = if (enabled) colors.onSurface else colors.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = LABEL_MAX_LINES,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            val thumbColor = if (enabled) colors.primary else colors.outline
+            val chevronColor = if (enabled) colors.onPrimary else colors.surface
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset { IntOffset(state.offset.roundToInt(), 0) }
+                    .size(thumbSize)
+                    .clip(CircleShape)
+                    .background(thumbColor)
+                    .drawBehind { drawChevron(chevronColor, mirrored) },
+            )
+        }
+        if (disabledReason != null) {
+            Text(
+                text = disabledReason,
+                color = colors.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+// `draggable` reports a cancelled gesture as a stop (`onDragStopped` with zero velocity), so it could confirm a slide
+// the system cancelled: this detector calls onDragCancel apart, and a restart of the handler calls neither.
+private suspend fun PointerInputScope.detectSlide(state: SlideToConfirmState, direction: Float) {
+    try {
+        detectHorizontalDragGestures(
+            onDragStart = { state.onDragStart() },
+            onDragEnd = state::onDragEnd,
+            onDragCancel = state::onDragCancel,
+            onHorizontalDrag = { change, dragAmount ->
+                change.consume()
+                state.onDrag(dragAmount * direction)
+            },
+        )
+    } finally {
+        state.onDragCancel()
+    }
+}
+
+private fun DrawScope.drawChevron(color: Color, mirrored: Boolean) {
+    val half = size.minDimension * CHEVRON_HALF_HEIGHT
+    val path = Path().apply {
+        moveTo(center.x - half / 2, center.y - half)
+        lineTo(center.x + half / 2, center.y)
+        lineTo(center.x - half / 2, center.y + half)
+    }
+    scale(scaleX = if (mirrored) -1f else 1f, scaleY = 1f, pivot = center) {
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(width = ChevronStroke.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+        )
+    }
+}
+
+private const val LABEL_MAX_LINES = 2
+private const val CHEVRON_HALF_HEIGHT = 0.18f
+private val TrackBorder = 1.dp
+private val ChevronStroke = 3.dp
+
+@Preview(widthDp = 360)
+@Composable
+private fun SlideToConfirmNightPreview() {
+    SlideToConfirmPreview(palette = GcsPalette.NIGHT)
+}
+
+@Preview(widthDp = 360)
+@Composable
+private fun SlideToConfirmDayPreview() {
+    SlideToConfirmPreview(palette = GcsPalette.DAY)
+}
+
+@Composable
+private fun SlideToConfirmPreview(palette: GcsPalette) {
+    GcsTheme(palette = palette) {
+        Column(
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.background)
+                .padding(GcsTheme.spacing.screen),
+            verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
+        ) {
+            SlideToConfirm(action = "RTL", systemId = 1, confirmKey = Unit, onConfirm = {})
+            SlideToConfirm(
+                action = "take off",
+                systemId = 1,
+                confirmKey = Unit,
+                onConfirm = {},
+                disabledReason = "Pre-flight check red: no 3D GPS fix",
+            )
+        }
+    }
+}
