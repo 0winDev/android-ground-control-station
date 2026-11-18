@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -40,6 +42,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -80,6 +83,8 @@ fun <K : Any> SlideToConfirm(
     val minimumTravelPx = with(LocalDensity.current) { MinimumTravel.toPx() }
     val mirrored = LocalLayoutDirection.current == LayoutDirection.Rtl
     val colors = MaterialTheme.colorScheme
+    val gcsColors = GcsTheme.colors
+    val progressColor = gcsColors.caution.copy(alpha = PROGRESS_ALPHA)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -98,29 +103,30 @@ fun <K : Any> SlideToConfirm(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(thumbSize)
-                .clip(CircleShape)
-                .background(colors.surfaceContainerHigh)
-                .border(TrackBorder, colors.outline, CircleShape)
+                .clip(ConfirmShape)
+                .background(if (enabled) gcsColors.cautionContainer else colors.surfaceContainerHigh)
+                .drawBehind { if (enabled) drawProgress(progressColor, state.offset + thumbPx / 2, mirrored) }
+                .border(TrackBorder, if (enabled) gcsColors.caution else colors.outline, ConfirmShape)
                 .onSizeChanged { state.onTrackMeasured(it.width.toFloat(), thumbPx, minimumTravelPx) }
                 .pointerInput(state, mirrored) { detectSlide(state, mirrored) },
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = label,
+                text = label.uppercase(),
                 modifier = Modifier.padding(start = thumbSize + GcsTheme.spacing.chip, end = GcsTheme.spacing.content),
                 color = if (enabled) colors.onSurface else colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = LABEL_MAX_LINES,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
             )
-            val thumbColor = if (enabled) colors.primary else colors.outline
-            val chevronColor = if (enabled) colors.onPrimary else colors.surface
+            val thumbColor = if (enabled) gcsColors.caution else colors.outline
+            val chevronColor = if (enabled) gcsColors.onCaution else colors.surface
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .offset { IntOffset(state.offset.roundToInt(), 0) }
                     .size(thumbSize)
-                    .clip(CircleShape)
+                    .clip(ConfirmShape)
                     .background(thumbColor)
                     .drawBehind { drawChevron(chevronColor, mirrored) },
             )
@@ -157,6 +163,15 @@ private suspend fun PointerInputScope.detectSlide(state: SlideToConfirmState<*>,
     }
 }
 
+private fun DrawScope.drawProgress(color: Color, width: Float, mirrored: Boolean) {
+    val filled = width.coerceAtMost(size.width)
+    drawRect(
+        color = color,
+        topLeft = Offset(if (mirrored) size.width - filled else 0f, 0f),
+        size = Size(filled, size.height),
+    )
+}
+
 private fun DrawScope.drawChevron(color: Color, mirrored: Boolean) {
     val half = size.minDimension * CHEVRON_HALF_HEIGHT
     val path = Path().apply {
@@ -178,6 +193,8 @@ private fun DrawScope.drawChevron(color: Color, mirrored: Boolean) {
 private val MinimumTravel = 160.dp
 
 private const val LABEL_MAX_LINES = 3
+private const val PROGRESS_ALPHA = 0.35f
+private val ConfirmShape = RoundedCornerShape(10.dp)
 private const val CHEVRON_HALF_HEIGHT = 0.18f
 private val TrackBorder = 1.dp
 private val ChevronStroke = 3.dp
