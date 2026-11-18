@@ -45,8 +45,20 @@ internal class TakeOffSequence @Inject constructor(
         onResult: (CommandResult) -> Unit,
     ) {
         val takeOffRoutes = TakeOffRoutes(routing)
-        if (flightModeOf(systemId) != GUIDED && !changeToGuided(systemId, takeOffRoutes, onState, onResult)) return
-        exchange.run(systemId, TAKE_OFF, takeOffCommand(altitudeMetres), onState, takeOffRoutes, onResult)
+        val modeChanged = flightModeOf(systemId) != GUIDED
+        if (modeChanged && !changeToGuided(systemId, takeOffRoutes, onState, onResult)) return
+        exchange.run(systemId, TAKE_OFF, takeOffCommand(altitudeMetres), onState, takeOffRoutes) { result ->
+            // After an accepted mode change the vehicle may be in GUIDED: such a stop is never "not sent".
+            onResult(
+                if (modeChanged &&
+                    result is CommandResult.NotSent
+                ) {
+                    CommandResult.TakeOffStopped(result.reason)
+                } else {
+                    result
+                },
+            )
+        }
     }
 
     /** Whether the vehicle is in GUIDED now; when not, [onResult] has been told why. */
@@ -73,7 +85,7 @@ internal class TakeOffSequence @Inject constructor(
             val route = takeOffRoutes.routeTo(systemId)
             onResult(
                 if (route is CommandRoute.Closed) {
-                    CommandResult.NotSent(route.reason)
+                    CommandResult.TakeOffStopped(route.reason)
                 } else {
                     CommandResult.ModeNotChanged(modeChange = null)
                 },

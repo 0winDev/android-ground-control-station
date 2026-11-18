@@ -5,8 +5,8 @@ description: State-driven presentation pattern for GCS (Ground Control Station) 
 
 # Presentation pattern — GCS
 
-The reference implementation is the HUD in `:feature:hud` (`HudUiState`, `HudViewModel`, `HudScreen`).
-The dangerous-command examples below stay illustrative until the first command lands (v0.2).
+The reference implementation is the HUD in `:feature:hud` (`HudUiState`, `HudViewModel`, `HudScreen`); its commands
+(`HudCommandsViewModel`, `HudCommands.kt`, `HudCommandSheet.kt`) are the reference for dangerous commands (#104).
 
 ## Files per screen
 
@@ -30,27 +30,34 @@ The dangerous-command examples below stay illustrative until the first command l
 
 ## Intents
 
-Public ViewModel functions are the intents (`onArmRequested()`, `onArmConfirmed()`,
-`onArmCancelled()`). No `onEvent(Event)` dispatcher unless a screen genuinely benefits from it.
+Public ViewModel functions are the intents (`onCommandRequested(command)`, `onCommandConfirmed(key)`,
+`onCommandCancelled()`). No `onEvent(Event)` dispatcher unless a screen genuinely benefits from it.
 
-### Dangerous commands: two-step confirmation in state
+### Dangerous commands: request, then slide (REQ-050)
 
-Arm, takeoff and changing the mission in flight never fire on the first tap:
+Arm, take off, RTL and land never fire on a tap. A request opens the confirmation sheet; only the slide sends:
 
 ```kotlin
-// Illustrative
-fun onArmRequested() {
-    _state.update { it.copy(pendingConfirmation = PendingCommand.Arm) }
+fun onCommandRequested(command: VehicleCommand) {
+    val key = commands.commandKey.value ?: return
+    if (!canConfirm(command)) return                  // judged on fresh values, not the state last drawn
+    request.value = Request(command, openedOn = key, altitudeMetres = ...)
 }
 
-fun onArmConfirmed() {
-    _state.update { it.copy(pendingConfirmation = null) }
-    viewModelScope.launch { vehicleRepository.arm(systemId) }   // result comes back as state
+fun onCommandConfirmed(key: ConfirmKey) {             // the key the slide started on
+    val confirming = request.value?.takeIf { canConfirm(it.command) } ?: return
+    if (key != confirming.confirmKey()) request.value = confirming.copy(slideAgain = true)
+    else launchSend(confirming, key)                  // the command service compares key.commandKey under its lock
 }
 ```
 
-The confirmation dialog renders from `pendingConfirmation`; cancelling clears it. Commands are
-blocked entirely while the link is lost (enforced in the domain/data layer, mirrored in UI state).
+- The slide's key holds the command, the `CommandKey` (vehicle and connection) and anything chosen in the sheet (the
+  take off altitude): a change drops the slide, and what is sent is what the key confirmed.
+- The sheet shows only on the connection it was opened on; once it cannot be shown it never reopens by itself.
+- The sending and the result live outside the modal sheet, so RTL and land stay reachable meanwhile. A refusal never
+  hides a command still waiting or an emergency; a result ends with its vehicle.
+- A `KeyChanged` result is no failure: it asks for another slide, for the same vehicle only.
+- Commands are offered only for a vehicle heard live: never in a replay or while the link is lost.
 
 ## One-off effects
 

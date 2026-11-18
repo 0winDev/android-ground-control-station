@@ -27,6 +27,12 @@ sealed interface CommandResult {
      */
     data class ModeNotChanged(val modeChange: CommandResult?) : CommandResult
 
+    /**
+     * A take off stopped for [reason] after its mode change to GUIDED was accepted and before its NAV_TAKEOFF left: the
+     * vehicle may be in GUIDED, armed on the ground.
+     */
+    data class TakeOffStopped(val reason: NotSentReason) : CommandResult
+
     /** Stopped for a newer RTL or land the operator sent. */
     data object Superseded : CommandResult
 

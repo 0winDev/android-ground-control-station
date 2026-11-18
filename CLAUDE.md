@@ -220,6 +220,7 @@ the issue number to an existing one.
 - An enable parameter hides its group from the list, not from a request by name: test a source's claim in SITL (#101).
 - ArduPilot 4.7 replaced `ARMING_CHECK` with `ARMING_SKIPCHK` (checks to skip, -1 all): ask the vehicle for each name (#102).
 - A PARAM_VALUE names no target and comes unrequested too: it never proves the vehicle heard this GCS (#102).
+- ArduPilot's reason for refusing an arm comes as STATUSTEXT, never in the COMMAND_ACK (#104).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -233,7 +234,8 @@ the issue number to an existing one.
 - Count a stream's messages, not only its gaps: one that stops leaves no gap between those counted (#28).
 - A tolerant reader's test can pass for the wrong reason: check it with a mutation of the rule it guards (#68, #71).
 - A capture's .tlog holds only what the vehicle sent: keep its AUTOPILOT_VERSION and raw counts in a file beside it (#112).
-- A mutation that does not compile looks like a survivor: read the build output before trusting it (#98).
+- A mutation that does not compile looks like a survivor: read the build output before trusting it (#98, #104).
+- A mock answering one system ID throws inside `combine` when the key moves: the state freezes, so stub `any()` (#104).
 - MGRS reference points stay 1 cm off a 1 m boundary; GEOTRANS and GeoConvert disagree at exactly 84°N (#40).
 
 **Flow and time**
@@ -260,6 +262,7 @@ the issue number to an existing one.
 - A fake transport that never suspends hides `withContext`'s cancellation on return: make it suspend (#98).
 - A cancelled job cleans up late: key shared state by request identity, never by kind (#98).
 - A start on a transition misses the stop that comes after it: start a service by level, not by edge (#28).
+- A counter moved twice per change lies between the two: compare what a change shows with the value before it (#104).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
@@ -280,6 +283,8 @@ the issue number to an existing one.
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
 - A close and the next log in one writer queue lose no frame; a gap between them would, until the next HEARTBEAT (#89).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
+- A request kept after its sheet hid comes back when its command does: drop it the first time it cannot show (#104).
+- A refusal must never replace the line of a command still waiting or an emergency: show it apart (#104).
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).

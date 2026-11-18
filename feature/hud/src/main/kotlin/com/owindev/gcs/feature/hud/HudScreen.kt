@@ -51,8 +51,10 @@ fun HudScreen(
     viewModel: HudViewModel = hiltViewModel(),
     replayViewModel: ReplayViewModel = hiltViewModel(),
     backgroundViewModel: BackgroundWarningsViewModel = hiltViewModel(),
+    commandsViewModel: HudCommandsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val commands by commandsViewModel.state.collectAsStateWithLifecycle()
     val replay by replayViewModel.banner.collectAsStateWithLifecycle()
     val backgroundWarnings by backgroundViewModel.warnings.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -80,6 +82,15 @@ fun HudScreen(
                 )
             },
         ),
+        commands = commands,
+        commandActions = CommandActions(
+            onRequest = commandsViewModel::onCommandRequested,
+            onAltitudeChanged = commandsViewModel::onTakeOffAltitudeChanged,
+            onConfirm = commandsViewModel::onCommandConfirmed,
+            onCancel = commandsViewModel::onCommandCancelled,
+            onDismissFeedback = commandsViewModel::onFeedbackDismissed,
+            onDismissRefusal = commandsViewModel::onRefusalDismissed,
+        ),
     )
 }
 
@@ -100,7 +111,12 @@ internal fun HudContent(
     onOpenRecordings: (() -> Unit)? = null,
     map: @Composable (insets: PaddingValues) -> Unit = {},
     background: BackgroundWarnings = BackgroundWarnings(),
+    commands: CommandsUiState = CommandsUiState(),
+    commandActions: CommandActions = CommandActions(),
 ) {
+    // Only for a vehicle heard live: never during a replay or while the link is lost, which outranks them (REQ-017).
+    val commandBar = commands.bar.takeIf { state is HudUiState.Connected }
+    if (commandBar != null) commands.sheet?.let { CommandSheetDialog(sheet = it, actions = commandActions) }
     var licencesOpen by rememberSaveable { mutableStateOf(false) }
     // Arming closes them: nothing may stand between the operator and an armed vehicle.
     if (licencesOpen && state.licencesAvailable) LicencesDialog(onDismiss = { licencesOpen = false })
@@ -139,6 +155,17 @@ internal fun HudContent(
                         SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert, background = background)
                     },
                 )
+                // Under the map, never in a column that scrolls: RTL and land stay in sight whatever the alerts.
+                commandBar?.let {
+                    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
+                        CommandArea(
+                            bar = it,
+                            feedback = commands.feedback,
+                            actions = commandActions,
+                            refusal = commands.refusal,
+                        )
+                    }
+                }
                 Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
                     Box(
                         modifier = Modifier.padding(vertical = GcsTheme.spacing.chip),
