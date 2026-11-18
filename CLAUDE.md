@@ -275,6 +275,8 @@ the issue number to an existing one.
 - A threshold set is no failsafe armed: read every condition the vehicle's code checks before it acts (#101).
 - A clear and the text it closes can arrive together: apply the clear last, it is the newer (#100).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
+- `draggable` reports a cancelled gesture as a stop: a confirm must tell them apart with `detectHorizontalDragGestures` (#103).
+- A key checked in the control lags recomposition by a frame: hand the slide's key back and let the sender compare it (#103).
 - Retention's "keep the newest" picks the file being added: name the one kept before adding it (#74).
 - A close and the next log in one writer queue lose no frame; a gap between them would, until the next HEARTBEAT (#89).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
@@ -329,3 +331,4 @@ the issue number to an existing one.
 - `git checkout -- <file>` to undo a mutation also drops the uncommitted fix: copy the file aside first (#74).
 - A fixed-width child in a `Row` leaves its weighted sibling 0 dp: check new button rows at 360 dp on a phone (#61).
 - Check a phone at 360 × 640 dp with every banner on (replay, LINK LOST), not only at 360 × 780 (#61).
+- `input motionevent` gives each event its own down time, so no gesture is held: use root `sendevent` on the emulator (#103).
