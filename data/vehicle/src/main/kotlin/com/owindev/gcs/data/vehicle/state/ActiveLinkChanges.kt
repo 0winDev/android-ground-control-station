@@ -1,10 +1,13 @@
 package com.owindev.gcs.data.vehicle.state
 
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Each change of the active vehicle's link, handed to every job that asks it for something: its target when it becomes
@@ -18,10 +21,12 @@ import kotlinx.coroutines.flow.receiveAsFlow
 internal class ActiveLinkChanges {
 
     private val channels = mutableListOf<Channel<VehicleTarget?>>()
-    private val changes = AtomicLong()
+    private val changes = MutableStateFlow(0L)
+
+    val connections: StateFlow<Long> = changes.asStateFlow()
 
     val connection: Long
-        get() = changes.get()
+        get() = changes.value
 
     fun newConsumer(): Flow<VehicleTarget?> {
         val channel = Channel<VehicleTarget?>(Channel.UNLIMITED)
@@ -31,7 +36,7 @@ internal class ActiveLinkChanges {
 
     /** Moves [connection] on without announcing: the watchdog calls it before it publishes the change. */
     fun nextConnection() {
-        changes.incrementAndGet()
+        changes.update { it + 1 }
     }
 
     fun announce(target: VehicleTarget?) {

@@ -36,21 +36,23 @@ internal class TakeOffSequence @Inject constructor(
     private val preflight: PreflightVeto,
 ) {
 
-    private val takeOffRoutes = CommandRoutes(::takeOffRouteTo)
-
+    /** Each step is checked on [routing], the injected routes unless the caller narrows them. */
     suspend fun run(
         systemId: SystemId,
         altitudeMetres: Float,
+        routing: CommandRoutes = routes,
         onState: (PendingState) -> Unit,
         onResult: (CommandResult) -> Unit,
     ) {
-        if (flightModeOf(systemId) != GUIDED && !changeToGuided(systemId, onState, onResult)) return
+        val takeOffRoutes = TakeOffRoutes(routing)
+        if (flightModeOf(systemId) != GUIDED && !changeToGuided(systemId, takeOffRoutes, onState, onResult)) return
         exchange.run(systemId, TAKE_OFF, takeOffCommand(altitudeMetres), onState, takeOffRoutes, onResult)
     }
 
     /** Whether the vehicle is in GUIDED now; when not, [onResult] has been told why. */
     private suspend fun changeToGuided(
         systemId: SystemId,
+        takeOffRoutes: CommandRoutes,
         onState: (PendingState) -> Unit,
         onResult: (CommandResult) -> Unit,
     ): Boolean {
@@ -68,7 +70,7 @@ internal class TakeOffSequence @Inject constructor(
             vehicles.vehicles.first { it[systemId]?.state?.flightMode == GUIDED }
         }
         if (guided == null) {
-            val route = takeOffRouteTo(systemId)
+            val route = takeOffRoutes.routeTo(systemId)
             onResult(
                 if (route is CommandRoute.Closed) {
                     CommandResult.NotSent(route.reason)
@@ -80,17 +82,21 @@ internal class TakeOffSequence @Inject constructor(
         return guided != null
     }
 
-    private fun takeOffRouteTo(systemId: SystemId): CommandRoute {
-        val route = routes.routeTo(systemId)
-        if (route !is CommandRoute.Open) return route
-        val telemetry = telemetry.telemetry.value[systemId]
-        return when {
-            vehicles.vehicles.value[systemId]?.state?.armed != true -> CommandRoute.Closed(NotSentReason.NotArmed)
+    // A class, not a fun-interface lambda: lint's ExperimentalDetector crashes on one (#99).
+    private inner class TakeOffRoutes(private val routing: CommandRoutes) : CommandRoutes {
 
-            !landedRule.isOnGround(telemetry) || !groundRule.isNearGround(telemetry) ->
-                CommandRoute.Closed(NotSentReason.NotLanded)
+        override fun routeTo(systemId: SystemId): CommandRoute {
+            val route = routing.routeTo(systemId)
+            if (route !is CommandRoute.Open) return route
+            val telemetry = telemetry.telemetry.value[systemId]
+            return when {
+                vehicles.vehicles.value[systemId]?.state?.armed != true -> CommandRoute.Closed(NotSentReason.NotArmed)
 
-            else -> preflight.refusalToTakeOff(systemId)?.let(CommandRoute::Closed) ?: route
+                !landedRule.isOnGround(telemetry) || !groundRule.isNearGround(telemetry) ->
+                    CommandRoute.Closed(NotSentReason.NotLanded)
+
+                else -> preflight.refusalToTakeOff(systemId)?.let(CommandRoute::Closed) ?: route
+            }
         }
     }
 

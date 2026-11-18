@@ -2,6 +2,7 @@ package com.owindev.gcs.data.vehicle.command
 
 import android.util.Log
 import com.owindev.gcs.core.domain.link.DataOrigin
+import com.owindev.gcs.core.domain.link.UplinkHealth
 import com.owindev.gcs.core.domain.preflight.PreflightAcknowledgements
 import com.owindev.gcs.core.domain.preflight.PreflightColour
 import com.owindev.gcs.core.domain.preflight.PreflightItem
@@ -18,6 +19,7 @@ import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.VehicleType
+import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingCommand
@@ -89,6 +91,16 @@ class DefaultCommandRepositoryTest {
     private val sessions = MutableStateFlow(FIRST_SESSION)
     private val sent = mutableListOf<CommandLong>()
     private var route: CommandRoute = OPEN_ROUTE
+    private val uplink = DefaultUplinkRepository(testScope.testScheduler.timeSource)
+    private var currentKey: CommandKey? = KEY
+    private val keyedRoutes = object : CommandKeys {
+        override val commandKey = MutableStateFlow<CommandKey?>(KEY)
+
+        override val currentKey: CommandKey?
+            get() = this@DefaultCommandRepositoryTest.currentKey
+
+        override fun routeTo(systemId: SystemId): CommandRoute = route
+    }
     private val vehicleRepository: VehicleRepository = mockk()
     private val vehicles = MutableStateFlow(mapOf(SYSTEM to vehicle(LOITER, armed = true)))
     private val telemetryStore = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
@@ -121,7 +133,7 @@ class DefaultCommandRepositoryTest {
         every { session.session } returns sessions
         every { vehicleRepository.vehicles } returns vehicles
         val exchange =
-            CommandExchange(sender, session, DefaultUplinkRepository(testScope.testScheduler.timeSource)) { route }
+            CommandExchange(sender, session, uplink) { route }
         repository = DefaultCommandRepository(
             exchange = exchange,
             takeOff = TakeOffSequence(
@@ -134,7 +146,7 @@ class DefaultCommandRepositoryTest {
                 preflight = veto,
             ),
             altitudeRule = TakeOffAltitudeRule(),
-            routes = { route },
+            routes = keyedRoutes,
             preflight = veto,
             scope = testScope.backgroundScope,
         )
@@ -152,9 +164,9 @@ class DefaultCommandRepositoryTest {
 
             val result =
                 listOf(
-                    repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS),
-                    repository.returnToLaunch(SYSTEM),
-                    repository.land(SYSTEM),
+                    repository.arm(KEY, NO_ACKNOWLEDGEMENTS),
+                    repository.returnToLaunch(KEY),
+                    repository.land(KEY),
                 )
 
             result shouldBeEqualTo List(3) { CommandResult.Accepted }
@@ -172,7 +184,7 @@ class DefaultCommandRepositoryTest {
     ) = testScope.runTest {
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED).takeIf { command.confirmation == answeredConfirmation } }
 
-        val result = repository.returnToLaunch(SYSTEM)
+        val result = repository.returnToLaunch(KEY)
 
         result shouldBeEqualTo CommandResult.Accepted
         sent.map { it.confirmation } shouldBeEqualTo (0..answeredConfirmation).toList()
@@ -183,7 +195,7 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleAnswers { null }
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo noAnswer(attempts = 3)
             sent.map { it.confirmation } shouldBeEqualTo listOf(0, 1, 2)
@@ -194,7 +206,7 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN the vehicle never answers WHEN arming THEN it is sent once and never again`() = testScope.runTest {
         vehicleAnswers { null }
 
-        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+        val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
         delay(LONG_AFTER)
 
         result shouldBeEqualTo noAnswer(attempts = 1)
@@ -205,7 +217,7 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN the vehicle denies an RTL WHEN sending it THEN it is rejected and never re-sent`() = testScope.runTest {
         vehicleAnswers { ack(MAV_RESULT_DENIED) }
 
-        val result = repository.returnToLaunch(SYSTEM)
+        val result = repository.returnToLaunch(KEY)
 
         result shouldBeEqualTo CommandResult.Rejected(Rejection.DENIED, reason = null)
         sent.size shouldBeEqualTo 1
@@ -220,7 +232,7 @@ class DefaultCommandRepositoryTest {
             answerLater(ack(MAV_RESULT_IN_PROGRESS, progress = 40), after = ANSWER_DELAY)
             answerLater(ack(MAV_RESULT_ACCEPTED), after = PAST_TWO_ATTEMPTS)
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo CommandResult.Accepted
             sent.size shouldBeEqualTo 1
@@ -237,7 +249,7 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleAnswers { command -> ack(MAV_RESULT_IN_PROGRESS).takeIf { command.confirmation == 0 } }
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo noAnswer(attempts = 1, startedByVehicle = true)
             sent.size shouldBeEqualTo 1
@@ -252,7 +264,7 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleAnswers { strangerAck(stranger) }
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo noAnswer(attempts = 3)
         }
@@ -261,7 +273,7 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an ACK without its target extensions WHEN sending an RTL THEN it is the answer`() = testScope.runTest {
         vehicleAnswers { ack(MAV_RESULT_ACCEPTED, targetSystem = 0, targetComponent = 0) }
 
-        val result = repository.returnToLaunch(SYSTEM)
+        val result = repository.returnToLaunch(KEY)
 
         result shouldBeEqualTo CommandResult.Accepted
     }
@@ -272,7 +284,7 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { null }
             answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_COMPONENT_ARM_DISARM), after = PAST_ONE_ATTEMPT)
 
-            val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+            val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
             delay(LONG_AFTER)
 
             result shouldBeEqualTo noAnswer(attempts = 1)
@@ -284,9 +296,9 @@ class DefaultCommandRepositoryTest {
     @Test
     fun `GIVEN an RTL just ended without answer WHEN sending an RTL again THEN it is not sent`() = testScope.runTest {
         vehicleAnswers { null }
-        repository.returnToLaunch(SYSTEM)
+        repository.returnToLaunch(KEY)
 
-        val result = repository.returnToLaunch(SYSTEM)
+        val result = repository.returnToLaunch(KEY)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
         sent.size shouldBeEqualTo 3
@@ -295,9 +307,9 @@ class DefaultCommandRepositoryTest {
     @Test
     fun `GIVEN an RTL just ended without answer WHEN landing THEN the land is sent at once`() = testScope.runTest {
         vehicleAnswers { command -> acceptsOnlyLand(command) }
-        repository.returnToLaunch(SYSTEM)
+        repository.returnToLaunch(KEY)
 
-        val result = repository.land(SYSTEM)
+        val result = repository.land(KEY)
 
         result shouldBeEqualTo CommandResult.Accepted
         currentTime shouldBeEqualTo THREE_ATTEMPTS + ANSWER_DELAY
@@ -307,10 +319,10 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an RTL ended without answer past its late window WHEN sending an RTL again THEN it is sent`() =
         testScope.runTest {
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED).takeIf { sent.size > 3 && command.confirmation == 0 } }
-            repository.returnToLaunch(SYSTEM)
+            repository.returnToLaunch(KEY)
             delay(PAST_LATE_WINDOW)
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo CommandResult.Accepted
         }
@@ -318,10 +330,10 @@ class DefaultCommandRepositoryTest {
     @Test
     fun `GIVEN an arm without answer 5 s ago WHEN arming again THEN it is not sent`() = testScope.runTest {
         vehicleAnswers { null }
-        repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+        repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
         delay(WITHIN_ARM_LATE_WINDOW)
 
-        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+        val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
         sent.size shouldBeEqualTo 1
@@ -331,10 +343,10 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an arm without answer past its 10 s late window WHEN arming again THEN it is sent`() =
         testScope.runTest {
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command).takeIf { sent.size == 2 } }
-            repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+            repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
             delay(PAST_ARM_LATE_WINDOW)
 
-            val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+            val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
 
             result shouldBeEqualTo CommandResult.Accepted
         }
@@ -343,10 +355,10 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an RTL being re-sent WHEN landing THEN the land is sent at once and the RTL is superseded`() =
         testScope.runTest {
             vehicleAnswers { command -> acceptsOnlyLand(command) }
-            val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
+            val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(KEY) }
             delay(DURING_SECOND_ATTEMPT)
 
-            val land = async(start = CoroutineStart.UNDISPATCHED) { repository.land(SYSTEM) }
+            val land = async(start = CoroutineStart.UNDISPATCHED) { repository.land(KEY) }
             val result = listOf(rtl.await(), land.await())
             delay(LONG_AFTER)
 
@@ -363,10 +375,10 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleAnswers { null }
             answerLater(ack(MAV_RESULT_ACCEPTED), after = DURING_SECOND_ATTEMPT + ANSWER_DELAY)
-            backgroundScope.launch { repository.returnToLaunch(SYSTEM) }
+            backgroundScope.launch { repository.returnToLaunch(KEY) }
             delay(DURING_SECOND_ATTEMPT)
 
-            val result = repository.land(SYSTEM)
+            val result = repository.land(KEY)
 
             result shouldBeEqualTo noAnswer(attempts = 3)
         }
@@ -374,10 +386,10 @@ class DefaultCommandRepositoryTest {
     @Test
     fun `GIVEN an RTL pending WHEN arming THEN the arm is not sent and the RTL goes on`() = testScope.runTest {
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED).takeIf { command.confirmation == 2 } }
-        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
+        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(KEY) }
         delay(DURING_SECOND_ATTEMPT)
 
-        val result = listOf(repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS), rtl.await())
+        val result = listOf(repository.arm(KEY, NO_ACKNOWLEDGEMENTS), rtl.await())
 
         result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command }.distinct() shouldBeEqualTo listOf(MAV_CMD_NAV_RETURN_TO_LAUNCH)
@@ -387,9 +399,9 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an arm pending WHEN sending an RTL THEN the RTL is not sent and the arm goes on`() = testScope.runTest {
         vehicleAnswers { null }
         answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_COMPONENT_ARM_DISARM), after = HALF_AN_ATTEMPT)
-        val arm = async(start = CoroutineStart.UNDISPATCHED) { repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS) }
+        val arm = async(start = CoroutineStart.UNDISPATCHED) { repository.arm(KEY, NO_ACKNOWLEDGEMENTS) }
 
-        val result = listOf(repository.returnToLaunch(SYSTEM), arm.await())
+        val result = listOf(repository.returnToLaunch(KEY), arm.await())
 
         result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_COMPONENT_ARM_DISARM)
@@ -400,10 +412,10 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleAnswers { null }
             answerLater(ack(MAV_RESULT_ACCEPTED), after = DURING_SECOND_ATTEMPT + ANSWER_DELAY)
-            val first = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
+            val first = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(KEY) }
             delay(DURING_SECOND_ATTEMPT)
 
-            val result = listOf(first, async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) })
+            val result = listOf(first, async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(KEY) })
                 .map { it.await() }
 
             result shouldBeEqualTo listOf(CommandResult.Superseded, CommandResult.Accepted)
@@ -415,7 +427,7 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { command -> ack(MAV_RESULT_IN_PROGRESS).takeIf { command.confirmation == 0 } }
             answerLater(ack(MAV_RESULT_ACCEPTED), after = ANSWER_DELAY + IN_PROGRESS_TIMEOUT + HALF_AN_ATTEMPT)
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
             delay(LONG_AFTER)
 
             result shouldBeEqualTo noAnswer(attempts = 1, startedByVehicle = true)
@@ -435,7 +447,7 @@ class DefaultCommandRepositoryTest {
                 sessions.value = REPLAY_SESSION
             }
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo
                 noAnswer(attempts = 1, startedByVehicle = true, retriesStopped = NotSentReason.Replay)
@@ -450,10 +462,125 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
             route = CommandRoute.Closed(reason)
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo CommandResult.NotSent(reason)
             sent shouldBeEqualTo emptyList()
+        }
+
+    @Tag("REQ-050")
+    @Test
+    fun `GIVEN a key no longer current WHEN sending each command THEN none is sent, as the key changed`() =
+        testScope.runTest {
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+            currentKey = CHANGED_KEY
+
+            val result =
+                listOf(
+                    repository.arm(KEY, NO_ACKNOWLEDGEMENTS),
+                    repository.returnToLaunch(KEY),
+                    repository.land(KEY),
+                    repository.takeOff(KEY, ALTITUDE),
+                )
+
+            result shouldBeEqualTo List(4) { CommandResult.NotSent(NotSentReason.KeyChanged) }
+            sent shouldBeEqualTo emptyList()
+        }
+
+    @Tag("REQ-050")
+    @Test
+    fun `GIVEN no current key WHEN sending an RTL THEN nothing is sent, as the key changed`() = testScope.runTest {
+        vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+        currentKey = null
+
+        val result = repository.returnToLaunch(KEY)
+
+        result shouldBeEqualTo CommandResult.NotSent(NotSentReason.KeyChanged)
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-050")
+    @ParameterizedTest
+    @MethodSource("closedRouteReasons")
+    fun `GIVEN a closed route and a changed key WHEN sending an RTL THEN nothing is sent, for the route's reason`(
+        reason: NotSentReason,
+    ) = testScope.runTest {
+        vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+        route = CommandRoute.Closed(reason)
+        currentKey = CHANGED_KEY
+
+        val result = repository.returnToLaunch(KEY)
+
+        result shouldBeEqualTo CommandResult.NotSent(reason)
+        sent shouldBeEqualTo emptyList()
+    }
+
+    @Tag("REQ-050")
+    @Test
+    fun `GIVEN the key changes during the second attempt WHEN sending an RTL THEN no answer after two attempts`() =
+        testScope.runTest {
+            vehicleAnswers { null }
+            backgroundScope.launch {
+                delay(DURING_SECOND_ATTEMPT)
+                currentKey = CHANGED_KEY
+            }
+
+            val result = repository.returnToLaunch(KEY)
+
+            result shouldBeEqualTo noAnswer(attempts = 2, retriesStopped = NotSentReason.KeyChanged)
+            sent.size shouldBeEqualTo 2
+        }
+
+    @Tag("REQ-050")
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN the key changes during the second attempt WHEN sending an RTL THEN the uplink is not doubted`() =
+        testScope.runTest {
+            vehicleAnswers { null }
+            backgroundScope.launch {
+                delay(DURING_SECOND_ATTEMPT)
+                currentKey = CHANGED_KEY
+            }
+
+            repository.returnToLaunch(KEY)
+
+            uplink.health.value shouldBeEqualTo UplinkHealth.HEALTHY
+        }
+
+    @Tag("REQ-050")
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the key changes and no HEARTBEAT shows GUIDED WHEN taking off THEN it ends as key changed`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+            backgroundScope.launch {
+                delay(DURING_GUIDED_WAIT)
+                currentKey = CHANGED_KEY
+            }
+
+            val result = repository.takeOff(KEY, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.KeyChanged)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
+        }
+
+    @Tag("REQ-050")
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN the key changes while waiting for GUIDED WHEN taking off THEN no take off is sent`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> switchesToGuided(command) }
+            backgroundScope.launch {
+                delay(DURING_GUIDED_WAIT)
+                currentKey = CHANGED_KEY
+            }
+
+            val result = repository.takeOff(KEY, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.KeyChanged)
+            sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
     @Tag("REQ-043")
@@ -466,7 +593,7 @@ class DefaultCommandRepositoryTest {
                 route = CommandRoute.Closed(NotSentReason.LinkLost)
             }
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo noAnswer(attempts = 2, retriesStopped = NotSentReason.LinkLost)
             sent.size shouldBeEqualTo 2
@@ -483,7 +610,7 @@ class DefaultCommandRepositoryTest {
                 sessions.value = REPLAY_SESSION
             }
 
-            val result = repository.returnToLaunch(SYSTEM)
+            val result = repository.returnToLaunch(KEY)
 
             result shouldBeEqualTo noAnswer(attempts = 1, retriesStopped = NotSentReason.Replay)
             currentTime shouldBeEqualTo HALF_AN_ATTEMPT
@@ -494,7 +621,7 @@ class DefaultCommandRepositoryTest {
         coEvery { sender.send(any<CommandLong>(), any<() -> CommandRoute>()) } returns
             CommandSendResult.NotSent(NotSentReason.SendFailed)
 
-        val result = repository.returnToLaunch(SYSTEM)
+        val result = repository.returnToLaunch(KEY)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.SendFailed)
     }
@@ -503,7 +630,7 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN its caller is cancelled WHEN an RTL is being re-sent THEN the RTL goes on until answered`() =
         testScope.runTest {
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED).takeIf { command.confirmation == 2 } }
-            val caller = launch { repository.returnToLaunch(SYSTEM) }
+            val caller = launch { repository.returnToLaunch(KEY) }
             delay(HALF_AN_ATTEMPT)
 
             caller.cancel()
@@ -520,7 +647,7 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleAnswers { null }
 
-            repository.returnToLaunch(SYSTEM)
+            repository.returnToLaunch(KEY)
 
             verifyOnce {
                 Log.w(
@@ -541,7 +668,7 @@ class DefaultCommandRepositoryTest {
             backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.pending.toList(states) }
             vehicleAnswers { null }
 
-            repository.returnToLaunch(SYSTEM)
+            repository.returnToLaunch(KEY)
 
             states shouldBeEqualTo listOf(
                 null,
@@ -559,7 +686,7 @@ class DefaultCommandRepositoryTest {
             vehicleStreamsGround()
             vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.Accepted
             sent shouldBeEqualTo listOf(
@@ -576,7 +703,7 @@ class DefaultCommandRepositoryTest {
         vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.Accepted
         sent shouldBeEqualTo listOf(commandLong(MAV_CMD_NAV_TAKEOFF, param7 = ALTITUDE))
@@ -589,7 +716,7 @@ class DefaultCommandRepositoryTest {
             vehicleStreamsGround()
             vehicleAnswers { command -> ack(MAV_RESULT_DENIED, command.command) }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.ModeNotChanged(CommandResult.Rejected(Rejection.DENIED, reason = null))
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
@@ -602,7 +729,7 @@ class DefaultCommandRepositoryTest {
             vehicleStreamsGround()
             vehicleAnswers { null }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
             delay(LONG_AFTER)
 
             result shouldBeEqualTo CommandResult.ModeNotChanged(noAnswer(attempts = 1))
@@ -615,7 +742,7 @@ class DefaultCommandRepositoryTest {
         vehicleStreamsGround()
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.ModeNotChanged(modeChange = null)
         sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
@@ -630,7 +757,7 @@ class DefaultCommandRepositoryTest {
             vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
             vehicleAnswers { command -> ack(MAV_RESULT_FAILED, command.command) }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
             delay(LONG_AFTER)
 
             result shouldBeEqualTo CommandResult.Rejected(Rejection.FAILED, reason = null)
@@ -643,7 +770,7 @@ class DefaultCommandRepositoryTest {
         vehicleStreamsGround()
         vehicleAnswers { command -> switchesToGuided(command) }
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
         delay(LONG_AFTER)
 
         result shouldBeEqualTo noAnswer(attempts = 1)
@@ -662,7 +789,7 @@ class DefaultCommandRepositoryTest {
                 route = CommandRoute.Closed(NotSentReason.LinkLost)
             }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LinkLost)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
@@ -678,7 +805,7 @@ class DefaultCommandRepositoryTest {
                 ack(MAV_RESULT_ACCEPTED, command.command)
             }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotArmed)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
@@ -691,7 +818,7 @@ class DefaultCommandRepositoryTest {
         vehicles.value = mapOf(SYSTEM to vehicle(LOITER, armed = false))
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotArmed)
         sent shouldBeEqualTo emptyList()
@@ -705,7 +832,7 @@ class DefaultCommandRepositoryTest {
             vehicleStreamsGround()
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = repository.takeOff(SYSTEM, altitude)
+            val result = repository.takeOff(KEY, altitude)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.AltitudeOutOfRange)
             sent shouldBeEqualTo emptyList()
@@ -725,10 +852,10 @@ class DefaultCommandRepositoryTest {
                 else -> ack(MAV_RESULT_ACCEPTED)
             }
         }
-        val takeOff = async(start = CoroutineStart.UNDISPATCHED) { repository.takeOff(SYSTEM, ALTITUDE) }
+        val takeOff = async(start = CoroutineStart.UNDISPATCHED) { repository.takeOff(KEY, ALTITUDE) }
         delay(rtlAt)
 
-        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
+        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(KEY) }
         val result = listOf(takeOff.await(), rtl.await())
         delay(LONG_AFTER)
 
@@ -741,9 +868,9 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN a take off pending WHEN arming THEN the arm is not sent and the take off goes on`() = testScope.runTest {
         vehicleStreamsGround()
         vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
-        val takeOff = async(start = CoroutineStart.UNDISPATCHED) { repository.takeOff(SYSTEM, ALTITUDE) }
+        val takeOff = async(start = CoroutineStart.UNDISPATCHED) { repository.takeOff(KEY, ALTITUDE) }
 
-        val result = listOf(repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS), takeOff.await())
+        val result = listOf(repository.arm(KEY, NO_ACKNOWLEDGEMENTS), takeOff.await())
 
         result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF)
@@ -755,10 +882,10 @@ class DefaultCommandRepositoryTest {
         vehicleStreamsGround()
         vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
         vehicleAnswers { null }
-        repository.takeOff(SYSTEM, ALTITUDE)
+        repository.takeOff(KEY, ALTITUDE)
         delay(WITHIN_ARM_LATE_WINDOW)
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
         sent.size shouldBeEqualTo 1
@@ -770,9 +897,9 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleStreamsGround()
             vehicleAnswers { null }
-            repository.takeOff(SYSTEM, ALTITUDE)
+            repository.takeOff(KEY, ALTITUDE)
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
@@ -785,10 +912,10 @@ class DefaultCommandRepositoryTest {
             vehicleStreamsGround()
             vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command).takeIf { sent.size == 2 } }
-            repository.takeOff(SYSTEM, ALTITUDE)
+            repository.takeOff(KEY, ALTITUDE)
             delay(PAST_ARM_LATE_WINDOW)
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.Accepted
         }
@@ -802,7 +929,7 @@ class DefaultCommandRepositoryTest {
             backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.pending.toList(states) }
             vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            repository.takeOff(SYSTEM, ALTITUDE)
+            repository.takeOff(KEY, ALTITUDE)
 
             states shouldBeEqualTo listOf(
                 null,
@@ -828,7 +955,7 @@ class DefaultCommandRepositoryTest {
             vehicleStreamsGround()
             vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
             sent shouldBeEqualTo emptyList()
@@ -841,7 +968,7 @@ class DefaultCommandRepositoryTest {
         vehicleStreamsPositionOnly()
         vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
         sent shouldBeEqualTo emptyList()
@@ -854,7 +981,7 @@ class DefaultCommandRepositoryTest {
         vehicleStreamsGround()
         vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
         sent shouldBeEqualTo emptyList()
@@ -867,7 +994,7 @@ class DefaultCommandRepositoryTest {
         vehicleStreamsGround()
         vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
         sent shouldBeEqualTo emptyList()
@@ -884,7 +1011,7 @@ class DefaultCommandRepositoryTest {
                 landedState = MAV_LANDED_STATE_IN_AIR
             }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
@@ -901,7 +1028,7 @@ class DefaultCommandRepositoryTest {
         vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
         route = CommandRoute.Closed(reason)
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.NotSent(reason)
         sent shouldBeEqualTo emptyList()
@@ -919,7 +1046,7 @@ class DefaultCommandRepositoryTest {
                 route = CommandRoute.Closed(NotSentReason.LinkLost)
             }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LinkLost)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
@@ -937,12 +1064,12 @@ class DefaultCommandRepositoryTest {
                     else -> ack(MAV_RESULT_ACCEPTED, command.command)
                 }
             }
-            backgroundScope.launch { repository.takeOff(SYSTEM, ALTITUDE) }
+            backgroundScope.launch { repository.takeOff(KEY, ALTITUDE) }
             delay(DURING_TAKE_OFF)
-            repository.land(SYSTEM)
+            repository.land(KEY)
             delay(WITHIN_ARM_LATE_WINDOW)
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(NotSentReason.Busy)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE, MAV_CMD_NAV_TAKEOFF, MAV_CMD_NAV_LAND)
@@ -959,12 +1086,12 @@ class DefaultCommandRepositoryTest {
                 else -> ack(MAV_RESULT_ACCEPTED, command.command)
             }
         }
-        backgroundScope.launch { repository.takeOff(SYSTEM, ALTITUDE) }
+        backgroundScope.launch { repository.takeOff(KEY, ALTITUDE) }
         delay(DURING_TAKE_OFF)
-        repository.land(SYSTEM)
+        repository.land(KEY)
         delay(PAST_ARM_LATE_WINDOW)
 
-        val result = repository.takeOff(SYSTEM, ALTITUDE)
+        val result = repository.takeOff(KEY, ALTITUDE)
 
         result shouldBeEqualTo CommandResult.Accepted
     }
@@ -974,10 +1101,10 @@ class DefaultCommandRepositoryTest {
     fun `GIVEN an RTL pending WHEN taking off THEN the take off is not sent and the RTL goes on`() = testScope.runTest {
         vehicleStreamsGround()
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED).takeIf { command.confirmation == 2 } }
-        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(SYSTEM) }
+        val rtl = async(start = CoroutineStart.UNDISPATCHED) { repository.returnToLaunch(KEY) }
         delay(DURING_SECOND_ATTEMPT)
 
-        val result = listOf(repository.takeOff(SYSTEM, ALTITUDE), rtl.await())
+        val result = listOf(repository.takeOff(KEY, ALTITUDE), rtl.await())
 
         result shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.Busy), CommandResult.Accepted)
         sent.map { it.command }.distinct() shouldBeEqualTo listOf(MAV_CMD_NAV_RETURN_TO_LAUNCH)
@@ -992,7 +1119,7 @@ class DefaultCommandRepositoryTest {
             vehicleAnswers { null }
             answerLater(ack(MAV_RESULT_ACCEPTED, MAV_CMD_NAV_TAKEOFF), after = PAST_ONE_ATTEMPT)
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
             delay(LONG_AFTER)
 
             result shouldBeEqualTo noAnswer(attempts = 1)
@@ -1007,7 +1134,7 @@ class DefaultCommandRepositoryTest {
         testScope.runTest {
             vehicleStreamsGround()
             vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
-            val caller = launch { repository.takeOff(SYSTEM, ALTITUDE) }
+            val caller = launch { repository.takeOff(KEY, ALTITUDE) }
             delay(DURING_GUIDED_WAIT)
 
             caller.cancel()
@@ -1025,7 +1152,7 @@ class DefaultCommandRepositoryTest {
         armRefusal = { GPS_LOST }
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+        val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
 
         result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
         sent.shouldBeEmpty()
@@ -1037,7 +1164,7 @@ class DefaultCommandRepositoryTest {
         armRefusal = { acknowledged -> UNACKNOWLEDGED.takeUnless { acknowledged == ACKNOWLEDGED } }
         vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-        val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+        val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
 
         result shouldBeEqualTo CommandResult.NotSent(UNACKNOWLEDGED)
         sent.shouldBeEmpty()
@@ -1050,7 +1177,7 @@ class DefaultCommandRepositoryTest {
             armRefusal = { acknowledged -> UNACKNOWLEDGED.takeUnless { acknowledged == ACKNOWLEDGED } }
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = repository.arm(SYSTEM, ACKNOWLEDGED)
+            val result = repository.arm(KEY, ACKNOWLEDGED)
 
             result shouldBeEqualTo CommandResult.Accepted
             sent shouldBeEqualTo listOf(commandLong(MAV_CMD_COMPONENT_ARM_DISARM, param1 = 1f))
@@ -1064,7 +1191,7 @@ class DefaultCommandRepositoryTest {
             armRefusal = { if (++checks > 1) GPS_LOST else null }
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = repository.arm(SYSTEM, NO_ACKNOWLEDGEMENTS)
+            val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
 
             result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
             sent.shouldBeEmpty()
@@ -1078,7 +1205,7 @@ class DefaultCommandRepositoryTest {
             takeOffRefusal = { GPS_LOST }
             vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
             sent.shouldBeEmpty()
@@ -1092,7 +1219,7 @@ class DefaultCommandRepositoryTest {
             takeOffRefusal = { GPS_LOST.takeIf { sent.isNotEmpty() } }
             vehicleAnswers { command -> switchesToGuided(command) ?: ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = repository.takeOff(SYSTEM, ALTITUDE)
+            val result = repository.takeOff(KEY, ALTITUDE)
 
             result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
             sent shouldBeEqualTo listOf(
@@ -1109,7 +1236,7 @@ class DefaultCommandRepositoryTest {
             takeOffRefusal = { GPS_LOST }
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = listOf(repository.returnToLaunch(SYSTEM), repository.land(SYSTEM))
+            val result = listOf(repository.returnToLaunch(KEY), repository.land(KEY))
 
             result shouldBeEqualTo List(2) { CommandResult.Accepted }
             sent shouldBeEqualTo listOf(commandLong(MAV_CMD_NAV_RETURN_TO_LAUNCH), commandLong(MAV_CMD_NAV_LAND))
@@ -1125,7 +1252,7 @@ class DefaultCommandRepositoryTest {
             takeOffRefusal = { BATTERY_CRITICAL }
             vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
 
-            val result = listOf(repository.returnToLaunch(SYSTEM), repository.land(SYSTEM))
+            val result = listOf(repository.returnToLaunch(KEY), repository.land(KEY))
 
             result shouldBeEqualTo List(2) { CommandResult.Accepted }
             sent shouldBeEqualTo listOf(commandLong(MAV_CMD_NAV_RETURN_TO_LAUNCH), commandLong(MAV_CMD_NAV_LAND))
@@ -1325,6 +1452,8 @@ class DefaultCommandRepositoryTest {
         const val DURING_TAKE_OFF = 2_000L
 
         val SYSTEM = SystemId(VEHICLE_SYSTEM_ID)
+        val KEY = CommandKey(SYSTEM, connection = 7)
+        val CHANGED_KEY = KEY.copy(connection = KEY.connection + 1)
         val VEHICLE_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
         val OTHER_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_570)
         val OPEN_ROUTE = CommandRoute.Open(VEHICLE_ADDRESS)

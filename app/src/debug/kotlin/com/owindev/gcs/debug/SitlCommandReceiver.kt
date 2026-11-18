@@ -7,6 +7,7 @@ import android.util.Log
 import com.owindev.gcs.core.domain.preflight.PreflightAcknowledgements
 import com.owindev.gcs.core.domain.preflight.PreflightRepository
 import com.owindev.gcs.core.domain.vehicle.SystemId
+import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
@@ -48,17 +49,17 @@ class SitlCommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val command = intent.getStringExtra(EXTRA_COMMAND)
         val systemId = intent.getIntExtra(EXTRA_SYSTEM_ID, NO_SYSTEM_ID)
-        val send: (suspend (SystemId) -> CommandResult)? = when (command) {
-            "arm" -> { id ->
-                commands.arm(id, acknowledgementsFor(id, intent.getBooleanExtra(EXTRA_ACKNOWLEDGE, false)))
+        val send: (suspend (CommandKey) -> CommandResult)? = when (command) {
+            "arm" -> { key ->
+                commands.arm(key, acknowledgementsFor(key.systemId, intent.getBooleanExtra(EXTRA_ACKNOWLEDGE, false)))
             }
 
             "rtl" -> commands::returnToLaunch
 
             "land" -> commands::land
 
-            "takeoff" -> { id ->
-                commands.takeOff(id, intent.getFloatExtra(EXTRA_ALTITUDE, altitudeRule.defaultMetres))
+            "takeoff" -> { key ->
+                commands.takeOff(key, intent.getFloatExtra(EXTRA_ALTITUDE, altitudeRule.defaultMetres))
             }
 
             else -> null
@@ -70,12 +71,16 @@ class SitlCommandReceiver : BroadcastReceiver() {
         val broadcast = goAsync()
         scope.launch {
             try {
-                send(SystemId(systemId))
+                send(keyFor(SystemId(systemId)))
             } finally {
                 broadcast.finish()
             }
         }
     }
+
+    /** The current key, aimed at [systemId]: one that is not the active vehicle is refused before the key counts. */
+    private fun keyFor(systemId: SystemId): CommandKey =
+        commands.commandKey.value?.copy(systemId = systemId) ?: CommandKey(systemId, NO_CONNECTION)
 
     private fun acknowledgementsFor(systemId: SystemId, acknowledgeAmbers: Boolean): PreflightAcknowledgements {
         if (!acknowledgeAmbers) return PreflightAcknowledgements()
@@ -93,6 +98,7 @@ class SitlCommandReceiver : BroadcastReceiver() {
         const val EXTRA_ALTITUDE = "altitude"
         const val EXTRA_ACKNOWLEDGE = "acknowledgeAmbers"
         const val NO_SYSTEM_ID = 0
+        const val NO_CONNECTION = -1L
         val SYSTEM_IDS = 1..255
     }
 }

@@ -162,8 +162,8 @@ internal class CommandExchange @Inject constructor(
 
     /**
      * A command left without answer says something of the uplink only when nothing else explains it: not after an
-     * IN_PROGRESS (the vehicle heard it) nor when the app stopped early because the link, the route or the session
-     * ended; any other stop (a failed send, a check refusing a retry) still does.
+     * IN_PROGRESS (the vehicle heard it) nor when the app stopped early because the link, the route, the session or
+     * the confirmed connection ended; any other stop (a failed send, a check refusing a retry) still does.
      */
     private val CommandResult.isUplinkEvidence: Boolean
         get() = this is CommandResult.NoAnswer &&
@@ -210,9 +210,12 @@ internal class CommandExchange @Inject constructor(
          */
         val DANGEROUS_LATE_WINDOW: Duration = 10.seconds
 
-        /** The app stopped retrying because the link, the session or the route ended: that explains the silence. */
+        /**
+         * The app stopped retrying because the link, the session, the route or the confirmed connection ended: that
+         * explains the silence.
+         */
         private val SILENCE_EXPLAINED =
-            setOf(NotSentReason.LinkLost, NotSentReason.Replay, NotSentReason.RouteChanged)
+            setOf(NotSentReason.LinkLost, NotSentReason.Replay, NotSentReason.RouteChanged, NotSentReason.KeyChanged)
 
         private const val TAG = "CommandExchange"
     }

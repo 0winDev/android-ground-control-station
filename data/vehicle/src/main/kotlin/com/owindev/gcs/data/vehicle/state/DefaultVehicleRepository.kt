@@ -8,9 +8,10 @@ import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleState
+import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
+import com.owindev.gcs.data.vehicle.command.CommandKeys
 import com.owindev.gcs.data.vehicle.command.CommandRoute
-import com.owindev.gcs.data.vehicle.command.CommandRoutes
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
 import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.FIRST_SESSION
@@ -42,8 +43,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -113,7 +116,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val activeVehicle: ActiveVehicle,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository,
-    CommandRoutes {
+    CommandKeys {
 
     private val mutableVehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val events = Channel<Event>(Channel.UNLIMITED)
@@ -153,6 +156,16 @@ internal class DefaultVehicleRepository @Inject constructor(
     /** The active vehicle's current connection ([ActiveLinkChanges.connection]), for the pre-flight check. */
     val activeConnection: Long
         get() = activeLinkChanges.connection
+
+    override val commandKey: StateFlow<CommandKey?> =
+        combine(session.session, activeVehicle.systemId, activeLinkChanges.connections) { _, _, _ -> currentKey }
+            .stateIn(scope, SharingStarted.Eagerly, currentKey)
+
+    /** REQ-050: a replay has no key, so nothing confirmed during one is ever current. */
+    override val currentKey: CommandKey?
+        get() = activeVehicle.systemId.value
+            ?.takeIf { session.session.value.origin == DataOrigin.LIVE }
+            ?.let { CommandKey(it, activeLinkChanges.connection) }
 
     override val activeSystemId: StateFlow<SystemId?> by lazy {
         // Starts the jobs: the active vehicle comes from the same HEARTBEATs as the map.
