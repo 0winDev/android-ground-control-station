@@ -294,6 +294,8 @@ internal class DefaultVehicleRepository @Inject constructor(
      * vehicle's address.
      */
     private fun update(systemId: SystemId, vehicle: Vehicle) {
+        // A timer run late (#12) misses a LOST the HEARTBEAT gap proves: recorded before this HEARTBEAT.
+        rule.lostInGap(mutableVehicles.value[systemId], vehicle)?.let { lost -> update(systemId, lost) }
         val before = mutableVehicles.value[systemId]?.link ?: VehicleLink.LOST
         // Only the live vehicle is ever asked for anything: a replayed one has no address to send to.
         val activeLinkChanged =
@@ -376,4 +378,11 @@ internal class DefaultVehicleRepository @Inject constructor(
 
         data class SessionChanged(val session: SessionId) : Event
     }
+}
+
+/** [before] as LOST when [heard] is CONNECTED but the gap between their HEARTBEATs passed the timeout. */
+private fun LinkLossRule.lostInGap(before: Vehicle?, heard: Vehicle): Vehicle? {
+    if (before == null || heard.link != VehicleLink.CONNECTED) return null
+    val gap = before.lastHeartbeat.elapsedNow() - heard.lastHeartbeat.elapsedNow()
+    return before.copy(link = VehicleLink.LOST).takeIf { linkAfter(gap) == VehicleLink.LOST }
 }

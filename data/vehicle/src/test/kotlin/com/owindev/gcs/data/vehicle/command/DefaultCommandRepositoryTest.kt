@@ -516,6 +516,36 @@ class DefaultCommandRepositoryTest {
     }
 
     @Tag("REQ-050")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a changed key and a red pre-flight item WHEN arming THEN it ends as key changed, never vetoed`() =
+        testScope.runTest {
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED, MAV_CMD_COMPONENT_ARM_DISARM) }
+            armRefusal = { GPS_LOST }
+            currentKey = CHANGED_KEY
+
+            val result = repository.arm(KEY, NO_ACKNOWLEDGEMENTS)
+
+            listOf(result, vetoAsked) shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.KeyChanged), 0)
+        }
+
+    @Tag("REQ-050")
+    @Tag("REQ-044")
+    @Test
+    fun `GIVEN a changed key on a disarmed vehicle with a red item WHEN taking off THEN it ends as key changed`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> switchesToGuided(command) }
+            vehicles.value = mapOf(SYSTEM to vehicle(LOITER, armed = false))
+            takeOffRefusal = { GPS_LOST }
+            currentKey = CHANGED_KEY
+
+            val result = repository.takeOff(KEY, ALTITUDE)
+
+            listOf(result, vetoAsked) shouldBeEqualTo listOf(CommandResult.NotSent(NotSentReason.KeyChanged), 0)
+        }
+
+    @Tag("REQ-050")
     @Test
     fun `GIVEN the key changes during the second attempt WHEN sending an RTL THEN no answer after two attempts`() =
         testScope.runTest {

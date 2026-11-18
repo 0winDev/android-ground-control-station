@@ -3,7 +3,6 @@ package com.owindev.gcs.data.vehicle.state
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.transport.Datagram
-import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.VehicleTarget
@@ -23,7 +22,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -166,10 +164,6 @@ class ParametersFromLinkTest {
 
         result shouldBeEqualTo FollowedParameters.empty(session.session.value)
     }
-}
-
-private fun emptySource(): DatagramSource = object : DatagramSource {
-    override fun datagrams() = emptyFlow<Datagram>()
 }
 
 /** `BATT_LOW_VOLT` 10.5, REAL32, from system 1 component 1 (pymavlink, resources `README.md`). */
