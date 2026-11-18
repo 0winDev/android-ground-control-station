@@ -591,7 +591,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(KEY, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.KeyChanged)
+            result shouldBeEqualTo CommandResult.TakeOffStopped(NotSentReason.KeyChanged)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -609,7 +609,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(KEY, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.KeyChanged)
+            result shouldBeEqualTo CommandResult.TakeOffStopped(NotSentReason.KeyChanged)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -808,6 +808,20 @@ class DefaultCommandRepositoryTest {
     }
 
     @Tag("REQ-044")
+    @Test
+    fun `GIVEN already in GUIDED with the link lost WHEN taking off THEN it is not sent, never stopped`() =
+        testScope.runTest {
+            vehicleStreamsGround()
+            vehicleAnswers { command -> ack(MAV_RESULT_ACCEPTED, command.command) }
+            vehicles.value = mapOf(SYSTEM to vehicle(GUIDED, armed = true))
+            route = CommandRoute.Closed(NotSentReason.LinkLost)
+
+            val result = repository.takeOff(KEY, ALTITUDE)
+
+            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LinkLost)
+        }
+
+    @Tag("REQ-044")
     @Tag("REQ-043")
     @Test
     fun `GIVEN the link is lost while waiting for GUIDED WHEN taking off THEN no take off is sent`() =
@@ -821,7 +835,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(KEY, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LinkLost)
+            result shouldBeEqualTo CommandResult.TakeOffStopped(NotSentReason.LinkLost)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -837,7 +851,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(KEY, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotArmed)
+            result shouldBeEqualTo CommandResult.TakeOffStopped(NotSentReason.NotArmed)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -1043,7 +1057,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(KEY, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.NotLanded)
+            result shouldBeEqualTo CommandResult.TakeOffStopped(NotSentReason.NotLanded)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -1078,7 +1092,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(KEY, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(NotSentReason.LinkLost)
+            result shouldBeEqualTo CommandResult.TakeOffStopped(NotSentReason.LinkLost)
             sent.map { it.command } shouldBeEqualTo listOf(MAV_CMD_DO_SET_MODE)
         }
 
@@ -1251,7 +1265,7 @@ class DefaultCommandRepositoryTest {
 
             val result = repository.takeOff(KEY, ALTITUDE)
 
-            result shouldBeEqualTo CommandResult.NotSent(GPS_LOST)
+            result shouldBeEqualTo CommandResult.TakeOffStopped(GPS_LOST)
             sent shouldBeEqualTo listOf(
                 commandLong(MAV_CMD_DO_SET_MODE, param1 = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, param2 = GUIDED_MODE),
             )
