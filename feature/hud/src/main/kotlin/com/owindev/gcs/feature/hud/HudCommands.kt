@@ -23,6 +23,7 @@ internal data class CommandActions(
     val onConfirm: (ConfirmKey) -> Unit = {},
     val onCancel: () -> Unit = {},
     val onDismissFeedback: () -> Unit = {},
+    val onDismissRefusal: () -> Unit = {},
 )
 
 /** The flight screen's commands (REQ-050): [ground] (arm or take off) kept apart from [returnToLaunch] and [land]. */
@@ -47,10 +48,10 @@ sealed interface CommandUnavailable {
 }
 
 /**
- * The slide's key: what the command service compares ([commandKey]) and the take off altitude chosen, so changing the
- * altitude during a slide drops it and the altitude sent is the one the slide confirmed.
+ * The slide's key: the [command] it confirms, what the command service compares ([commandKey]) and the take off
+ * altitude chosen, so changing the altitude during a slide drops it and the altitude sent is the one it confirmed.
  */
-data class ConfirmKey(val commandKey: CommandKey, val altitudeMetres: Float?)
+data class ConfirmKey(val command: VehicleCommand, val commandKey: CommandKey, val altitudeMetres: Float?)
 
 /**
  * The confirmation of [command] for [systemId] (REQ-050), only while the link it was opened on lasts. [key] is `null`
@@ -79,8 +80,16 @@ sealed interface CommandStatus {
     data class Ended(val message: CommandMessage) : CommandStatus
 }
 
-/** A result in words: [text] with [args], each a string resource or a value, at its alert [level]. */
-data class CommandMessage(@param:StringRes val text: Int, val args: List<Any> = emptyList(), val level: Level) {
+/**
+ * A result in words: [text] with [args], each a string resource or a value, at its alert [level]; [text] is a plural
+ * resource when [quantity] is set.
+ */
+data class CommandMessage(
+    val text: Int,
+    val args: List<Any> = emptyList(),
+    val level: Level,
+    val quantity: Int? = null,
+) {
 
     enum class Level {
         NOMINAL,
@@ -93,11 +102,15 @@ data class CommandMessage(@param:StringRes val text: Int, val args: List<Any> = 
 /** A string resource passed as an argument of a [CommandMessage]. */
 data class TextArg(@param:StringRes val text: Int)
 
-/** What the flight screen shows of the commands; empty during a replay, with no vehicle or while it is lost. */
+/**
+ * What the flight screen shows of the commands; empty during a replay, with no vehicle or while it is lost. [refusal]
+ * is a command refused before it left while [feedback] still held one the operator must see.
+ */
 data class CommandsUiState(
     val bar: CommandBar? = null,
     val sheet: CommandSheet? = null,
     val feedback: CommandFeedback? = null,
+    val refusal: CommandFeedback? = null,
 )
 
 /**
@@ -169,10 +182,10 @@ internal fun PendingState.toStatus(command: VehicleCommand): CommandStatus = whe
 }
 
 /**
- * [result] in words for [command] (REQ-042, REQ-044); `null` for a key that changed, which asks for another slide and
- * is no failure (REQ-050).
+ * [result] in words for [command] (REQ-042, REQ-044); [otherPending] tells a refusal as busy while another command waits
+ * from one while the last one's late answer is still listened for (ADR 0008).
  */
-internal fun messageOf(command: VehicleCommand, result: CommandResult): CommandMessage? {
+internal fun messageOf(command: VehicleCommand, result: CommandResult, otherPending: Boolean): CommandMessage {
     val name = TextArg(command.title())
     return when (result) {
         CommandResult.Accepted -> CommandMessage(
@@ -191,38 +204,69 @@ internal fun messageOf(command: VehicleCommand, result: CommandResult): CommandM
 
         is CommandResult.NoAnswer -> noAnswer(command, result, name)
 
-        is CommandResult.ModeNotChanged ->
-            CommandMessage(R.string.hud_command_mode_not_changed, level = CommandMessage.Level.EMERGENCY)
+        is CommandResult.ModeNotChanged -> modeNotChanged(result.modeChange)
 
         is CommandResult.TakeOffStopped -> CommandMessage(
             R.string.hud_command_take_off_stopped,
-            listOf(TextArg(result.reason.text())),
+            listOf(TextArg(result.reason.text(otherPending))),
             CommandMessage.Level.EMERGENCY,
         )
 
         CommandResult.Superseded ->
             CommandMessage(R.string.hud_command_superseded, listOf(name), CommandMessage.Level.ADVISORY)
 
-        is CommandResult.NotSent -> if (result.reason == NotSentReason.KeyChanged) {
-            null
-        } else {
-            CommandMessage(
-                R.string.hud_command_not_sent,
-                listOf(name, TextArg(result.reason.text())),
-                CommandMessage.Level.CAUTION,
-            )
-        }
+        is CommandResult.NotSent -> CommandMessage(
+            R.string.hud_command_not_sent,
+            listOf(name, TextArg(result.reason.text(otherPending))),
+            CommandMessage.Level.CAUTION,
+        )
     }
 }
 
-private fun noAnswer(command: VehicleCommand, result: CommandResult.NoAnswer, name: TextArg): CommandMessage = when {
-    result.startedByVehicle ->
-        CommandMessage(R.string.hud_command_started_no_end, listOf(name), CommandMessage.Level.EMERGENCY)
+private fun noAnswer(command: VehicleCommand, result: CommandResult.NoAnswer, name: TextArg): CommandMessage {
+    val stopped = result.retriesStopped
+    return when {
+        result.startedByVehicle ->
+            CommandMessage(R.string.hud_command_started_no_end, listOf(name), CommandMessage.Level.EMERGENCY)
 
-    command.attempts() > 1 ->
-        CommandMessage(R.string.hud_command_no_answer, listOf(name, result.attempts), CommandMessage.Level.EMERGENCY)
+        stopped != null -> CommandMessage(
+            R.plurals.hud_command_no_answer_stopped,
+            listOf(name, result.attempts, TextArg(stopped.text(otherPending = false))),
+            CommandMessage.Level.EMERGENCY,
+            quantity = result.attempts,
+        )
 
-    else -> CommandMessage(R.string.hud_command_no_answer_not_resent, listOf(name), CommandMessage.Level.EMERGENCY)
+        command.attempts() > 1 -> CommandMessage(
+            R.plurals.hud_command_no_answer,
+            listOf(name, result.attempts),
+            CommandMessage.Level.EMERGENCY,
+            quantity = result.attempts,
+        )
+
+        else -> CommandMessage(R.string.hud_command_no_answer_not_resent, listOf(name), CommandMessage.Level.EMERGENCY)
+    }
+}
+
+/** The vehicle stays in its mode when it refused GUIDED; otherwise it may be in GUIDED, or switch to it later. */
+private fun modeNotChanged(modeChange: CommandResult?): CommandMessage = when (modeChange) {
+    null -> CommandMessage(R.string.hud_command_guided_not_shown, level = CommandMessage.Level.EMERGENCY)
+
+    is CommandResult.NoAnswer -> CommandMessage(
+        R.string.hud_command_guided_no_answer,
+        level = CommandMessage.Level.EMERGENCY,
+    )
+
+    is CommandResult.Rejected -> CommandMessage(
+        R.string.hud_command_guided_refused,
+        listOf(modeChange.reason ?: TextArg(modeChange.rejection.text())),
+        CommandMessage.Level.EMERGENCY,
+    )
+
+    else -> CommandMessage(
+        R.string.hud_command_guided_refused,
+        listOf(TextArg(R.string.hud_rejection_busy)),
+        CommandMessage.Level.EMERGENCY,
+    )
 }
 
 @StringRes
@@ -252,7 +296,7 @@ private fun Rejection.text(): Int = when (this) {
 }
 
 @StringRes
-private fun NotSentReason.text(): Int = when (this) {
+private fun NotSentReason.text(otherPending: Boolean): Int = when (this) {
     NotSentReason.Replay -> R.string.hud_not_sent_replay
     NotSentReason.NotActiveVehicle -> R.string.hud_not_sent_not_active
     NotSentReason.LinkLost -> R.string.hud_not_sent_link_lost
@@ -261,7 +305,7 @@ private fun NotSentReason.text(): Int = when (this) {
     NotSentReason.NotArmed -> R.string.hud_not_sent_not_armed
     NotSentReason.NotLanded -> R.string.hud_not_sent_not_landed
     NotSentReason.AltitudeOutOfRange -> R.string.hud_not_sent_altitude
-    NotSentReason.Busy -> R.string.hud_not_sent_busy
+    NotSentReason.Busy -> if (otherPending) R.string.hud_not_sent_busy else R.string.hud_not_sent_late_window
     NotSentReason.SendFailed -> R.string.hud_not_sent_send_failed
     is NotSentReason.PreflightRed -> R.string.hud_not_sent_preflight_red
     is NotSentReason.PreflightUnacknowledged -> R.string.hud_not_sent_preflight_unacknowledged

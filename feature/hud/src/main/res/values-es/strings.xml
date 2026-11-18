@@ -184,10 +184,8 @@
     <string name="hud_command_accepted">%1$s: aceptado por el dron</string>
     <string name="hud_command_busy">%1$s: el dron está ocupado. Inténtalo de nuevo.</string>
     <string name="hud_command_rejected">%1$s: rechazado por el dron (%2$s)</string>
-    <string name="hud_command_no_answer">%1$s: sin respuesta del dron tras %2$d intentos. Comprueba el dron.</string>
     <string name="hud_command_no_answer_not_resent">%1$s: sin respuesta, no se reenvía. Comprueba el dron.</string>
     <string name="hud_command_started_no_end">%1$s: el dron lo empezó pero no dijo que terminara. Comprueba el dron.</string>
-    <string name="hud_command_mode_not_changed">Despegue detenido: el dron no pasó a GUIDED. Puede quedarse en GUIDED.</string>
     <string name="hud_command_take_off_stopped">Despegue detenido: el dron puede estar en GUIDED y NAV_TAKEOFF no se envió (%1$s).</string>
     <string name="hud_command_superseded">%1$s: sustituido por un RTL o un aterrizaje más reciente</string>
     <string name="hud_command_not_sent">%1$s: no enviado (%2$s)</string>
@@ -213,5 +211,20 @@
         <item quantity="one">Chequeo prevuelo: %1$d elemento en rojo</item>
         <item quantity="many">Chequeo prevuelo: %1$d elementos en rojo</item>
         <item quantity="other">Chequeo prevuelo: %1$d elementos en rojo</item>
+    </plurals>
+    <string name="hud_command_guided_not_shown">Despegue detenido: el dron aceptó GUIDED pero nunca lo mostró. Aún puede pasar a GUIDED.</string>
+    <string name="hud_command_guided_no_answer">Despegue detenido: sin respuesta al cambio a GUIDED. El dron puede estar en GUIDED.</string>
+    <string name="hud_command_guided_refused">Despegue detenido: el dron rechazó GUIDED (%1$s). Sigue en su modo.</string>
+    <string name="hud_rejection_busy">ocupado</string>
+    <string name="hud_not_sent_late_window">el dron aún puede responder a la anterior; espera un momento</string>
+    <plurals name="hud_command_no_answer">
+        <item quantity="one">%1$s: sin respuesta del dron tras %2$d intento. Comprueba el dron.</item>
+        <item quantity="many">%1$s: sin respuesta del dron tras %2$d intentos. Comprueba el dron.</item>
+        <item quantity="other">%1$s: sin respuesta del dron tras %2$d intentos. Comprueba el dron.</item>
+    </plurals>
+    <plurals name="hud_command_no_answer_stopped">
+        <item quantity="one">%1$s: sin respuesta tras %2$d intento; después se detuvo (%3$s). Comprueba el dron.</item>
+        <item quantity="many">%1$s: sin respuesta tras %2$d intentos; después se detuvo (%3$s). Comprueba el dron.</item>
+        <item quantity="other">%1$s: sin respuesta tras %2$d intentos; después se detuvo (%3$s). Comprueba el dron.</item>
     </plurals>
 </resources>

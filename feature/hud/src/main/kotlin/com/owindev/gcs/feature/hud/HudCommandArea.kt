@@ -49,13 +49,19 @@ import kotlin.math.roundToInt
  * another command waits for its answer.
  */
 @Composable
-internal fun CommandArea(bar: CommandBar, feedback: CommandFeedback?, actions: CommandActions) {
+internal fun CommandArea(
+    bar: CommandBar,
+    feedback: CommandFeedback?,
+    actions: CommandActions,
+    refusal: CommandFeedback? = null,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = GcsTheme.spacing.screen, vertical = GcsTheme.spacing.chip),
         verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
     ) {
+        refusal?.let { FeedbackLine(feedback = it, onDismiss = actions.onDismissRefusal) }
         feedback?.let { FeedbackLine(feedback = it, onDismiss = actions.onDismissFeedback) }
         // The ground command sits apart from RTL and land: arming never leaves a finger where RTL appears next.
         Row(
@@ -192,7 +198,8 @@ private fun feedbackText(feedback: CommandFeedback): Pair<String, CommandMessage
 private fun messageText(message: CommandMessage): String {
     val resources = LocalResources.current
     val args = message.args.map { arg -> if (arg is TextArg) resources.getString(arg.text) else arg }
-    return resources.getString(message.text, *args.toTypedArray())
+    return message.quantity?.let { resources.getQuantityString(message.text, it, *args.toTypedArray()) }
+        ?: resources.getString(message.text, *args.toTypedArray())
 }
 
 @Composable

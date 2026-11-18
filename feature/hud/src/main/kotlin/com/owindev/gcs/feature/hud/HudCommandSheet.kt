@@ -203,7 +203,11 @@ private fun CommandsPreview(palette: GcsPalette) {
                         command = VehicleCommand.TAKE_OFF,
                         systemId = 1,
                         altitudeMetres = 10f,
-                        key = ConfirmKey(CommandKey(SystemId(1), connection = 1), altitudeMetres = 10f),
+                        key = ConfirmKey(
+                            VehicleCommand.TAKE_OFF,
+                            CommandKey(SystemId(1), connection = 1),
+                            altitudeMetres = 10f,
+                        ),
                         unavailable = null,
                     ),
                     actions = CommandActions(),

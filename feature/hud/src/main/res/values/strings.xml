@@ -192,10 +192,8 @@
     <string name="hud_command_accepted">%1$s: accepted by the vehicle</string>
     <string name="hud_command_busy">%1$s: the vehicle is busy. Try again.</string>
     <string name="hud_command_rejected">%1$s: rejected by the vehicle (%2$s)</string>
-    <string name="hud_command_no_answer">%1$s: no answer from the vehicle after %2$d attempts. Check the vehicle.</string>
     <string name="hud_command_no_answer_not_resent">%1$s: no answer, not re-sent. Check the vehicle.</string>
     <string name="hud_command_started_no_end">%1$s: the vehicle started it but never said it finished. Check the vehicle.</string>
-    <string name="hud_command_mode_not_changed">Take off stopped: the vehicle did not change to GUIDED. It may stay in GUIDED.</string>
     <string name="hud_command_take_off_stopped">Take off stopped: the vehicle may be in GUIDED, and NAV_TAKEOFF was not sent (%1$s).</string>
     <string name="hud_command_superseded">%1$s: replaced by a newer RTL or land</string>
     <string name="hud_command_not_sent">%1$s: not sent (%2$s)</string>
@@ -220,5 +218,18 @@
     <plurals name="hud_command_preflight_red">
         <item quantity="one">Pre-flight check: %1$d item red</item>
         <item quantity="other">Pre-flight check: %1$d items red</item>
+    </plurals>
+    <string name="hud_command_guided_not_shown">Take off stopped: the vehicle accepted GUIDED but never showed it. It may still switch to GUIDED.</string>
+    <string name="hud_command_guided_no_answer">Take off stopped: no answer to the change to GUIDED. The vehicle may be in GUIDED.</string>
+    <string name="hud_command_guided_refused">Take off stopped: the vehicle refused GUIDED (%1$s). It stays in its mode.</string>
+    <string name="hud_rejection_busy">busy</string>
+    <string name="hud_not_sent_late_window">the vehicle may still answer the last one; wait a moment</string>
+    <plurals name="hud_command_no_answer">
+        <item quantity="one">%1$s: no answer from the vehicle after %2$d attempt. Check the vehicle.</item>
+        <item quantity="other">%1$s: no answer from the vehicle after %2$d attempts. Check the vehicle.</item>
+    </plurals>
+    <plurals name="hud_command_no_answer_stopped">
+        <item quantity="one">%1$s: no answer after %2$d attempt, then stopped (%3$s). Check the vehicle.</item>
+        <item quantity="other">%1$s: no answer after %2$d attempts, then stopped (%3$s). Check the vehicle.</item>
     </plurals>
 </resources>

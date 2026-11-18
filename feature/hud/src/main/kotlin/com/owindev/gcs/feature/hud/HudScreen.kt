@@ -89,6 +89,7 @@ fun HudScreen(
             onConfirm = commandsViewModel::onCommandConfirmed,
             onCancel = commandsViewModel::onCommandCancelled,
             onDismissFeedback = commandsViewModel::onFeedbackDismissed,
+            onDismissRefusal = commandsViewModel::onRefusalDismissed,
         ),
     )
 }
@@ -157,7 +158,12 @@ internal fun HudContent(
                 // Under the map, never in a column that scrolls: RTL and land stay in sight whatever the alerts.
                 commandBar?.let {
                     Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
-                        CommandArea(bar = it, feedback = commands.feedback, actions = commandActions)
+                        CommandArea(
+                            bar = it,
+                            feedback = commands.feedback,
+                            actions = commandActions,
+                            refusal = commands.refusal,
+                        )
                     }
                 }
                 Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {

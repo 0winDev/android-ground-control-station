@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ class HudCommandsViewModel @Inject constructor(
     private val rules = CommandRules(linkLoss, landed, groundPosition)
     private val request = MutableStateFlow<Request?>(null)
     private val sent = MutableStateFlow<Sent?>(null)
+    private val refused = MutableStateFlow<Refusal?>(null)
 
     /** The landed state and the position count for 0.5 s, so the bar is judged again at twice that rate. */
     private val ticks: Flow<Unit> = flow {
@@ -78,18 +80,26 @@ class HudCommandsViewModel @Inject constructor(
             key to barOf(key, vehicles, telemetry)
         }
 
-    val state: StateFlow<CommandsUiState> = combine(bar, request, sent, commands.pending) {
+    val state: StateFlow<CommandsUiState> = combine(bar, request, sent, refused, commands.pending) {
             (key, bar),
-            request,
+            opened,
             sent,
+            refused,
             pending,
         ->
+        val sheet = if (key != null && bar != null) opened?.toSheet(key, bar) else null
+        // A sheet that could not be shown once is over: it never comes back by itself when its command does.
+        if (opened != null && sheet == null) request.compareAndSet(opened, null)
         CommandsUiState(
             bar = bar,
-            sheet = if (key != null && bar != null) request?.toSheet(key, bar) else null,
-            feedback = sent?.toFeedback(pending),
+            sheet = sheet,
+            feedback = sent?.toFeedback(pending, key),
+            refusal = refused?.takeIf { it.systemId == key?.systemId }?.feedback,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeout = STOP_TIMEOUT), CommandsUiState())
+    }
+        // Nobody looks for a while: whatever was open was not confirmed, and never reopens by itself.
+        .onCompletion { request.value = null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeout = STOP_TIMEOUT), CommandsUiState())
 
     /** Opens the confirmation of [command], only if it is offered and can be confirmed right now. */
     fun onCommandRequested(command: VehicleCommand) {
@@ -114,11 +124,11 @@ class HudCommandsViewModel @Inject constructor(
 
     /**
      * Sends the command the slide confirmed on [key], with [key]'s altitude: nothing if the sheet's command is no longer
-     * offered, or if the altitude changed since the slide started (it asks for another slide).
+     * offered, and another slide if [key] is not the open sheet's (its command, link or altitude changed meanwhile).
      */
     fun onCommandConfirmed(key: ConfirmKey) {
         val confirming = request.value?.takeIf { canConfirm(it.command) } ?: return
-        if (key.altitudeMetres != confirming.altitudeMetres) {
+        if (key != confirming.confirmKey()) {
             request.value = confirming.copy(slideAgain = true)
         } else {
             request.value = null
@@ -128,30 +138,47 @@ class HudCommandsViewModel @Inject constructor(
 
     /** Hides an ended command's result; one still waiting for its answer stays. */
     fun onFeedbackDismissed() {
-        sent.update { current -> current?.takeIf { it.result == null } }
+        sent.update { current -> current?.takeIf { it.message == null } }
+    }
+
+    fun onRefusalDismissed() {
+        refused.value = null
     }
 
     private fun launchSend(confirming: Request, key: ConfirmKey) {
-        val sending = Sent(confirming.command, confirming.openedOn.systemId)
+        val replaced = sent.value
+        val sending = Sent(confirming.command, confirming.openedOn)
         sent.value = sending
+        refused.value = null
         viewModelScope.launch {
-            val result = send(confirming.command, key) ?: return@launch
-            if (result == CommandResult.NotSent(NotSentReason.KeyChanged)) {
-                sent.compareAndSet(sending, null)
-                commands.commandKey.value?.let { now ->
+            val result = send(confirming.command, key)
+            val outdated = result == CommandResult.NotSent(NotSentReason.KeyChanged)
+            val now = commands.commandKey.value
+            val otherPending = commands.pending.value != null
+            when {
+                // Another slide, but only for the same vehicle: never one it was not confirmed for.
+                outdated && now?.systemId == key.commandKey.systemId -> {
+                    sent.compareAndSet(sending, replaced)
                     request.value = Request(confirming.command, now, key.altitudeMetres, slideAgain = true)
                 }
-            } else {
-                sent.compareAndSet(sending, sending.ended(result))
+
+                // A refusal never hides the command still waiting, nor an emergency the operator has not dismissed.
+                result is CommandResult.NotSent && replaced?.mustStay() == true -> {
+                    sent.compareAndSet(sending, replaced)
+                    refused.value = Refusal(key.commandKey.systemId, confirming.command, result.reason, otherPending)
+                }
+
+                else -> sent.compareAndSet(sending, sending.ended(result, otherPending))
             }
         }
     }
 
-    private suspend fun send(command: VehicleCommand, key: ConfirmKey): CommandResult? = when (command) {
+    private suspend fun send(command: VehicleCommand, key: ConfirmKey): CommandResult = when (command) {
         // Offered only with no amber item, so there is nothing to acknowledge (#106 brings the checklist).
         VehicleCommand.ARM -> commands.arm(key.commandKey, PreflightAcknowledgements())
 
         VehicleCommand.TAKE_OFF -> key.altitudeMetres?.let { commands.takeOff(key.commandKey, it) }
+            ?: CommandResult.NotSent(NotSentReason.AltitudeOutOfRange)
 
         VehicleCommand.RETURN_TO_LAUNCH -> commands.returnToLaunch(key.commandKey)
 
@@ -175,6 +202,8 @@ class HudCommandsViewModel @Inject constructor(
         val slideAgain: Boolean = false,
     ) {
 
+        fun confirmKey() = ConfirmKey(command, openedOn, altitudeMetres)
+
         /** Shown only on the link it was opened on, and while its command is still on the bar. */
         fun toSheet(key: CommandKey, bar: CommandBar): CommandSheet? =
             bar.offered(command)?.takeIf { key == openedOn }?.let { offered ->
@@ -182,26 +211,47 @@ class HudCommandsViewModel @Inject constructor(
                     command = command,
                     systemId = key.systemId.value,
                     altitudeMetres = altitudeMetres,
-                    key = ConfirmKey(key, altitudeMetres).takeIf { offered.unavailable == null },
+                    key = confirmKey().takeIf { offered.unavailable == null },
                     unavailable = offered.unavailable,
                     slideAgain = slideAgain,
                 )
             }
     }
 
-    /** One command sent; a class, so a newer one is never taken for it. */
-    private class Sent(val command: VehicleCommand, val systemId: SystemId, val result: CommandResult? = null) {
+    /** One command sent on [sentOn], and its result in words once it ended; a class, so a newer one is never taken for it. */
+    private class Sent(val command: VehicleCommand, val sentOn: CommandKey, val message: CommandMessage? = null) {
 
-        fun ended(result: CommandResult) = Sent(command, systemId, result)
+        fun ended(result: CommandResult, otherPending: Boolean) =
+            Sent(command, sentOn, messageOf(command, result, otherPending))
 
-        fun toFeedback(pending: PendingCommand?): CommandFeedback {
-            val status = when {
-                result != null -> messageOf(command, result)?.let(CommandStatus::Ended)
-                pending?.command == command && pending.systemId == systemId -> pending.state.toStatus(command)
-                else -> null
-            } ?: CommandStatus.Sending(attempt = null, attempts = command.attempts())
+        fun mustStay(): Boolean = message == null || message.level == CommandMessage.Level.EMERGENCY
+
+        /**
+         * Shown only for its own vehicle; a result that needs no action ends with the connection it was sent on, the
+         * others stay until the operator dismisses them.
+         */
+        fun toFeedback(pending: PendingCommand?, key: CommandKey?): CommandFeedback? {
+            val current = key?.systemId == sentOn.systemId &&
+                (message == null || message.level > CommandMessage.Level.ADVISORY || key == sentOn)
+            if (!current) return null
+            val status = message?.let(CommandStatus::Ended)
+                ?: pending?.takeIf { it.command == command && it.systemId == sentOn.systemId }?.state?.toStatus(command)
+                ?: CommandStatus.Sending(attempt = null, attempts = command.attempts())
             return CommandFeedback(command, status)
         }
+    }
+
+    /** A command refused before it left, shown apart so it never hides the one that is still the operator's concern. */
+    private class Refusal(
+        val systemId: SystemId,
+        command: VehicleCommand,
+        reason: NotSentReason,
+        otherPending: Boolean,
+    ) {
+        val feedback = CommandFeedback(
+            command,
+            CommandStatus.Ended(messageOf(command, CommandResult.NotSent(reason), otherPending)),
+        )
     }
 
     private companion object {
