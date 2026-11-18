@@ -47,7 +47,7 @@ enum class Rejection {
     UNKNOWN,
 }
 
-/** Why a command never left (REQ-043, REQ-048). */
+/** Why a command never left (REQ-043, REQ-048, REQ-050). */
 sealed interface NotSentReason {
     /** A recording plays: nothing reaches a vehicle. */
     data object Replay : NotSentReason
@@ -60,6 +60,9 @@ sealed interface NotSentReason {
 
     /** The vehicle's HEARTBEATs come from another address than its first one. */
     data object RouteChanged : NotSentReason
+
+    /** The vehicle, its link or the session changed since the command was confirmed (REQ-050). */
+    data object KeyChanged : NotSentReason
 
     /** A take off for a vehicle whose HEARTBEAT does not show it armed. */
     data object NotArmed : NotSentReason

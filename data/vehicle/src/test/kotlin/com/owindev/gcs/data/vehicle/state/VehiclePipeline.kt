@@ -5,6 +5,7 @@ import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.transport.Datagram
+import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.GcsHeartbeatSender
@@ -28,6 +29,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.TestScope
 
@@ -121,3 +123,8 @@ internal fun datagramOf(fixture: String) = Datagram(
         else -> SYSTEM_1_ADDRESS
     },
 )
+
+/** A recording with nothing in it, for a replay that only has to start and stop. */
+internal fun emptySource(): DatagramSource = object : DatagramSource {
+    override fun datagrams(): Flow<Datagram> = emptyFlow()
+}

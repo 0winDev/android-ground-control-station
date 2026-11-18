@@ -5,7 +5,6 @@ import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.transport.Datagram
-import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.command.CommandRoute
@@ -22,9 +21,7 @@ import java.net.InetSocketAddress
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.test.TestScope
@@ -204,7 +201,3 @@ private const val AFTER_THREE_GAPS = 400L
 private const val ONE_SECOND = 1_000L
 private const val TEN_SECONDS = 10_000L
 private val MOVED_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_580)
-
-private fun emptySource(): DatagramSource = object : DatagramSource {
-    override fun datagrams(): Flow<Datagram> = emptyFlow()
-}

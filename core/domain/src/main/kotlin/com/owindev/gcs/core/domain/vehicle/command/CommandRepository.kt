@@ -6,9 +6,13 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Sends commands to the active vehicle one at a time, each ending in exactly one [CommandResult] (REQ-042, REQ-043).
- * Cancelling the caller stops only its wait for the result, never the command or its retries.
+ * Each goes to its key's vehicle only while that key is still [commandKey], checked under the sender's lock before every
+ * attempt (REQ-050). Cancelling the caller stops only its wait for the result, never the command or its retries.
  */
 interface CommandRepository {
+
+    /** The key a command confirmed now would carry, `null` while no live vehicle is active. */
+    val commandKey: StateFlow<CommandKey?>
 
     /** The command waiting for its answer, `null` when none is. */
     val pending: StateFlow<PendingCommand?>
@@ -17,20 +21,20 @@ interface CommandRepository {
      * Sent once, never re-sent, and only while no pre-flight item is red and every amber one is in [acknowledged]
      * (REQ-048), checked again right before it leaves.
      */
-    suspend fun arm(systemId: SystemId, acknowledged: PreflightAcknowledgements): CommandResult
+    suspend fun arm(key: CommandKey, acknowledged: PreflightAcknowledgements): CommandResult
 
     /** Supersedes a pending RTL or land. */
-    suspend fun returnToLaunch(systemId: SystemId): CommandResult
+    suspend fun returnToLaunch(key: CommandKey): CommandResult
 
     /** Supersedes a pending RTL or land. */
-    suspend fun land(systemId: SystemId): CommandResult
+    suspend fun land(key: CommandKey): CommandResult
 
     /**
      * Puts the vehicle in GUIDED first when it is not, then takes off to [altitudeMetres] above home (REQ-044), only
      * while armed and no pre-flight item is red (REQ-048); neither step is re-sent, and RTL or land supersedes it at
      * any step. RTL and land are never refused by the pre-flight check.
      */
-    suspend fun takeOff(systemId: SystemId, altitudeMetres: Float): CommandResult
+    suspend fun takeOff(key: CommandKey, altitudeMetres: Float): CommandResult
 }
 
 enum class VehicleCommand {

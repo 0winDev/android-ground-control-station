@@ -3,6 +3,7 @@ package com.owindev.gcs.data.vehicle.command
 import android.util.Log
 import com.owindev.gcs.core.domain.preflight.PreflightAcknowledgements
 import com.owindev.gcs.core.domain.vehicle.SystemId
+import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
@@ -32,7 +33,7 @@ internal class DefaultCommandRepository @Inject constructor(
     private val exchange: CommandExchange,
     private val takeOff: TakeOffSequence,
     private val altitudeRule: TakeOffAltitudeRule,
-    private val routes: CommandRoutes,
+    private val routes: CommandKeys,
     private val preflight: PreflightVeto,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : CommandRepository {
@@ -48,37 +49,39 @@ internal class DefaultCommandRepository @Inject constructor(
      */
     private val lateWindows = mutableMapOf<VehicleCommand, Any>()
 
+    override val commandKey: StateFlow<CommandKey?> = routes.commandKey
+
     private val mutablePending = MutableStateFlow<PendingCommand?>(null)
     override val pending: StateFlow<PendingCommand?> = mutablePending.asStateFlow()
 
-    override suspend fun arm(systemId: SystemId, acknowledged: PreflightAcknowledgements): CommandResult = submit(
-        Request(systemId, VehicleCommand.ARM) { onState, onResult ->
-            val vetoed = routes.vetoedBy { preflight.refusalToArm(it, acknowledged) }
-            exchange.run(systemId, VehicleCommand.ARM.name, ARM_COMMAND, onState, vetoed, onResult)
+    override suspend fun arm(key: CommandKey, acknowledged: PreflightAcknowledgements): CommandResult = submit(
+        Request(key.systemId, VehicleCommand.ARM) { onState, onResult ->
+            val vetoed = routes.keyedBy(key).vetoedBy { preflight.refusalToArm(it, acknowledged) }
+            exchange.run(key.systemId, VehicleCommand.ARM.name, ARM_COMMAND, onState, vetoed, onResult)
         },
     )
 
-    override suspend fun returnToLaunch(systemId: SystemId): CommandResult =
-        submit(systemId, VehicleCommand.RETURN_TO_LAUNCH, RETURN_TO_LAUNCH_COMMAND)
+    override suspend fun returnToLaunch(key: CommandKey): CommandResult =
+        submit(key, VehicleCommand.RETURN_TO_LAUNCH, RETURN_TO_LAUNCH_COMMAND)
 
-    override suspend fun land(systemId: SystemId): CommandResult = submit(systemId, VehicleCommand.LAND, LAND_COMMAND)
+    override suspend fun land(key: CommandKey): CommandResult = submit(key, VehicleCommand.LAND, LAND_COMMAND)
 
-    override suspend fun takeOff(systemId: SystemId, altitudeMetres: Float): CommandResult {
+    override suspend fun takeOff(key: CommandKey, altitudeMetres: Float): CommandResult {
         if (!altitudeRule.isValid(altitudeMetres)) {
             val result = CommandResult.NotSent(NotSentReason.AltitudeOutOfRange)
-            report(systemId, VehicleCommand.TAKE_OFF, result)
+            report(key.systemId, VehicleCommand.TAKE_OFF, result)
             return result
         }
         return submit(
-            Request(systemId, VehicleCommand.TAKE_OFF) { onState, onResult ->
-                takeOff.run(systemId, altitudeMetres, onState, onResult)
+            Request(key.systemId, VehicleCommand.TAKE_OFF) { onState, onResult ->
+                takeOff.run(key.systemId, altitudeMetres, routes.keyedBy(key), onState, onResult)
             },
         )
     }
 
-    private suspend fun submit(systemId: SystemId, command: VehicleCommand, mavCommand: MavCommand) = submit(
-        Request(systemId, command) { onState, onResult ->
-            exchange.run(systemId, command.name, mavCommand, onState, onResult = onResult)
+    private suspend fun submit(key: CommandKey, command: VehicleCommand, mavCommand: MavCommand) = submit(
+        Request(key.systemId, command) { onState, onResult ->
+            exchange.run(key.systemId, command.name, mavCommand, onState, routes.keyedBy(key), onResult)
         },
     )
 

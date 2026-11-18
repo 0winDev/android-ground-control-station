@@ -7,7 +7,6 @@ import com.owindev.gcs.core.domain.telemetry.TrailRule
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.transport.Datagram
-import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.SendResult
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
@@ -32,7 +31,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
@@ -131,10 +129,6 @@ class SessionChangeTest {
 private fun liveSocketWith(fixture: String): Flow<Datagram> = flow {
     emit(Datagram(readFixture(fixture), VEHICLE_ADDRESS))
     awaitCancellation()
-}
-
-private fun emptySource(): DatagramSource = object : DatagramSource {
-    override fun datagrams(): Flow<Datagram> = emptyFlow()
 }
 
 private const val HEARTBEAT = "heartbeat/disarmed-stabilize.bin"

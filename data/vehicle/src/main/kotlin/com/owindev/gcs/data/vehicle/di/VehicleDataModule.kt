@@ -32,6 +32,7 @@ import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
 import com.owindev.gcs.data.vehicle.alert.DefaultAlertRepository
+import com.owindev.gcs.data.vehicle.command.CommandKeys
 import com.owindev.gcs.data.vehicle.command.CommandRoutes
 import com.owindev.gcs.data.vehicle.command.DefaultCommandRepository
 import com.owindev.gcs.data.vehicle.command.PreflightGate
@@ -83,6 +84,9 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindCommandRoutes(impl: DefaultVehicleRepository): CommandRoutes
+
+    @Binds
+    internal abstract fun bindCommandKeys(impl: DefaultVehicleRepository): CommandKeys
 
     @Binds
     internal abstract fun bindPreflightVeto(impl: PreflightGate): PreflightVeto
