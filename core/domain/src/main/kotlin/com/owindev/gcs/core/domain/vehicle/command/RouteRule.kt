@@ -11,12 +11,15 @@ import kotlin.time.ComparableTimeMark
  */
 class RouteRule(private val linkLoss: LinkLossRule) {
 
-    fun statusOf(route: VehicleRoute): RouteStatus {
-        val recent = recentOf(route.heard)
+    fun statusOf(route: VehicleRoute): RouteStatus = statusOf(route.pinned, route.heard)
+
+    /** The status of a route pinned on [pinned], with when each address was last [heard]. */
+    fun statusOf(pinned: RouteAddress, heard: Map<RouteAddress, ComparableTimeMark>): RouteStatus {
+        val recent = recentOf(heard)
         return when {
-            recent.size > 1 -> RouteStatus.Alternating(route.pinned, recent)
-            recent.isEmpty() || recent.single() == route.pinned -> RouteStatus.Pinned
-            else -> RouteStatus.Changed(from = route.pinned, to = recent.single())
+            recent.size > 1 -> RouteStatus.Alternating(pinned, recent)
+            recent.isEmpty() || recent.single() == pinned -> RouteStatus.Pinned
+            else -> RouteStatus.Changed(from = pinned, to = recent.single())
         }
     }
 

@@ -77,9 +77,9 @@ import kotlinx.coroutines.launch
  * The [activeSystemId] is the [ActiveVehicle] the link pinned with the first vehicle heard, and stays so (REQ-020);
  * the others are kept in the map like any vehicle, never merged into it.
  *
- * Commands take one route (REQ-043, [routeTo]): the address of the active vehicle's first live HEARTBEAT in the
- * session. While its HEARTBEATs come from another address, as from a forger with its system ID (`docs/security.md`,
- * N-2), no command goes anywhere.
+ * Commands take one route (REQ-043, REQ-051, [routeTo]): the address of the active vehicle's first live HEARTBEAT in
+ * the session ([ActiveRoute]). While its HEARTBEATs come from another address too, or only from another one, as from a
+ * forger with its system ID (`docs/security.md`, N-2), no command goes anywhere.
  *
  * The watchdog is the only writer: HEARTBEATs and timeouts reach it as events through one channel and
  * are handled one at a time, so no state is shared between threads. Vehicles are never removed: a lost
@@ -129,9 +129,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     @Volatile
     private var addresses: Map<SystemId, InetSocketAddress> = emptyMap()
 
-    /** Where the active vehicle's first live HEARTBEAT of the session came from; written only by the watchdog. */
-    @Volatile
-    private var commandAddress: InetSocketAddress? = null
+    private val route = ActiveRoute(rule)
 
     /** Whether the listener holds the link open right now; written only by the listener. */
     @Volatile
@@ -221,7 +219,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Normally CONNECTED; LOST only if the watchdog got to this HEARTBEAT after the
                         // timeout had already passed, so a late event never flashes CONNECTED.
                         val link = rule.linkAfter(elapsed)
-                        pinCommandAddress(event)
+                        recordRoute(event)
                         addresses += systemId to event.sender
                         update(systemId, Vehicle(event.state, link, event.at, origin = event.session.origin))
                         if (link == VehicleLink.CONNECTED) {
@@ -262,9 +260,9 @@ internal class DefaultVehicleRepository @Inject constructor(
         }
     }
 
-    private fun pinCommandAddress(heard: Event.Heard) {
+    private fun recordRoute(heard: Event.Heard) {
         if (heard.state.systemId == activeVehicle.systemId.value && heard.session.origin == DataOrigin.LIVE) {
-            commandAddress = commandAddress ?: heard.sender
+            route.heard(heard.sender, heard.at)
         }
     }
 
@@ -278,7 +276,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         timers.values.forEach(Job::cancel)
         timers.clear()
         addresses = emptyMap()
-        commandAddress = null
+        route.reset()
         uplink.reset()
         mutableVehicles.value = emptyMap()
         telemetryStore.startSession(to)
@@ -353,15 +351,11 @@ internal class DefaultVehicleRepository @Inject constructor(
     private fun activeHeardNow(): Boolean = listening && activeAddressWhileConnected() != null
 
     /** REQ-043. Read from any thread; only the watchdog writes what it reads. */
-    override fun routeTo(systemId: SystemId): CommandRoute {
-        val pinned = commandAddress
-        return when {
-            session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.Replay)
-            systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NotActiveVehicle)
-            pinned == null || !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LinkLost)
-            addresses[systemId] != pinned -> CommandRoute.Closed(NotSentReason.RouteChanged)
-            else -> CommandRoute.Open(pinned)
-        }
+    override fun routeTo(systemId: SystemId): CommandRoute = when {
+        session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.Replay)
+        systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NotActiveVehicle)
+        !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LinkLost)
+        else -> route.check().toCommandRoute()
     }
 
     private sealed interface Event {
@@ -381,6 +375,12 @@ internal class DefaultVehicleRepository @Inject constructor(
 }
 
 /** [before] as LOST when [heard] is CONNECTED but the gap between their HEARTBEATs passed the timeout. */
+private fun RouteCheck.toCommandRoute(): CommandRoute = when (this) {
+    RouteCheck.None -> CommandRoute.Closed(NotSentReason.LinkLost)
+    RouteCheck.Held -> CommandRoute.Closed(NotSentReason.RouteChanged)
+    is RouteCheck.Open -> CommandRoute.Open(address)
+}
+
 private fun LinkLossRule.lostInGap(before: Vehicle?, heard: Vehicle): Vehicle? {
     if (before == null || heard.link != VehicleLink.CONNECTED) return null
     val gap = before.lastHeartbeat.elapsedNow() - heard.lastHeartbeat.elapsedNow()

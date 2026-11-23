@@ -629,7 +629,9 @@ class DefaultVehicleRepositoryTest {
             coEvery { idleSender.run(any()) } coAnswers { awaitCancellation() }
             val failingRule: LinkLossRule = mockk()
             every { failingRule.timeout } returns TIMEOUT
-            every { failingRule.linkAfter(any()) } returns VehicleLink.CONNECTED andThenThrows IllegalStateException()
+            // The first HEARTBEAT reads the rule twice, for its link and for its route (REQ-051).
+            every { failingRule.linkAfter(any()) } returnsMany
+                listOf(VehicleLink.CONNECTED, VehicleLink.CONNECTED) andThenThrows IllegalStateException()
             every { transport.datagrams() } returns datagrams(
                 GAP to DISARMED_STABILIZE,
                 WELL_PAST_TIMEOUT to DISARMED_GUIDED,
