@@ -36,7 +36,10 @@ internal class DefaultUplinkRepository @Inject constructor(private val timeSourc
 
     fun heartbeatFailed() = mutableHealth.update { it.afterHeartbeatFailed() }
 
-    fun commandUnanswered() = mutableHealth.update { it.afterCommandUnanswered(timeSource.markNow()) }
+    /** Counted only when [to] is the active vehicle's command route: a command by a replaced route proves nothing. */
+    fun commandUnanswered(to: InetSocketAddress) = synchronized(lock) {
+        if (to == answersFrom) mutableHealth.update { it.afterCommandUnanswered(timeSource.markNow()) }
+    }
 
     /** Only for a COMMAND_ACK from the active vehicle's system ID; counted only when [from] is its command route. */
     fun commandAnswered(from: InetSocketAddress) = synchronized(lock) {

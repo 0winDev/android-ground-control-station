@@ -396,14 +396,14 @@ internal class DefaultVehicleRepository @Inject constructor(
 }
 
 /** [before] as LOST when [heard] is CONNECTED but the gap between their HEARTBEATs passed the timeout. */
-private fun RouteCheck.toCommandRoute(): CommandRoute = when (this) {
-    RouteCheck.None -> CommandRoute.Closed(NotSentReason.LinkLost)
-    RouteCheck.Held -> CommandRoute.Closed(NotSentReason.RouteChanged)
-    is RouteCheck.Open -> CommandRoute.Open(address)
-}
-
 private fun LinkLossRule.lostInGap(before: Vehicle?, heard: Vehicle): Vehicle? {
     if (before == null || heard.link != VehicleLink.CONNECTED) return null
     val gap = before.lastHeartbeat.elapsedNow() - heard.lastHeartbeat.elapsedNow()
     return before.copy(link = VehicleLink.LOST).takeIf { linkAfter(gap) == VehicleLink.LOST }
+}
+
+private fun RouteCheck.toCommandRoute(): CommandRoute = when (this) {
+    RouteCheck.None -> CommandRoute.Closed(NotSentReason.LinkLost)
+    RouteCheck.Held -> CommandRoute.Closed(NotSentReason.RouteChanged)
+    is RouteCheck.Open -> CommandRoute.Open(address)
 }

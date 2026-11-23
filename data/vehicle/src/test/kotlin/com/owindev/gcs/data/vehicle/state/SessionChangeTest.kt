@@ -117,7 +117,7 @@ class SessionChangeTest {
             repository.vehicles.launchIn(backgroundScope)
             delay(HEARD)
             uplink.commandAnswered(VEHICLE_ADDRESS)
-            uplink.commandUnanswered()
+            uplink.commandUnanswered(VEHICLE_ADDRESS)
 
             session.replay(emptySource(), ReplayClock(testScheduler.timeSource))
             runCurrent()

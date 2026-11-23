@@ -641,6 +641,71 @@ class DefaultCommandRepositoryTest {
             result shouldBeEqualTo true
         }
 
+    @Tag("REQ-051")
+    @Test
+    fun `GIVEN an RTL in progress and a new route accepted WHEN its final answer comes THEN no answer`() =
+        testScope.runTest {
+            vehicleAnswers { command -> ack(MAV_RESULT_IN_PROGRESS).takeIf { command.confirmation == 0 } }
+            backgroundScope.launch {
+                delay(HALF_AN_ATTEMPT)
+                currentKey = CHANGED_KEY
+                messages.emit(ack(MAV_RESULT_ACCEPTED))
+            }
+
+            val result = repository.returnToLaunch(KEY)
+
+            result shouldBeEqualTo CommandResult.NoAnswer(attempts = 1, startedByVehicle = true, retriesStopped = null)
+        }
+
+    @Tag("REQ-051")
+    @Test
+    fun `GIVEN an RTL in progress and its route doubted WHEN its final answer comes THEN no answer`() =
+        testScope.runTest {
+            vehicleAnswers { command -> ack(MAV_RESULT_IN_PROGRESS).takeIf { command.confirmation == 0 } }
+            backgroundScope.launch {
+                delay(HALF_AN_ATTEMPT)
+                route = CommandRoute.Closed(NotSentReason.RouteChanged)
+                messages.emit(ack(MAV_RESULT_ACCEPTED))
+            }
+
+            val result = repository.returnToLaunch(KEY)
+
+            result shouldBeEqualTo CommandResult.NoAnswer(attempts = 1, startedByVehicle = true, retriesStopped = null)
+        }
+
+    @Tag("REQ-051")
+    @Test
+    fun `GIVEN the route opens elsewhere on the same key WHEN an RTL retries THEN no retry leaves`() =
+        testScope.runTest {
+            vehicleAnswers { null }
+            backgroundScope.launch {
+                delay(HALF_AN_ATTEMPT)
+                route = CommandRoute.Open(OTHER_ADDRESS)
+            }
+
+            val result = repository.returnToLaunch(KEY)
+
+            result shouldBeEqualTo noAnswer(attempts = 1, retriesStopped = NotSentReason.RouteChanged)
+            sent.size shouldBeEqualTo 1
+        }
+
+    @Tag("REQ-051")
+    @Tag("REQ-045")
+    @Test
+    fun `GIVEN a route accepted during an RTL's last attempt WHEN it ends unanswered THEN no doubt is marked`() =
+        testScope.runTest {
+            vehicleAnswers { null }
+            backgroundScope.launch {
+                delay(PAST_TWO_ATTEMPTS)
+                uplink.restartOn(OTHER_ADDRESS)
+            }
+            repository.returnToLaunch(KEY)
+
+            val result = uplink.health.value.unansweredSince
+
+            result shouldBeEqualTo null
+        }
+
     @Tag("REQ-050")
     @Tag("REQ-044")
     @Test

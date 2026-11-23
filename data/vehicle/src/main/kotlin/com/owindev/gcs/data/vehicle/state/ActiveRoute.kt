@@ -38,16 +38,17 @@ internal class ActiveRoute(
     val pin: StateFlow<RoutePin?> = mutablePin.asStateFlow()
 
     /**
-     * Records a HEARTBEAT of [systemId] if it is the active live vehicle's, keeping only the pinned address and those
-     * [RouteRule] still counts, so made-up addresses never pile up.
+     * Records a HEARTBEAT of [systemId] if it is the active live vehicle's, keeping only the pinned address and the
+     * [OTHERS_KEPT] newest others: all [RouteRule] needs, so a flood of made-up addresses costs nothing more.
      */
     fun heard(systemId: SystemId, origin: DataOrigin, sender: InetSocketAddress, at: ComparableTimeMark) {
         if (systemId != activeVehicle.systemId.value || origin != DataOrigin.LIVE) return
         val before = mutablePin.value
         val current = before ?: RoutePin(sender, emptyMap())
+        val pinned = current.address.toRoute()
         val all = current.heard + (sender.toRoute() to at)
-        val kept = rule.recentOf(all).toSet() + current.address.toRoute()
-        mutablePin.value = current.copy(heard = all.filterKeys { it in kept })
+        val others = (all - pinned).entries.sortedByDescending { (_, heardAt) -> heardAt }.take(OTHERS_KEPT)
+        mutablePin.value = current.copy(heard = all.filterKeys { it == pinned } + others.associate { it.toPair() })
         if (before == null) uplink.answersFrom(sender)
     }
 
@@ -82,6 +83,11 @@ internal class ActiveRoute(
     }
 
     private fun statusOf(pin: RoutePin): RouteStatus = rule.statusOf(pin.address.toRoute(), pin.heard)
+
+    private companion object {
+        /** Two others heard within a timeout already make the route alternate. */
+        const val OTHERS_KEPT = 2
+    }
 }
 
 /** Where commands go, and when each address the active vehicle was heard from was last heard. */

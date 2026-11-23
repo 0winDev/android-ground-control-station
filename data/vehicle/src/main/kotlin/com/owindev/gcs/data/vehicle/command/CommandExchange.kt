@@ -63,7 +63,9 @@ internal class CommandExchange @Inject constructor(
                 val result = attempts(request, acks)
                 // Marked before the late window opens, so a late answer is always taken after the mark, and only in
                 // the session the command was sent in: a session that ended has reset the uplink.
-                if (result.isUplinkEvidence && session.session.value == current) uplink.commandUnanswered()
+                if (result.isUplinkEvidence && session.session.value == current) {
+                    uplink.commandUnanswered(request.address)
+                }
                 onResult(result)
                 if (result is CommandResult.NoAnswer) dropLateAnswers(request, acks)
                 coroutineContext.cancelChildren()
@@ -97,7 +99,8 @@ internal class CommandExchange @Inject constructor(
             componentId == MAV_COMP_ID_AUTOPILOT1 &&
             sender == address &&
             ack.command == request.command.id &&
-            ack.isForThisGcs()
+            ack.isForThisGcs() &&
+            !request.routeReplaced()
     }
 
     private suspend fun attempts(request: Request, acks: ReceiveChannel<CommandAck>): CommandResult {
@@ -113,7 +116,7 @@ internal class CommandExchange @Inject constructor(
     /** Sends the [attempt]th time and waits [ACK_TIMEOUT]: `null` when no answer came in time. */
     private suspend fun attempt(request: Request, attempt: Int, acks: ReceiveChannel<CommandAck>): CommandResult? {
         val sent = sender.send(commandLongOf(request.systemId, request.command, confirmation = attempt - 1)) {
-            request.routing.routeTo(request.systemId)
+            request.routeNow()
         }
         val received = if (sent == CommandSendResult.Sent) {
             withTimeoutOrNull(ACK_TIMEOUT) { acks.receiveCatching() }
@@ -193,9 +196,30 @@ internal class CommandExchange @Inject constructor(
         val onState: (PendingState) -> Unit,
         /** The route the command left by; its answers come only from there. */
         val address: InetSocketAddress,
-    )
+    ) {
+
+        /** The command's route now: open only to the address its answers are taken from. */
+        fun routeNow(): CommandRoute = when (val route = routing.routeTo(systemId)) {
+            is CommandRoute.Open ->
+                if (route.address == address) route else CommandRoute.Closed(NotSentReason.RouteChanged)
+
+            is CommandRoute.Closed -> route
+        }
+
+        /**
+         * Whether the route the command left by was replaced or doubted since (REQ-051): its answers then answer
+         * nothing. The other checks, such as the pre-flight veto before a take off's second step, never drop an
+         * answer already due.
+         */
+        fun routeReplaced(): Boolean = when (val route = routeNow()) {
+            is CommandRoute.Open -> false
+            is CommandRoute.Closed -> route.reason in ROUTE_REPLACED
+        }
+    }
 
     companion object {
+        private val ROUTE_REPLACED: Set<NotSentReason> = setOf(NotSentReason.KeyChanged, NotSentReason.RouteChanged)
+
         /** Per attempt (ADR 0008): SITL answered in 6–27 ms (#36), with room for a radio link's round trip. */
         val ACK_TIMEOUT: Duration = 1.5.seconds
 

@@ -2,9 +2,12 @@ package com.owindev.gcs.data.vehicle.state
 
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.TrailRule
+import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.RouteAcceptance
 import com.owindev.gcs.core.domain.vehicle.command.RouteOffer
+import com.owindev.gcs.core.domain.vehicle.command.RouteRule
+import com.owindev.gcs.core.domain.vehicle.command.RouteStatus
 import com.owindev.gcs.core.testing.readFixture
 import com.owindev.gcs.core.transport.Datagram
 import com.owindev.gcs.core.transport.SendResult
@@ -49,6 +52,7 @@ class RouteAcceptanceTest {
     private val telemetryStore = TelemetryStore(TrailRule(StalenessRule()), ActiveVehicle())
     private val uplink = DefaultUplinkRepository(testScope.testScheduler.timeSource)
     private val announced = mutableListOf<VehicleTarget?>()
+    private val routeRule = RouteRule(LinkLossRule())
 
     private lateinit var repository: DefaultVehicleRepository
 
@@ -188,29 +192,78 @@ class RouteAcceptanceTest {
         }
 
     @Test
-    fun `GIVEN an accepted route WHEN the HEARTBEATs move again THEN commands are held again`() = testScope.runTest {
-        every { transport.datagrams() } returns datagrams(
-            GAP to DISARMED_STABILIZE,
-            afterwards = {
-                repeat(MOVED_HEARTBEATS) {
-                    delay(ONE_SECOND)
-                    emit(movedHeartbeat())
-                }
-                while (true) {
-                    delay(ONE_SECOND)
-                    emit(Datagram(readFixture(DISARMED_STABILIZE), THIRD_ADDRESS))
-                }
-            },
-        )
-        repository.vehicles.launchIn(backgroundScope)
-        delay(CHANGED)
-        repository.acceptRoute(offerOnCurrentKey())
-        delay(UNTIL_MOVED_AGAIN)
+    fun `GIVEN an accepted route WHEN the HEARTBEATs move again for good THEN it changed from the accepted one`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns movedAndThenThird()
+            repository.vehicles.launchIn(backgroundScope)
+            delay(CHANGED)
+            repository.acceptRoute(offerOnCurrentKey())
+            delay(UNTIL_THIRD_ALONE)
 
-        val result = repository.routeTo(SYSTEM_1)
+            val result = repository.route.value?.let(routeRule::statusOf)
 
-        result shouldBeEqualTo CommandRoute.Closed(NotSentReason.RouteChanged)
-    }
+            result shouldBeEqualTo RouteStatus.Changed(from = MOVED_ADDRESS.toRoute(), to = THIRD_ADDRESS.toRoute())
+        }
+
+    @Test
+    fun `GIVEN an accepted route and the HEARTBEATs moved again WHEN routing THEN commands are held`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns movedAndThenThird()
+            repository.vehicles.launchIn(backgroundScope)
+            delay(CHANGED)
+            repository.acceptRoute(offerOnCurrentKey())
+            delay(UNTIL_THIRD_ALONE)
+
+            val result = repository.routeTo(SYSTEM_1)
+
+            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.RouteChanged)
+        }
+
+    @Test
+    fun `GIVEN a second change accepted on its own key WHEN routing THEN goes to the third address`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns movedAndThenThird()
+            repository.vehicles.launchIn(backgroundScope)
+            delay(CHANGED)
+            repository.acceptRoute(offerOnCurrentKey())
+            delay(UNTIL_THIRD_ALONE)
+            repository.acceptRoute(
+                RouteOffer(requireNotNull(repository.currentKey), MOVED_ADDRESS.toRoute(), THIRD_ADDRESS.toRoute()),
+            )
+
+            val result = repository.routeTo(SYSTEM_1)
+
+            result shouldBeEqualTo CommandRoute.Open(THIRD_ADDRESS)
+        }
+
+    @Test
+    fun `GIVEN the route changed to another address since the offer WHEN accepting it THEN is outdated`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                afterwards = {
+                    repeat(MOVED_HEARTBEATS - 1) {
+                        delay(ONE_SECOND)
+                        emit(movedHeartbeat())
+                    }
+                    while (true) {
+                        delay(ONE_SECOND)
+                        emit(Datagram(readFixture(DISARMED_STABILIZE), THIRD_ADDRESS))
+                    }
+                },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            delay(CHANGED)
+            val offer = offerOnCurrentKey()
+            delay(UNTIL_THIRD_ALONE)
+
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) {
+                repository.acceptRoute(offer.copy(key = requireNotNull(repository.currentKey)))
+            }
+            val result = deferred.await()
+
+            result shouldBeEqualTo RouteAcceptance.Outdated
+        }
 
     @Test
     fun `GIVEN an accepted route WHEN a new session starts THEN its first HEARTBEAT pins the route again`() =
@@ -292,6 +345,61 @@ class RouteAcceptanceTest {
         }
 
     @Tag("REQ-045")
+    @Test
+    fun `GIVEN an accepted route and a new session from another address WHEN answered by it THEN awaits none`() =
+        testScope.runTest {
+            val activeVehicle = ActiveVehicle()
+            val session = sessionOn(transport, activeVehicle)
+            val switching =
+                repositoryOn(transport, telemetryRequester, telemetryStore, activeVehicle, session, uplink = uplink)
+            every { transport.datagrams() } returnsMany listOf(
+                movedForGood(),
+                flow {
+                    delay(GAP)
+                    emit(Datagram(readFixture(DISARMED_STABILIZE), THIRD_ADDRESS))
+                    awaitCancellation()
+                },
+            )
+            switching.vehicles.launchIn(backgroundScope)
+            delay(CHANGED)
+            switching.acceptRoute(offerOn(switching))
+            session.replay(emptySource(), ReplayClock(testScheduler.timeSource))
+            runCurrent()
+            session.live()
+            delay(AFTER_TWO_GAPS)
+            uplink.commandAnswered(THIRD_ADDRESS)
+
+            val result = uplink.health.value.awaitsAnswer
+
+            result shouldBeEqualTo false
+        }
+
+    @Test
+    fun `GIVEN HEARTBEATs from a flood of made-up addresses WHEN judging the route THEN alternates on three kept`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                afterwards = {
+                    repeat(FLOOD) { index ->
+                        delay(1)
+                        emit(Datagram(readFixture(DISARMED_STABILIZE), madeUp(index)))
+                    }
+                    awaitCancellation()
+                },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            delay(GAP + FLOOD + GAP)
+
+            val result = repository.route.value
+
+            result?.heard?.size shouldBeEqualTo KEPT
+            result?.let(routeRule::statusOf) shouldBeEqualTo RouteStatus.Alternating(
+                SYSTEM_1_ADDRESS.toRoute(),
+                listOf(madeUp(FLOOD - 1), madeUp(FLOOD - 2), SYSTEM_1_ADDRESS).map { it.toRoute() },
+            )
+        }
+
+    @Tag("REQ-045")
     @Tag("REQ-048")
     @Test
     fun `GIVEN the first HEARTBEAT and an answer by its address WHEN reading the uplink THEN awaits none`() =
@@ -322,7 +430,7 @@ class RouteAcceptanceTest {
         }
 
     @Test
-    fun `GIVEN HEARTBEATs from many made-up addresses WHEN reading the route THEN keeps the first and recent ones`() =
+    fun `GIVEN HEARTBEATs from many made-up addresses WHEN reading the route THEN keeps the first and two newest`() =
         testScope.runTest {
             every { transport.datagrams() } returns datagrams(
                 GAP to DISARMED_STABILIZE,
@@ -339,7 +447,7 @@ class RouteAcceptanceTest {
 
             val result = repository.route.value?.heard?.keys
 
-            result shouldBeEqualTo setOf(SYSTEM_1_ADDRESS, madeUp(7), madeUp(8), madeUp(9)).map { it.toRoute() }.toSet()
+            result shouldBeEqualTo setOf(SYSTEM_1_ADDRESS, madeUp(8), madeUp(9)).map { it.toRoute() }.toSet()
         }
 
     private fun offerOnCurrentKey() = offerOn(repository)
@@ -362,6 +470,21 @@ private fun movedForGood(): Flow<Datagram> = datagrams(
     },
 )
 
+/** [movedForGood] for [MOVED_HEARTBEATS] seconds, then every second from [THIRD_ADDRESS] only. */
+private fun movedAndThenThird(): Flow<Datagram> = datagrams(
+    GAP to DISARMED_STABILIZE,
+    afterwards = {
+        repeat(MOVED_HEARTBEATS) {
+            delay(ONE_SECOND)
+            emit(movedHeartbeat())
+        }
+        while (true) {
+            delay(ONE_SECOND)
+            emit(Datagram(readFixture(DISARMED_STABILIZE), THIRD_ADDRESS))
+        }
+    },
+)
+
 private fun movedHeartbeat() = Datagram(readFixture(DISARMED_STABILIZE), MOVED_ADDRESS)
 
 private fun madeUp(index: Int) = InetSocketAddress(InetAddress.getLoopbackAddress(), FIRST_MADE_UP_PORT + index)
@@ -372,7 +495,11 @@ private const val ONE_SECOND = 1_000L
 private const val HALF_A_SECOND = 500L
 private const val CHANGED = 4_500L
 private const val MOVED_HEARTBEATS = 5
-private const val UNTIL_MOVED_AGAIN = 2_000L
+
+// The moved address is last heard at 5.1 s, the third one from 6.1 s: alone from 8.1 s on.
+private const val UNTIL_THIRD_ALONE = 4_000L
+private const val FLOOD = 1_000
+private const val KEPT = 3
 private const val MADE_UP_ADDRESSES = 10
 private const val AFTER_MADE_UP_ADDRESSES = 10_500L
 private const val FIRST_MADE_UP_PORT = 15_000
