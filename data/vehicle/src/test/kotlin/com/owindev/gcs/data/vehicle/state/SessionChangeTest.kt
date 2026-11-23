@@ -116,7 +116,7 @@ class SessionChangeTest {
             every { transport.datagrams() } returns liveSocketWith(HEARTBEAT)
             repository.vehicles.launchIn(backgroundScope)
             delay(HEARD)
-            uplink.commandAnswered()
+            uplink.commandAnswered(VEHICLE_ADDRESS)
             uplink.commandUnanswered()
 
             session.replay(emptySource(), ReplayClock(testScheduler.timeSource))

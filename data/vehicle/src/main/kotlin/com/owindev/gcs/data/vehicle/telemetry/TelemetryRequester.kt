@@ -173,7 +173,7 @@ internal class TelemetryRequester @Inject constructor(
         when (sender.send(setMessageInterval(target.systemId, stream), target.address)) {
             SendResult.Sent -> ack.await()?.let { received ->
                 // Any final answer, a rejection too, shows the vehicle heard this GCS.
-                uplink.commandAnswered()
+                uplink.commandAnswered(received.sender)
                 resultOf(received.message as CommandAck)
             } ?: StreamResult.NoAck
 

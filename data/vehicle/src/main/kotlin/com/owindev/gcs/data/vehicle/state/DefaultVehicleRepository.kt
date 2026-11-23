@@ -9,7 +9,11 @@ import com.owindev.gcs.core.domain.vehicle.VehicleLink
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.VehicleState
 import com.owindev.gcs.core.domain.vehicle.command.CommandKey
+import com.owindev.gcs.core.domain.vehicle.command.CommandRouteRepository
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
+import com.owindev.gcs.core.domain.vehicle.command.RouteAcceptance
+import com.owindev.gcs.core.domain.vehicle.command.RouteOffer
+import com.owindev.gcs.core.domain.vehicle.command.VehicleRoute
 import com.owindev.gcs.data.vehicle.command.CommandKeys
 import com.owindev.gcs.data.vehicle.command.CommandRoute
 import com.owindev.gcs.data.vehicle.di.ApplicationScope
@@ -31,6 +35,7 @@ import javax.inject.Singleton
 import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.TimeSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -79,7 +84,8 @@ import kotlinx.coroutines.launch
  *
  * Commands take one route (REQ-043, REQ-051, [routeTo]): the address of the active vehicle's first live HEARTBEAT in
  * the session ([ActiveRoute]). While its HEARTBEATs come from another address too, or only from another one, as from a
- * forger with its system ID (`docs/security.md`, N-2), no command goes anywhere.
+ * forger with its system ID (`docs/security.md`, N-2), no command goes anywhere, until the operator accepts the only
+ * new one ([acceptRoute]). Answers count as uplink evidence only from the route commands take at that moment.
  *
  * The watchdog is the only writer: HEARTBEATs and timeouts reach it as events through one channel and
  * are handled one at a time, so no state is shared between threads. Vehicles are never removed: a lost
@@ -116,7 +122,8 @@ internal class DefaultVehicleRepository @Inject constructor(
     private val activeVehicle: ActiveVehicle,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : VehicleRepository,
-    CommandKeys {
+    CommandKeys,
+    CommandRouteRepository {
 
     private val mutableVehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val events = Channel<Event>(Channel.UNLIMITED)
@@ -129,7 +136,7 @@ internal class DefaultVehicleRepository @Inject constructor(
     @Volatile
     private var addresses: Map<SystemId, InetSocketAddress> = emptyMap()
 
-    private val route = ActiveRoute(rule)
+    private val activeRoute = ActiveRoute(rule, activeVehicle, activeLinkChanges, uplink)
 
     /** Whether the listener holds the link open right now; written only by the listener. */
     @Volatile
@@ -165,6 +172,18 @@ internal class DefaultVehicleRepository @Inject constructor(
             ?.takeIf { session.session.value.origin == DataOrigin.LIVE }
             ?.let { CommandKey(it, activeLinkChanges.connection) }
 
+    /** One value with its key (#72): published from the pin and the key the watchdog wrote. */
+    override val route: StateFlow<VehicleRoute?> =
+        combine(activeRoute.pin, commandKey) { pin, key -> key?.let { pin?.toVehicleRoute(it) } }
+            .stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** Answered by the watchdog, the only writer; [RouteAcceptance.Outdated] once it has stopped. */
+    override suspend fun acceptRoute(offer: RouteOffer): RouteAcceptance {
+        val reply = CompletableDeferred<RouteAcceptance>()
+        if (events.trySend(Event.AcceptRoute(offer, reply)).isFailure) return RouteAcceptance.Outdated
+        return reply.await()
+    }
+
     override val activeSystemId: StateFlow<SystemId?> by lazy {
         // Starts the jobs: the active vehicle comes from the same HEARTBEATs as the map.
         vehicles
@@ -196,6 +215,8 @@ internal class DefaultVehicleRepository @Inject constructor(
             }
     }
 
+    // One branch per event the watchdog handles; splitting them would hide that it is the only writer.
+    @Suppress("CyclomaticComplexMethod")
     private suspend fun watch() = coroutineScope {
         val timers = mutableMapOf<SystemId, Job>()
         // Where the store starts too: a session that began before the watchdog did still arrives as a change.
@@ -219,7 +240,7 @@ internal class DefaultVehicleRepository @Inject constructor(
                         // Normally CONNECTED; LOST only if the watchdog got to this HEARTBEAT after the
                         // timeout had already passed, so a late event never flashes CONNECTED.
                         val link = rule.linkAfter(elapsed)
-                        recordRoute(event)
+                        activeRoute.heard(systemId, event.session.origin, event.sender, event.at)
                         addresses += systemId to event.sender
                         update(systemId, Vehicle(event.state, link, event.at, origin = event.session.origin))
                         if (link == VehicleLink.CONNECTED) {
@@ -246,6 +267,11 @@ internal class DefaultVehicleRepository @Inject constructor(
                     is Event.Rebooted -> requestAgainAfterReboot(event, current)
 
                     is Event.SessionChanged -> current = changeSession(from = current, to = event.session, timers)
+
+                    is Event.AcceptRoute -> {
+                        val lastSender = addresses[event.offer.key.systemId]
+                        event.reply.complete(activeRoute.accept(event.offer, currentKey, lastSender))
+                    }
                 }
             }
         } finally {
@@ -260,12 +286,6 @@ internal class DefaultVehicleRepository @Inject constructor(
         }
     }
 
-    private fun recordRoute(heard: Event.Heard) {
-        if (heard.state.systemId == activeVehicle.systemId.value && heard.session.origin == DataOrigin.LIVE) {
-            route.heard(heard.sender, heard.at)
-        }
-    }
-
     /**
      * Forgets every vehicle, timer, address and telemetry of the session [from], if [to] is another one, and returns
      * the session now. Any request target still queued is dropped, so none outlives its session, and the telemetry job
@@ -276,8 +296,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         timers.values.forEach(Job::cancel)
         timers.clear()
         addresses = emptyMap()
-        route.reset()
-        uplink.reset()
+        activeRoute.reset()
         mutableVehicles.value = emptyMap()
         telemetryStore.startSession(to)
         messageStore.startSession(to)
@@ -355,7 +374,7 @@ internal class DefaultVehicleRepository @Inject constructor(
         session.session.value.origin != DataOrigin.LIVE -> CommandRoute.Closed(NotSentReason.Replay)
         systemId != activeVehicle.systemId.value -> CommandRoute.Closed(NotSentReason.NotActiveVehicle)
         !activeHeardNow() -> CommandRoute.Closed(NotSentReason.LinkLost)
-        else -> route.check().toCommandRoute()
+        else -> activeRoute.check().toCommandRoute()
     }
 
     private sealed interface Event {
@@ -371,6 +390,8 @@ internal class DefaultVehicleRepository @Inject constructor(
         data class Rebooted(val systemId: SystemId, val session: SessionId) : Event
 
         data class SessionChanged(val session: SessionId) : Event
+
+        data class AcceptRoute(val offer: RouteOffer, val reply: CompletableDeferred<RouteAcceptance>) : Event
     }
 }
 

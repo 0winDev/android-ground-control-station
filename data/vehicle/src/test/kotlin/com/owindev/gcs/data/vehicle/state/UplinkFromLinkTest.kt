@@ -59,7 +59,7 @@ class UplinkFromLinkTest {
             )
             repository.vehicles.launchIn(backgroundScope)
             delay(HEARD)
-            uplink.commandAnswered()
+            uplink.commandAnswered(SYSTEM_1_ADDRESS)
             uplink.commandUnanswered()
 
             delay(UNTIL_HEARD_AGAIN)

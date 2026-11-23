@@ -69,6 +69,7 @@ class TelemetryRequesterTest {
     @BeforeEach
     fun setUp() {
         every { session.messages } returns messages
+        uplink.answersFrom(VEHICLE_ADDRESS)
         every { session.session } returns MutableStateFlow(FIRST_SESSION)
         requester = TelemetryRequester(
             sender = sender,

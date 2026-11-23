@@ -58,7 +58,7 @@ internal class CommandExchange @Inject constructor(
             is CommandRoute.Closed -> onResult(CommandResult.NotSent(route.reason))
 
             is CommandRoute.Open -> coroutineScope {
-                val request = Request(systemId, label, command, routing, onState)
+                val request = Request(systemId, label, command, routing, onState, route.address)
                 val acks = answersTo(request, route.address, current)
                 val result = attempts(request, acks)
                 // Marked before the late window opens, so a late answer is always taken after the mark, and only in
@@ -121,7 +121,7 @@ internal class CommandExchange @Inject constructor(
             null
         }
         val ack = received?.getOrNull()
-        if (ack != null) uplink.commandAnswered()
+        if (ack != null) uplink.commandAnswered(request.address)
         return when {
             sent is CommandSendResult.NotSent ->
                 if (attempt == 1) CommandResult.NotSent(sent.reason) else noAnswer(attempt - 1, sent.reason)
@@ -152,7 +152,7 @@ internal class CommandExchange @Inject constructor(
                 val next = acks.receiveCatching()
                 closed = next.isClosed
                 ack = next.getOrNull()
-                if (ack != null) uplink.commandAnswered()
+                if (ack != null) uplink.commandAnswered(request.address)
             }
             ack
         }
@@ -179,7 +179,7 @@ internal class CommandExchange @Inject constructor(
     private suspend fun dropLateAnswers(request: Request, acks: ReceiveChannel<CommandAck>) {
         withTimeoutOrNull(request.command.lateWindow) {
             for (ack in acks) {
-                uplink.commandAnswered()
+                uplink.commandAnswered(request.address)
                 Log.w(TAG, "${request.label} to system ${request.systemId.value}: late answer ${ack.result} dropped")
             }
         }
@@ -191,6 +191,8 @@ internal class CommandExchange @Inject constructor(
         val command: MavCommand,
         val routing: CommandRoutes,
         val onState: (PendingState) -> Unit,
+        /** The route the command left by; its answers come only from there. */
+        val address: InetSocketAddress,
     )
 
     companion object {

@@ -212,7 +212,8 @@ class GcsHeartbeatSenderTest {
             var destination: InetSocketAddress? = PEER
             backgroundScope.launch { sender.run { destination } }
             delay(ONE_AND_A_HALF_SECONDS)
-            uplink.commandAnswered()
+            uplink.answersFrom(PEER)
+            uplink.commandAnswered(PEER)
             uplink.commandUnanswered()
             destination = null
 
@@ -227,7 +228,8 @@ class GcsHeartbeatSenderTest {
     fun `GIVEN an answer and a command without answer WHEN the sender stops THEN the uplink is healthy`() = runTest {
         val job = backgroundScope.launch { sender.run { PEER } }
         runCurrent()
-        uplink.commandAnswered()
+        uplink.answersFrom(PEER)
+        uplink.commandAnswered(PEER)
         uplink.commandUnanswered()
 
         job.cancel()
