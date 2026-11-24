@@ -13,6 +13,7 @@ import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingState
 import com.owindev.gcs.core.domain.vehicle.command.Rejection
+import com.owindev.gcs.core.domain.vehicle.command.RouteOffer
 import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
 
 /** What the operator does with the commands; each is judged again by [HudCommandsViewModel]. */
@@ -24,6 +25,9 @@ internal data class CommandActions(
     val onCancel: () -> Unit = {},
     val onDismissFeedback: () -> Unit = {},
     val onDismissRefusal: () -> Unit = {},
+    val onReviewRoute: () -> Unit = {},
+    val onConfirmRoute: (RouteOffer) -> Unit = {},
+    val onCancelRoute: () -> Unit = {},
 )
 
 /** The flight screen's commands (REQ-050): [ground] (arm or take off) kept apart from [returnToLaunch] and [land]. */
@@ -45,6 +49,15 @@ sealed interface CommandUnavailable {
 
     /** Arm, while an amber pre-flight item has no acknowledgement; the checklist acknowledges them (#106). */
     data object CautionsToAcknowledge : CommandUnavailable
+
+    /** The vehicle is heard only from a new route, which the operator has not accepted (REQ-051). */
+    data object RouteChanged : CommandUnavailable
+
+    /** The vehicle is heard from more than one route: nothing can be accepted until one is heard alone (REQ-051). */
+    data object RouteAlternating : CommandUnavailable
+
+    /** No route is known yet on the current key, as for a moment after it moves (REQ-051). */
+    data object RouteUnknown : CommandUnavailable
 }
 
 /**

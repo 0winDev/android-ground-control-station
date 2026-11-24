@@ -177,6 +177,21 @@
     <string name="hud_command_not_on_ground">No consta que esté en tierra</string>
     <string name="hud_command_only_armed">Solo armado</string>
     <string name="hud_command_acknowledge_cautions">Confirma los avisos en el chequeo prevuelo</string>
+    <string name="hud_command_route_changed">La ruta del dron cambió: revísala</string>
+    <string name="hud_command_route_alternating">Se oye el dron por más de una ruta</string>
+    <string name="hud_command_route_unknown">Ruta del dron aún desconocida</string>
+
+    <!-- Ruta del dron (REQ-051) -->
+    <string name="hud_route_changed">La ruta del dron cambió · %1$s → %2$s</string>
+    <string name="hud_route_alternating">Se oye el dron por más de una ruta (%1$s); comandos retenidos, fijados en %2$s. Si sigue, vuela con la emisora.</string>
+    <string name="hud_route_review">Revisar</string>
+    <string name="hud_route_title">Nueva ruta del dron</string>
+    <string name="hud_route_from">Los comandos iban a</string>
+    <string name="hud_route_to">Ahora el dron solo se oye desde</string>
+    <string name="hud_route_held">Solo se retienen los comandos. La telemetría y el HEARTBEAT de esta GCS ya siguen la nueva ruta.</string>
+    <string name="hud_route_not_proof">Aceptar no prueba que sea tu dron. Si no cambiaste la red, no aceptes: vuela con la emisora.</string>
+    <string name="hud_route_slide_again">El enlace del dron cambió. Desliza otra vez.</string>
+    <string name="hud_route_action">aceptar la nueva ruta</string>
     <string name="hud_command_sending">%1$s: enviando…</string>
     <string name="hud_command_sending_attempt">%1$s: enviado, intento %2$d de %3$d</string>
     <string name="hud_command_in_progress">%1$s: en curso</string>

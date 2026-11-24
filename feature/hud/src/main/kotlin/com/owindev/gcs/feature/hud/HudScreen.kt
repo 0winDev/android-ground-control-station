@@ -52,9 +52,11 @@ fun HudScreen(
     replayViewModel: ReplayViewModel = hiltViewModel(),
     backgroundViewModel: BackgroundWarningsViewModel = hiltViewModel(),
     commandsViewModel: HudCommandsViewModel = hiltViewModel(),
+    routeViewModel: HudRouteViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val commands by commandsViewModel.state.collectAsStateWithLifecycle()
+    val route by routeViewModel.state.collectAsStateWithLifecycle()
     val replay by replayViewModel.banner.collectAsStateWithLifecycle()
     val backgroundWarnings by backgroundViewModel.warnings.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -83,6 +85,7 @@ fun HudScreen(
             },
         ),
         commands = commands,
+        route = route,
         commandActions = CommandActions(
             onRequest = commandsViewModel::onCommandRequested,
             onAltitudeChanged = commandsViewModel::onTakeOffAltitudeChanged,
@@ -90,6 +93,9 @@ fun HudScreen(
             onCancel = commandsViewModel::onCommandCancelled,
             onDismissFeedback = commandsViewModel::onFeedbackDismissed,
             onDismissRefusal = commandsViewModel::onRefusalDismissed,
+            onReviewRoute = routeViewModel::onReviewRequested,
+            onConfirmRoute = routeViewModel::onConfirmed,
+            onCancelRoute = routeViewModel::onCancelled,
         ),
     )
 }
@@ -112,11 +118,13 @@ internal fun HudContent(
     map: @Composable (insets: PaddingValues) -> Unit = {},
     background: BackgroundWarnings = BackgroundWarnings(),
     commands: CommandsUiState = CommandsUiState(),
+    route: RouteUiState = RouteUiState(),
     commandActions: CommandActions = CommandActions(),
 ) {
     // Only for a vehicle heard live: never during a replay or while the link is lost, which outranks them (REQ-017).
     val commandBar = commands.bar.takeIf { state is HudUiState.Connected }
     if (commandBar != null) commands.sheet?.let { CommandSheetDialog(sheet = it, actions = commandActions) }
+    if (commandBar != null) route.sheet?.let { RouteSheetDialog(sheet = it, actions = commandActions) }
     var licencesOpen by rememberSaveable { mutableStateOf(false) }
     // Arming closes them: nothing may stand between the operator and an armed vehicle.
     if (licencesOpen && state.licencesAvailable) LicencesDialog(onDismiss = { licencesOpen = false })
@@ -163,6 +171,7 @@ internal fun HudContent(
                             feedback = commands.feedback,
                             actions = commandActions,
                             refusal = commands.refusal,
+                            route = route.notice,
                         )
                     }
                 }

@@ -56,9 +56,9 @@ cannot be told from the answer to a newer command with the same ID. Until signin
   the reason when the app stopped retrying early (link lost, route changed, replay).
 - **One route.** Commands go to the active vehicle's autopilot (component 1) at the address of its first HEARTBEAT in
   the session, and an ACK counts only from there, from that system ID and component, naming the command, addressed to
-  this GCS (255/190, or 0/0 when the extension fields are omitted). Another address blocks commands (accepting it is
-  #105). Every attempt is checked under the sender's lock: never during a replay, to another system ID, while LOST or
-  over a changed route (REQ-043).
+  this GCS (255/190, or 0/0 when the extension fields are omitted). Another address holds commands until the operator
+  accepts it (#105). Every attempt is checked under the sender's lock: never during a replay, to another system ID,
+  while LOST or over a changed route (REQ-043).
 
 ## Alternatives considered
 
@@ -79,8 +79,8 @@ cannot be told from the answer to a newer command with the same ID. Until signin
 - Negative / costs we accept: after an arm without answer, the operator cannot arm again for 10 s; an ACK later
   than the late window, or one for an RTL superseded by another RTL, can be taken as the next same command's answer;
   a forged unsigned ACK from the pinned address can fake an answer until signing (v0.6); a command sent before the
-  link is lost ends as no answer, never as not sent; until #105 a change of the vehicle's address (a router restart,
-  a second route) blocks every command for the rest of the session, which #105 must fix before any real flight; a
+  link is lost ends as no answer, never as not sent; a change of the vehicle's address (a router restart, a second
+  route) holds every command until the operator accepts the new one (#105); a
   take off stopped after an accepted mode change leaves the vehicle in GUIDED, armed on the ground, until it
   disarms by itself after `DISARM_DELAY`.
-- Follow-ups: the operator accepts a new route (#105); signing authenticates the ACK (v0.6).
+- Follow-ups: signing authenticates the ACK and the route (v0.6).
