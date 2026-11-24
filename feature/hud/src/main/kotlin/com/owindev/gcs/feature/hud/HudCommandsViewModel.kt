@@ -107,7 +107,11 @@ class HudCommandsViewModel @Inject constructor(
         )
     }
         // Nobody looks for a while: whatever was open was not confirmed, and never reopens by itself.
-        .onCompletion { request.value = null }
+        // Nor do acknowledgements outlive it: a change while unobserved is never judged, so it could not drop them.
+        .onCompletion {
+            request.value = null
+            judge.forget()
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeout = STOP_TIMEOUT), CommandsUiState())
 
     /**
@@ -175,6 +179,7 @@ class HudCommandsViewModel @Inject constructor(
         refused.value = null
         viewModelScope.launch {
             val result = send(confirming.command, key)
+            if (confirming.command == VehicleCommand.ARM && result == CommandResult.Accepted) judge.forget()
             val outdated = result == CommandResult.NotSent(NotSentReason.KeyChanged)
             val now = commands.commandKey.value
             val otherPending = commands.pending.value != null

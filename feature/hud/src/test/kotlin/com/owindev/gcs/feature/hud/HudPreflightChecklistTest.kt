@@ -43,6 +43,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +66,7 @@ class HudPreflightChecklistTest {
     private val commandKey = MutableStateFlow<CommandKey?>(KEY)
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val activeTelemetry = MutableStateFlow<Telemetry?>(null)
+    private val route = MutableStateFlow<VehicleRoute?>(pinnedOn(KEY))
     private var check = PreflightCheck(listOf(LINK_OK), CONNECTION)
     private val commandRepository: CommandRepository = mockk()
     private val routeRepository: CommandRouteRepository = mockk()
@@ -79,7 +81,7 @@ class HudPreflightChecklistTest {
     fun setUp() {
         every { commandRepository.commandKey } returns commandKey
         every { commandRepository.pending } returns MutableStateFlow<PendingCommand?>(null)
-        every { routeRepository.route } returns MutableStateFlow(PINNED)
+        every { routeRepository.route } returns route
         every { vehicleRepository.vehicles } returns vehicles
         every { telemetryRepository.activeTelemetry } returns activeTelemetry
         every { preflightRepository.checkFor(any()) } answers { check }
@@ -303,6 +305,60 @@ class HudPreflightChecklistTest {
         }
     }
 
+    @Test
+    fun `GIVEN an acknowledged amber item WHEN nobody observes for over 5 s THEN it must be acknowledged again`() =
+        runTest {
+            turbineScope {
+                disarmedOnTheGround()
+                check = PreflightCheck(listOf(LIMITS_AMBER), CONNECTION)
+                val observed = viewModel.state.testIn(backgroundScope)
+                viewModel.onCommandRequested(VehicleCommand.ARM)
+                viewModel.onCautionAcknowledged(LIMITS_AMBER)
+
+                observed.cancelAndIgnoreRemainingEvents()
+                mainDispatcher.testDispatcher.scheduler.advanceTimeBy(ACKNOWLEDGED_ONCE)
+                disarmedOnTheGround()
+                val result = viewModel.state.testIn(backgroundScope).expectMostRecentItem().bar?.ground
+
+                result shouldBeEqualTo OfferedCommand(VehicleCommand.ARM, CommandUnavailable.CautionsToAcknowledge)
+            }
+        }
+
+    @Test
+    fun `GIVEN an amber item acknowledged WHEN an arm is accepted THEN the next arm asks for it again`() = runTest {
+        turbineScope {
+            disarmedOnTheGround()
+            check = PreflightCheck(listOf(LIMITS_AMBER), CONNECTION)
+            coEvery { commandRepository.arm(KEY, any()) } returns CommandResult.Accepted
+            val states = viewModel.state.testIn(backgroundScope)
+            viewModel.onCommandRequested(VehicleCommand.ARM)
+            viewModel.onCautionAcknowledged(LIMITS_AMBER)
+
+            viewModel.onCommandConfirmed(ARM_KEY)
+            mainDispatcher.testDispatcher.scheduler.advanceTimeBy(RECHECKED)
+            val result = states.expectMostRecentItem().bar?.ground
+
+            result shouldBeEqualTo OfferedCommand(VehicleCommand.ARM, CommandUnavailable.CautionsToAcknowledge)
+        }
+    }
+
+    @Test
+    fun `GIVEN an unobserved checklist on an older key WHEN an amber item is acknowledged THEN nothing is`() = runTest {
+        turbineScope {
+            disarmedOnTheGround()
+            check = PreflightCheck(listOf(LIMITS_AMBER), CONNECTION)
+            viewModel.onCommandRequested(VehicleCommand.ARM)
+            check = PreflightCheck(listOf(LIMITS_AMBER), NEXT_KEY.connection)
+            route.value = pinnedOn(NEXT_KEY)
+            commandKey.value = NEXT_KEY
+
+            viewModel.onCautionAcknowledged(LIMITS_AMBER)
+            val result = viewModel.state.testIn(backgroundScope).expectMostRecentItem().bar?.ground
+
+            result shouldBeEqualTo OfferedCommand(VehicleCommand.ARM, CommandUnavailable.CautionsToAcknowledge)
+        }
+    }
+
     private fun TestScope.markNow() = testScheduler.timeSource.markNow()
 
     private fun TestScope.disarmedOnTheGround() {
@@ -339,12 +395,13 @@ class HudPreflightChecklistTest {
         val KEY = CommandKey(SYSTEM, connection = CONNECTION)
         val ARM_KEY = ConfirmKey(VehicleCommand.ARM, KEY, altitudeMetres = null)
         val RECHECKED = 0.5.seconds
+        val NEXT_KEY = KEY.copy(connection = CONNECTION + 1)
         val PINNED_ADDRESS = RouteAddress("192.168.1.20", port = 14550)
-        val PINNED = VehicleRoute(
-            KEY,
-            pinned = PINNED_ADDRESS,
-            heard = mapOf(PINNED_ADDRESS to TimeSource.Monotonic.markNow()),
-        )
+        val ACKNOWLEDGED_ONCE: Duration = 6.seconds
+
+        /** One address heard alone is pinned however old its mark. */
+        fun pinnedOn(key: CommandKey) =
+            VehicleRoute(key, pinned = PINNED_ADDRESS, heard = mapOf(PINNED_ADDRESS to TimeSource.Monotonic.markNow()))
         val LINK_OK = PreflightItem(PreflightKind.LINK, PreflightColour.GREEN, PreflightReason.Ok)
         val GPS_OK = PreflightItem(PreflightKind.GPS, PreflightColour.GREEN, PreflightReason.Ok)
         val GPS_RED = PreflightItem(PreflightKind.GPS, PreflightColour.RED, PreflightReason.NoFix3d)

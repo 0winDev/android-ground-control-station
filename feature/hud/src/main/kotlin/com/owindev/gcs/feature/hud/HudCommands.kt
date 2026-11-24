@@ -133,7 +133,8 @@ data class CommandsUiState(
 
 /**
  * The bar for [vehicle], heard live with [key]: arm while disarmed and take off while armed, each only on the ground and
- * with no red pre-flight item, arm also with every amber one [acknowledged] (REQ-044, REQ-048); RTL and land while armed, whatever the alerts or the pre-flight check.
+ * with no red pre-flight item, arm also with every amber one [acknowledged] (REQ-044, REQ-048); RTL and land while
+ * armed, whatever the alerts or the pre-flight check.
  */
 // One check per rule the command service applies; splitting them would scatter what the bar promises.
 @Suppress("LongParameterList")

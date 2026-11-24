@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.updateAndGet
 /**
  * Judges the command bar and arm's pre-flight checklist from one check (REQ-048, REQ-051), with the amber items the
  * operator acknowledged. Each judgement drops the acknowledgements its check no longer covers, so an item that changed
- * needs a new one even if it changes back.
+ * needs a new one even if it changes back; nothing judges while nobody looks, so the screen forgets them then.
  */
 internal class CommandJudge(
     private val preflight: PreflightRepository,
@@ -51,6 +51,11 @@ internal class CommandJudge(
     fun acknowledge(item: PreflightItem, key: CommandKey) {
         val check = preflight.checkFor(key.systemId)
         mutableAcknowledgements.update { it.keptFor(check).acknowledge(item, check, deviceClock.markNow()) }
+    }
+
+    /** After an accepted arm, or while unobserved: the next arm needs the checklist read again. */
+    fun forget() {
+        mutableAcknowledgements.value = PreflightAcknowledgements()
     }
 }
 
