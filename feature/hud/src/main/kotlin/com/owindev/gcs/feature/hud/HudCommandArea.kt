@@ -101,7 +101,7 @@ private fun CommandButton(
     val reason = offered.unavailable?.let { unavailableText(it, offered.command) }
     Surface(
         onClick = { onRequest(offered.command) },
-        enabled = enabled,
+        enabled = enabled || offered.opensChecklist,
         modifier = modifier
             .heightIn(min = GcsTheme.sizes.gloveButton)
             .semantics(mergeDescendants = true) {

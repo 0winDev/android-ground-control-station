@@ -243,7 +243,10 @@ class PreflightRuleTest {
         val result = rule.check(input)
 
         result[PreflightKind.VEHICLE_PREARM] shouldBeEqualTo
-            red(PreflightKind.VEHICLE_PREARM, PreflightReason.PreArmFailing(PRE_ARM_TEXT, current = true))
+            red(
+                PreflightKind.VEHICLE_PREARM,
+                PreflightReason.PreArmFailing(PRE_ARM_TEXT, current = true, receivedAt = NOW),
+            )
     }
 
     @Test
@@ -253,7 +256,15 @@ class PreflightRuleTest {
         val result = rule.check(input)
 
         result[PreflightKind.VEHICLE_PREARM] shouldBeEqualTo
-            red(PreflightKind.VEHICLE_PREARM, PreflightReason.PreArmFailing(PRE_ARM_TEXT, current = false))
+            red(
+                PreflightKind.VEHICLE_PREARM,
+                PreflightReason.PreArmFailing(
+                    PRE_ARM_TEXT,
+                    current = false,
+                    receivedAt =
+                        NOW - PRE_ARM_MAX_AGE,
+                ),
+            )
     }
 
     @Test

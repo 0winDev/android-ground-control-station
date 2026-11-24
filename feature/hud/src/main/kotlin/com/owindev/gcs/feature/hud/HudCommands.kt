@@ -2,7 +2,9 @@ package com.owindev.gcs.feature.hud
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
+import com.owindev.gcs.core.domain.preflight.PreflightAcknowledgements
 import com.owindev.gcs.core.domain.preflight.PreflightCheck
+import com.owindev.gcs.core.domain.preflight.PreflightItem
 import com.owindev.gcs.core.domain.telemetry.GroundPositionRule
 import com.owindev.gcs.core.domain.telemetry.LandedRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
@@ -28,6 +30,7 @@ internal data class CommandActions(
     val onReviewRoute: () -> Unit = {},
     val onConfirmRoute: (RouteOffer) -> Unit = {},
     val onCancelRoute: () -> Unit = {},
+    val onAcknowledgeCaution: (PreflightItem) -> Unit = {},
 )
 
 /** The flight screen's commands (REQ-050): [ground] (arm or take off) kept apart from [returnToLaunch] and [land]. */
@@ -47,7 +50,7 @@ sealed interface CommandUnavailable {
 
     data class PreflightRed(val items: Int) : CommandUnavailable
 
-    /** Arm, while an amber pre-flight item has no acknowledgement; the checklist acknowledges them (#106). */
+    /** Arm, while an amber pre-flight item has no acknowledgement; the checklist acknowledges them. */
     data object CautionsToAcknowledge : CommandUnavailable
 
     /** The vehicle is heard only from a new route, which the operator has not accepted (REQ-051). */
@@ -69,6 +72,7 @@ data class ConfirmKey(val command: VehicleCommand, val commandKey: CommandKey, v
 /**
  * The confirmation of [command] for [systemId] (REQ-050), only while the link it was opened on lasts. [key] is `null`
  * and [unavailable] set while it cannot be confirmed; [slideAgain] after a slide the command service found outdated.
+ * Arm's carries the pre-flight [checklist] (REQ-048).
  */
 data class CommandSheet(
     val command: VehicleCommand,
@@ -77,6 +81,7 @@ data class CommandSheet(
     val key: ConfirmKey?,
     val unavailable: CommandUnavailable?,
     val slideAgain: Boolean = false,
+    val checklist: List<ChecklistItem>? = null,
 )
 
 /** The command sent last and how it stands, apart from the sheet, so RTL and land stay reachable meanwhile. */
@@ -128,7 +133,8 @@ data class CommandsUiState(
 
 /**
  * The bar for [vehicle], heard live with [key]: arm while disarmed and take off while armed, each only on the ground and
- * with no red pre-flight item (REQ-044, REQ-048); RTL and land while armed, whatever the alerts or the pre-flight check.
+ * with no red pre-flight item, arm also with every amber one [acknowledged] (REQ-044, REQ-048); RTL and land while
+ * armed, whatever the alerts or the pre-flight check.
  */
 // One check per rule the command service applies; splitting them would scatter what the bar promises.
 @Suppress("LongParameterList")
@@ -137,6 +143,7 @@ internal fun commandBarOf(
     vehicle: Vehicle?,
     telemetry: Telemetry?,
     check: PreflightCheck,
+    acknowledged: PreflightAcknowledgements,
     rules: CommandRules,
 ): CommandBar? {
     if (vehicle == null || vehicle.state.systemId != key.systemId || rules.linkLoss.isLost(vehicle)) {
@@ -159,9 +166,7 @@ internal fun commandBarOf(
             VehicleCommand.ARM,
             when {
                 !onGround -> CommandUnavailable.NotOnGround
-                reds.isNotEmpty() -> CommandUnavailable.PreflightRed(reds.size)
-                check.ambers.isNotEmpty() -> CommandUnavailable.CautionsToAcknowledge
-                else -> null
+                else -> check.armingUnavailable(acknowledged)
             },
         )
     }

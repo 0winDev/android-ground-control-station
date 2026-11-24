@@ -96,6 +96,7 @@ fun HudScreen(
             onReviewRoute = routeViewModel::onReviewRequested,
             onConfirmRoute = routeViewModel::onConfirmed,
             onCancelRoute = routeViewModel::onCancelled,
+            onAcknowledgeCaution = commandsViewModel::onCautionAcknowledged,
         ),
     )
 }

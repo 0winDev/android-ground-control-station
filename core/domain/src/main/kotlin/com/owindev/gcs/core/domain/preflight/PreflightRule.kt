@@ -125,6 +125,7 @@ class PreflightRule(
             !status.healthy -> RED to PreflightReason.PreArmFailing(
                 text = reason?.text,
                 current = reason?.let(preArm::isCurrent) == true,
+                receivedAt = reason?.receivedAt,
             )
 
             else -> OK

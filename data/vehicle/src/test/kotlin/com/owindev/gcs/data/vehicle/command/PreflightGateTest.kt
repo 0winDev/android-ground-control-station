@@ -182,12 +182,13 @@ class PreflightGateTest {
     @Test
     fun `GIVEN the active vehicle's pre-arm reason WHEN the checks fail THEN it is given as current`() {
         telemetry.value = mapOf(ACTIVE to telemetryWith(GpsFixType.Fix3d, preArmHealthy = false))
-        messages.value = FollowedMessages(FIRST_SESSION, ACTIVE, emptyList(), preArmReason(clock))
+        val reason = preArmReason(clock)
+        messages.value = FollowedMessages(FIRST_SESSION, ACTIVE, emptyList(), reason)
 
         val result = gate.checkFor(ACTIVE)
 
         result.items.single { it.kind == PreflightKind.VEHICLE_PREARM }.reason shouldBeEqualTo
-            PreflightReason.PreArmFailing(text = PRE_ARM_TEXT, current = true)
+            PreflightReason.PreArmFailing(text = PRE_ARM_TEXT, current = true, receivedAt = reason.receivedAt)
     }
 
     @Test
