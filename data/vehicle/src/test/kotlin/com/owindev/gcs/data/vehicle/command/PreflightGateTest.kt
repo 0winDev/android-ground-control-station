@@ -51,6 +51,8 @@ import com.owindev.gcs.data.vehicle.state.DefaultVehicleRepository
 import com.owindev.gcs.data.vehicle.telemetry.TelemetryStore
 import io.mockk.every
 import io.mockk.mockk
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import kotlin.time.TestTimeSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.amshove.kluent.shouldBeEqualTo
@@ -219,7 +221,8 @@ class PreflightGateTest {
 
     /** Every item green, the critical failsafe action set to [critical]. */
     private fun allGreenBut(critical: Float) {
-        uplink.commandAnswered()
+        uplink.answersFrom(VEHICLE_ROUTE)
+        uplink.commandAnswered(VEHICLE_ROUTE)
         parameters.value = FollowedParameters(
             FIRST_SESSION,
             ACTIVE,
@@ -251,6 +254,7 @@ class PreflightGateTest {
 }
 
 private val ACTIVE = SystemId(1)
+private val VEHICLE_ROUTE = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_560)
 private val OTHER = SystemId(2)
 private const val CONNECTION = 7L
 private val ENDED_SESSION = SessionId(DataOrigin.LIVE, epoch = FIRST_SESSION.epoch - 1)

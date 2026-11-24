@@ -60,6 +60,7 @@ class CommandUplinkTest {
         coEvery { sender.send(any<CommandLong>(), any<() -> CommandRoute>()) } answers {
             sendResults.removeFirstOrNull() ?: CommandSendResult.Sent
         }
+        uplink.answersFrom(VEHICLE_ADDRESS)
         exchange = CommandExchange(sender, session, uplink) { CommandRoute.Open(VEHICLE_ADDRESS) }
     }
 

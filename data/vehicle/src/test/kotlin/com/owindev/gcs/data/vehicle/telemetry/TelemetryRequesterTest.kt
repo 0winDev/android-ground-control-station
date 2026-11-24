@@ -69,6 +69,7 @@ class TelemetryRequesterTest {
     @BeforeEach
     fun setUp() {
         every { session.messages } returns messages
+        uplink.answersFrom(VEHICLE_ADDRESS)
         every { session.session } returns MutableStateFlow(FIRST_SESSION)
         requester = TelemetryRequester(
             sender = sender,
@@ -214,6 +215,20 @@ class TelemetryRequesterTest {
         uplink.health.value.answered shouldBeEqualTo true
     }
 
+    @Tag("REQ-051")
+    @Tag("REQ-048")
+    @Test
+    fun `GIVEN a target that is not the command route WHEN it accepts the requests THEN it has not answered`() =
+        testScope.runTest {
+            mockLog()
+            uplink.answersFrom(OTHER_ADDRESS)
+            vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
+
+            requester.requestAll(TARGET)
+
+            uplink.health.value.answered shouldBeEqualTo false
+        }
+
     @Tag("REQ-045")
     @Tag("REQ-048")
     @Test
@@ -244,7 +259,7 @@ class TelemetryRequesterTest {
     @Test
     fun `GIVEN a command without answer WHEN a stream request is answered THEN the command is no longer unanswered`() =
         testScope.runTest {
-            uplink.commandUnanswered()
+            uplink.commandUnanswered(VEHICLE_ADDRESS)
             vehicleAnswers { ack(MAV_RESULT_ACCEPTED) }
 
             requester.requestAll(TARGET)
@@ -457,7 +472,7 @@ class TelemetryRequesterTest {
             vehicleStreams(SYSTEM_1)
             backgroundScope.launch {
                 delay(TWO_SECONDS)
-                uplink.commandUnanswered()
+                uplink.commandUnanswered(VEHICLE_ADDRESS)
             }
 
             requester.run(isHeard = { true }, targets = connectedFor(TWENTY_SECONDS))

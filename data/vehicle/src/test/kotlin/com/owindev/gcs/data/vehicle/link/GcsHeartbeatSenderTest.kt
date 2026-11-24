@@ -56,6 +56,7 @@ class GcsHeartbeatSenderTest {
             sent += firstArg<ByteArray>()
             results.removeFirstOrNull() ?: SendResult.Sent
         }
+        uplink.answersFrom(PEER)
         sender = GcsHeartbeatSender(GcsMessageSender(transport, ignoringRecorder(), liveSession()), uplink)
     }
 
@@ -212,8 +213,8 @@ class GcsHeartbeatSenderTest {
             var destination: InetSocketAddress? = PEER
             backgroundScope.launch { sender.run { destination } }
             delay(ONE_AND_A_HALF_SECONDS)
-            uplink.commandAnswered()
-            uplink.commandUnanswered()
+            uplink.commandAnswered(PEER)
+            uplink.commandUnanswered(PEER)
             destination = null
 
             delay(ONE_SECOND)
@@ -227,8 +228,8 @@ class GcsHeartbeatSenderTest {
     fun `GIVEN an answer and a command without answer WHEN the sender stops THEN the uplink is healthy`() = runTest {
         val job = backgroundScope.launch { sender.run { PEER } }
         runCurrent()
-        uplink.commandAnswered()
-        uplink.commandUnanswered()
+        uplink.commandAnswered(PEER)
+        uplink.commandUnanswered(PEER)
 
         job.cancel()
         runCurrent()
@@ -239,7 +240,7 @@ class GcsHeartbeatSenderTest {
     @Tag("REQ-045")
     @Test
     fun `GIVEN a command without answer before WHEN the sender starts THEN the uplink is healthy`() = runTest {
-        uplink.commandUnanswered()
+        uplink.commandUnanswered(PEER)
 
         backgroundScope.launch { sender.run { PEER } }
         runCurrent()
@@ -252,7 +253,7 @@ class GcsHeartbeatSenderTest {
     fun `GIVEN a command without answer WHEN HEARTBEATs are sent THEN the command stays unanswered`() = runTest {
         backgroundScope.launch { sender.run { PEER } }
         runCurrent()
-        uplink.commandUnanswered()
+        uplink.commandUnanswered(PEER)
 
         delay(TWO_AND_A_HALF_SECONDS)
 

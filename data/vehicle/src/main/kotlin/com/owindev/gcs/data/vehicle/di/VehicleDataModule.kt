@@ -28,6 +28,7 @@ import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
+import com.owindev.gcs.core.domain.vehicle.command.CommandRouteRepository
 import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.transport.DatagramSource
 import com.owindev.gcs.core.transport.UdpTransport
@@ -87,6 +88,9 @@ abstract class VehicleDataModule {
 
     @Binds
     internal abstract fun bindCommandKeys(impl: DefaultVehicleRepository): CommandKeys
+
+    @Binds
+    internal abstract fun bindCommandRouteRepository(impl: DefaultVehicleRepository): CommandRouteRepository
 
     @Binds
     internal abstract fun bindPreflightVeto(impl: PreflightGate): PreflightVeto

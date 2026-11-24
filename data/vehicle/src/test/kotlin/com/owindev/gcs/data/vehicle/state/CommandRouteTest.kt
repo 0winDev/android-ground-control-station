@@ -84,8 +84,9 @@ class CommandRouteTest {
         }
 
     @Tag("REQ-043")
+    @Tag("REQ-051")
     @Test
-    fun `GIVEN the active vehicle's HEARTBEATs come back to its first address WHEN routing THEN the route is open`() =
+    fun `GIVEN the HEARTBEATs come back to the first address at once WHEN routing THEN the route still alternates`() =
         testScope.runTest {
             every { transport.datagrams() } returns datagrams(
                 GAP to DISARMED_STABILIZE,
@@ -102,7 +103,55 @@ class CommandRouteTest {
 
             val result = repository.routeTo(SYSTEM_1)
 
+            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.RouteChanged)
+        }
+
+    @Tag("REQ-043")
+    @Tag("REQ-051")
+    @Test
+    fun `GIVEN only the first address is heard for a timeout after another WHEN routing THEN the route is open`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                afterwards = {
+                    delay(GAP)
+                    emit(Datagram(readFixture(DISARMED_STABILIZE), MOVED_ADDRESS))
+                    while (true) {
+                        delay(ONE_SECOND)
+                        emit(datagramOf(DISARMED_STABILIZE))
+                    }
+                },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            delay(FOUR_AND_A_HALF_SECONDS)
+
+            val result = repository.routeTo(SYSTEM_1)
+
             result shouldBeEqualTo CommandRoute.Open(SYSTEM_1_ADDRESS)
+        }
+
+    @Tag("REQ-043")
+    @Tag("REQ-051")
+    @Test
+    fun `GIVEN the HEARTBEATs alternate between two addresses WHEN routing on the first THEN is closed`() =
+        testScope.runTest {
+            every { transport.datagrams() } returns datagrams(
+                GAP to DISARMED_STABILIZE,
+                afterwards = {
+                    while (true) {
+                        delay(HALF_A_SECOND)
+                        emit(Datagram(readFixture(DISARMED_STABILIZE), MOVED_ADDRESS))
+                        delay(HALF_A_SECOND)
+                        emit(datagramOf(DISARMED_STABILIZE))
+                    }
+                },
+            )
+            repository.vehicles.launchIn(backgroundScope)
+            delay(TEN_SECONDS + GAP + HALF_A_SECOND)
+
+            val result = repository.routeTo(SYSTEM_1)
+
+            result shouldBeEqualTo CommandRoute.Closed(NotSentReason.RouteChanged)
         }
 
     @Tag("REQ-043")
@@ -200,4 +249,6 @@ class CommandRouteTest {
 private const val AFTER_THREE_GAPS = 400L
 private const val ONE_SECOND = 1_000L
 private const val TEN_SECONDS = 10_000L
+private const val HALF_A_SECOND = 500L
+private const val FOUR_AND_A_HALF_SECONDS = 4_500L
 private val MOVED_ADDRESS = InetSocketAddress(InetAddress.getLoopbackAddress(), 14_580)
