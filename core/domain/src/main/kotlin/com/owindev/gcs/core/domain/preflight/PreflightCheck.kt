@@ -1,6 +1,7 @@
 package com.owindev.gcs.core.domain.preflight
 
 import com.owindev.gcs.core.domain.battery.FailsafeStatus
+import kotlin.time.TimeMark
 
 /** How a pre-flight item stands (REQ-048): red blocks arm and take off, amber must be acknowledged before arming. */
 enum class PreflightColour {
@@ -71,10 +72,12 @@ sealed interface PreflightReason {
     data object ArmingChecksDisabled : PreflightReason
 
     /**
-     * The vehicle's pre-arm checks fail. [text] is its latest `PreArm:` reason, `null` when none has been received yet;
-     * [current] is `false` when that reason is older than [com.owindev.gcs.core.domain.message.PreArmRule.maxAge].
+     * The vehicle's pre-arm checks fail. [text] is its latest `PreArm:` reason and [receivedAt] when it came, both `null`
+     * when none has been received yet; [current] is `false` when that reason is older than
+     * [com.owindev.gcs.core.domain.message.PreArmRule.maxAge].
      */
-    data class PreArmFailing(val text: String?, val current: Boolean) : PreflightReason
+    data class PreArmFailing(val text: String?, val current: Boolean, val receivedAt: TimeMark? = null) :
+        PreflightReason
 
     data object NoFix3d : PreflightReason
 
