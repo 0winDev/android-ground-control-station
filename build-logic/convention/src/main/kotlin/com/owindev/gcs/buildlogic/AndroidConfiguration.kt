@@ -24,6 +24,7 @@ internal fun Project.configureAndroidLibrary() {
         compileSdk = intVersion("compileSdk")
         defaultConfig {
             minSdk = intVersion("minSdk")
+            testInstrumentationRunner = INSTRUMENTATION_RUNNER
         }
         compileOptions {
             sourceCompatibility = javaTarget
@@ -31,3 +32,6 @@ internal fun Project.configureAndroidLibrary() {
         }
     }
 }
+
+/** Runs the instrumented Compose UI tests on a device (`connectedDebugAndroidTest`); CI does not run them. */
+private const val INSTRUMENTATION_RUNNER = "androidx.test.runner.AndroidJUnitRunner"
