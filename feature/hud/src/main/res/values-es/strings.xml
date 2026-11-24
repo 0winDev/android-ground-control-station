@@ -242,12 +242,12 @@
         <item quantity="many">%1$s: sin respuesta tras %2$d intentos; después se detuvo (%3$s). Comprueba el dron.</item>
         <item quantity="other">%1$s: sin respuesta tras %2$d intentos; después se detuvo (%3$s). Comprueba el dron.</item>
     </plurals>
-    <string name="hud_checklist_title">Chequeo prevuelo</string>
-    <string name="hud_checklist_summary">%1$d fallo · %2$d aviso · %3$d OK</string>
+    <string name="hud_checklist_summary">Chequeo prevuelo · fallos: %1$d · avisos: %2$d · OK: %3$d</string>
     <string name="hud_checklist_ok">OK</string>
     <string name="hud_checklist_caution">Aviso</string>
     <string name="hud_checklist_fail">Fallo</string>
     <string name="hud_checklist_acknowledge">Reconocer</string>
+    <string name="hud_checklist_acknowledge_item">Reconocer: %1$s</string>
     <string name="hud_checklist_acknowledged">Reconocido</string>
     <string name="hud_checklist_link">Enlace</string>
     <string name="hud_checklist_uplink">El dron oye a esta GCS</string>
@@ -260,7 +260,6 @@
     <string name="hud_checklist_position">Posición</string>
     <string name="hud_checklist_attitude">Actitud</string>
     <string name="hud_checklist_alerts">Alertas</string>
-    <string name="hud_reason_ok">OK</string>
     <string name="hud_reason_not_received">Aún no recibido</string>
     <string name="hud_reason_stale">Datos demasiado antiguos</string>
     <string name="hud_reason_replay">Se está reproduciendo una grabación</string>
@@ -289,7 +288,7 @@
     <string name="hud_failsafe_no_threshold">sin umbral</string>
     <string name="hud_failsafe_warn_only">solo avisa</string>
     <string name="hud_failsafe_armed">actúa</string>
-    <string name="hud_reason_home_unknown">Casa no fijada</string>
+    <string name="hud_reason_home_unknown">Posición de casa no recibida</string>
     <string name="hud_reason_emergency_alert">Hay una alerta de emergencia activa</string>
     <string name="hud_reason_alerts_not_evaluated">Alertas sin evaluar</string>
 </resources>

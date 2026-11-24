@@ -13,64 +13,96 @@ import com.owindev.gcs.core.domain.preflight.BatteryUnknownCause
 import com.owindev.gcs.core.domain.preflight.PreflightColour
 import com.owindev.gcs.core.domain.preflight.PreflightKind
 import com.owindev.gcs.core.domain.preflight.PreflightReason
+import kotlin.time.Duration
 
 // How the pre-flight checklist says each item (REQ-048): a title per kind, a reason in words, a colour with its icon
 // and word.
 
-@Composable
-internal fun reasonText(entry: ChecklistItem): String = when (val reason = entry.item.reason) {
-    is PreflightReason.PreArmFailing -> preArmText(reason, entry)
+/** A text from resources: [res] with [args], each a value, a [Duration] written as an age, or nested [Words]. */
+internal data class Words(@param:StringRes val res: Int, val args: List<Any> = emptyList())
 
-    is PreflightReason.BatteryUnknown -> stringResource(
-        id = when (reason.cause) {
+/** This item's reason in words; `null` for an item that is fine, whose word already says so. */
+// One branch per reason, so a new reason does not compile without its words: a warning must say its true reason (#73).
+@Suppress("CyclomaticComplexMethod")
+internal fun ChecklistItem.reasonWords(): Words? = when (val reason = item.reason) {
+    PreflightReason.Ok -> null
+
+    PreflightReason.NotReceived -> Words(R.string.hud_reason_not_received)
+
+    PreflightReason.Stale -> Words(R.string.hud_reason_stale)
+
+    PreflightReason.Replay -> Words(R.string.hud_reason_replay)
+
+    PreflightReason.NoActiveVehicle -> Words(R.string.hud_reason_no_active_vehicle)
+
+    PreflightReason.LinkLost -> Words(R.string.hud_reason_link_lost)
+
+    PreflightReason.UplinkSendsFailing -> Words(R.string.hud_reason_uplink_sends_failing)
+
+    PreflightReason.UplinkCommandUnanswered -> Words(R.string.hud_reason_uplink_command_unanswered)
+
+    PreflightReason.NotAnsweredYet -> Words(R.string.hud_reason_not_answered_yet)
+
+    PreflightReason.BackgroundLinkNotRunning -> Words(R.string.hud_reason_background_not_running)
+
+    PreflightReason.BackgroundRestricted -> Words(R.string.hud_reason_background_restricted)
+
+    PreflightReason.PreArmStateUnknown -> Words(R.string.hud_reason_prearm_unknown)
+
+    PreflightReason.ArmingChecksDisabled -> Words(R.string.hud_reason_arming_checks_disabled)
+
+    is PreflightReason.PreArmFailing -> preArmWords(reason, reasonAge)
+
+    PreflightReason.NoFix3d -> Words(R.string.hud_reason_no_fix_3d)
+
+    PreflightReason.BatteryUnhealthy -> Words(R.string.hud_reason_battery_unhealthy)
+
+    PreflightReason.BatteryCritical -> Words(R.string.hud_reason_battery_critical)
+
+    PreflightReason.BatteryLow -> Words(R.string.hud_reason_battery_low)
+
+    is PreflightReason.BatteryUnknown -> Words(
+        when (reason.cause) {
             BatteryUnknownCause.NO_MONITOR -> R.string.hud_reason_battery_no_monitor
             BatteryUnknownCause.NO_READING -> R.string.hud_reason_battery_no_reading
         },
     )
 
-    is PreflightReason.FailsafeNotArmed -> stringResource(
-        id = R.string.hud_reason_failsafe_not_armed,
-        stringResource(id = reason.low.words()),
-        stringResource(id = reason.critical.words()),
+    PreflightReason.LimitsNotRead -> Words(R.string.hud_reason_limits_not_read)
+
+    is PreflightReason.FailsafeNotArmed -> Words(
+        R.string.hud_reason_failsafe_not_armed,
+        listOf(Words(reason.low.words()), Words(reason.critical.words())),
     )
 
-    else -> ReasonWords[reason]?.let { stringResource(id = it) }.orEmpty()
+    PreflightReason.HomeUnknown -> Words(R.string.hud_reason_home_unknown)
+
+    PreflightReason.EmergencyAlert -> Words(R.string.hud_reason_emergency_alert)
+
+    PreflightReason.AlertsNotEvaluated -> Words(R.string.hud_reason_alerts_not_evaluated)
 }
 
-@Composable
-private fun preArmText(reason: PreflightReason.PreArmFailing, entry: ChecklistItem): String {
+private fun preArmWords(reason: PreflightReason.PreArmFailing, age: Duration?): Words {
     val text = reason.text
-    val age = entry.reasonAge
     return when {
-        text == null || age == null -> stringResource(id = R.string.hud_reason_prearm_failing_no_text)
-        reason.current -> stringResource(id = R.string.hud_reason_prearm_failing, text, elapsedText(age))
-        else -> stringResource(id = R.string.hud_reason_prearm_failing_old, text, elapsedText(age))
+        text == null || age == null -> Words(R.string.hud_reason_prearm_failing_no_text)
+        reason.current -> Words(R.string.hud_reason_prearm_failing, listOf(text, age))
+        else -> Words(R.string.hud_reason_prearm_failing_old, listOf(text, age))
     }
 }
 
-/** The words of each reason with no value in it; [reasonText] writes the others with their values. */
-private val ReasonWords: Map<PreflightReason, Int> = mapOf(
-    PreflightReason.Ok to R.string.hud_reason_ok,
-    PreflightReason.NotReceived to R.string.hud_reason_not_received,
-    PreflightReason.Stale to R.string.hud_reason_stale,
-    PreflightReason.Replay to R.string.hud_reason_replay,
-    PreflightReason.NoActiveVehicle to R.string.hud_reason_no_active_vehicle,
-    PreflightReason.LinkLost to R.string.hud_reason_link_lost,
-    PreflightReason.UplinkSendsFailing to R.string.hud_reason_uplink_sends_failing,
-    PreflightReason.UplinkCommandUnanswered to R.string.hud_reason_uplink_command_unanswered,
-    PreflightReason.NotAnsweredYet to R.string.hud_reason_not_answered_yet,
-    PreflightReason.BackgroundLinkNotRunning to R.string.hud_reason_background_not_running,
-    PreflightReason.BackgroundRestricted to R.string.hud_reason_background_restricted,
-    PreflightReason.PreArmStateUnknown to R.string.hud_reason_prearm_unknown,
-    PreflightReason.ArmingChecksDisabled to R.string.hud_reason_arming_checks_disabled,
-    PreflightReason.NoFix3d to R.string.hud_reason_no_fix_3d,
-    PreflightReason.BatteryUnhealthy to R.string.hud_reason_battery_unhealthy,
-    PreflightReason.BatteryCritical to R.string.hud_reason_battery_critical,
-    PreflightReason.BatteryLow to R.string.hud_reason_battery_low,
-    PreflightReason.LimitsNotRead to R.string.hud_reason_limits_not_read,
-    PreflightReason.HomeUnknown to R.string.hud_reason_home_unknown,
-    PreflightReason.EmergencyAlert to R.string.hud_reason_emergency_alert,
-    PreflightReason.AlertsNotEvaluated to R.string.hud_reason_alerts_not_evaluated,
+// A handful of arguments, once per row on a sheet: the array copy costs nothing worth avoiding.
+@Suppress("SpreadOperator")
+@Composable
+internal fun Words.text(): String = stringResource(
+    res,
+    *args.map { arg ->
+        when (arg) {
+            is Words -> arg.text()
+            is Duration -> elapsedText(arg)
+            else -> arg
+        }
+    }.toTypedArray(),
 )
 
 @StringRes

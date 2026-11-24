@@ -1,10 +1,14 @@
 package com.owindev.gcs.feature.hud
 
+import android.os.SystemClock
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import com.owindev.gcs.core.designsystem.R as DesignSystemR
@@ -62,15 +66,43 @@ class PreflightChecklistTest {
     @Test
     fun `GIVEN_an_unacknowledged_amber_item_WHEN_its_button_is_tapped_THEN_that_item_is_acknowledged`() {
         showChecklist(listOf(ChecklistItem(LIMITS_AMBER)), key = null, held = CommandUnavailable.CautionsToAcknowledge)
+        SystemClock.sleep(SETTLED_MILLIS)
 
-        compose.onNodeWithText(context.getString(R.string.hud_checklist_acknowledge).uppercase()).performClick()
+        acknowledgeButton(LIMITS_AMBER).performClick()
         compose.waitForIdle()
         val result = acknowledged.toList()
 
         result shouldBeEqualTo listOf(LIMITS_AMBER)
     }
 
-    private fun showChecklist(checklist: List<ChecklistItem>, key: ConfirmKey?, held: CommandUnavailable?) {
+    @Test
+    fun `GIVEN_a_row_that_just_moved_into_another_row_WHEN_its_button_is_tapped_THEN_nothing_is_acknowledged`() {
+        val checklist = mutableStateOf(listOf(ChecklistItem(LIMITS_AMBER), ChecklistItem(PREARM_AMBER)))
+        showChecklist(checklist, key = null, held = CommandUnavailable.CautionsToAcknowledge)
+        SystemClock.sleep(SETTLED_MILLIS)
+
+        checklist.value = listOf(ChecklistItem(PREARM_AMBER), ChecklistItem(LIMITS_AMBER))
+        compose.waitForIdle()
+        acknowledgeButton(PREARM_AMBER).performClick()
+        compose.waitForIdle()
+        val result = acknowledged.toList()
+
+        result shouldBeEqualTo emptyList()
+    }
+
+    @Test
+    fun `GIVEN_arm_held_by_the_route_WHEN_the_checklist_shows_THEN_its_acknowledge_button_is_disabled`() {
+        showChecklist(listOf(ChecklistItem(LIMITS_AMBER)), key = null, held = CommandUnavailable.RouteChanged)
+
+        val result = SemanticsProperties.Disabled in acknowledgeButton(LIMITS_AMBER).fetchSemanticsNode().config
+
+        result shouldBeEqualTo true
+    }
+
+    private fun showChecklist(checklist: List<ChecklistItem>, key: ConfirmKey?, held: CommandUnavailable?) =
+        showChecklist(mutableStateOf(checklist), key, held)
+
+    private fun showChecklist(checklist: State<List<ChecklistItem>>, key: ConfirmKey?, held: CommandUnavailable?) {
         compose.setContent {
             GcsTheme {
                 ChecklistSheetContent(
@@ -80,9 +112,9 @@ class PreflightChecklistTest {
                         altitudeMetres = null,
                         key = key,
                         unavailable = held,
-                        checklist = checklist,
+                        checklist = checklist.value,
                     ),
-                    checklist = checklist,
+                    checklist = checklist.value,
                     actions = CommandActions(onAcknowledgeCaution = { acknowledged += it }),
                 )
             }
@@ -95,15 +127,24 @@ class PreflightChecklistTest {
         return compose.onAllNodesWithContentDescription(label).fetchSemanticsNodes().size
     }
 
+    private fun acknowledgeButton(item: PreflightItem) = compose.onNodeWithContentDescription(
+        context.getString(R.string.hud_checklist_acknowledge_item, context.getString(item.kind.title())),
+    )
+
     private fun redReason(): String = context.resources.getQuantityString(R.plurals.hud_command_preflight_red, 1, 1)
 
     private companion object {
         const val SYSTEM_ID = 1
+
+        /** Longer than the checklist's acknowledgement guard, so a row counts as settled. */
+        const val SETTLED_MILLIS = 1_200L
         val ARM_KEY = ConfirmKey(VehicleCommand.ARM, CommandKey(SystemId(SYSTEM_ID), connection = 4), null)
         val RED_ONE = CommandUnavailable.PreflightRed(items = 1)
         val LINK_OK = PreflightItem(PreflightKind.LINK, PreflightColour.GREEN, PreflightReason.Ok)
         val GPS_RED = PreflightItem(PreflightKind.GPS, PreflightColour.RED, PreflightReason.NoFix3d)
         val LIMITS_AMBER =
             PreflightItem(PreflightKind.BATTERY_LIMITS, PreflightColour.AMBER, PreflightReason.LimitsNotRead)
+        val PREARM_AMBER =
+            PreflightItem(PreflightKind.VEHICLE_PREARM, PreflightColour.AMBER, PreflightReason.ArmingChecksDisabled)
     }
 }

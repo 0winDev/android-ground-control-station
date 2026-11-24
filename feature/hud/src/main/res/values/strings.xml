@@ -247,12 +247,12 @@
         <item quantity="one">%1$s: no answer after %2$d attempt, then stopped (%3$s). Check the vehicle.</item>
         <item quantity="other">%1$s: no answer after %2$d attempts, then stopped (%3$s). Check the vehicle.</item>
     </plurals>
-    <string name="hud_checklist_title">Pre-flight check</string>
-    <string name="hud_checklist_summary">%1$d fail · %2$d caution · %3$d OK</string>
+    <string name="hud_checklist_summary">Pre-flight check · fail: %1$d · caution: %2$d · OK: %3$d</string>
     <string name="hud_checklist_ok">OK</string>
     <string name="hud_checklist_caution">Caution</string>
     <string name="hud_checklist_fail">Fail</string>
     <string name="hud_checklist_acknowledge">Acknowledge</string>
+    <string name="hud_checklist_acknowledge_item">Acknowledge: %1$s</string>
     <string name="hud_checklist_acknowledged">Acknowledged</string>
     <string name="hud_checklist_link">Link</string>
     <string name="hud_checklist_uplink">Vehicle hears this GCS</string>
@@ -265,7 +265,6 @@
     <string name="hud_checklist_position">Position</string>
     <string name="hud_checklist_attitude">Attitude</string>
     <string name="hud_checklist_alerts">Alerts</string>
-    <string name="hud_reason_ok">OK</string>
     <string name="hud_reason_not_received">Not received yet</string>
     <string name="hud_reason_stale">Data too old</string>
     <string name="hud_reason_replay">A replay is playing</string>
@@ -294,7 +293,7 @@
     <string name="hud_failsafe_no_threshold">no threshold</string>
     <string name="hud_failsafe_warn_only">warns only</string>
     <string name="hud_failsafe_armed">acts</string>
-    <string name="hud_reason_home_unknown">Home not set</string>
+    <string name="hud_reason_home_unknown">Home position not received</string>
     <string name="hud_reason_emergency_alert">An emergency alert is active</string>
     <string name="hud_reason_alerts_not_evaluated">Alerts not evaluated</string>
 </resources>

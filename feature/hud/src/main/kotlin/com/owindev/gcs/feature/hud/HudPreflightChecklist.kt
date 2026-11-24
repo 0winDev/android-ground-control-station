@@ -15,10 +15,17 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import com.owindev.gcs.core.designsystem.confirm.SlideToConfirm
@@ -32,6 +39,7 @@ import com.owindev.gcs.core.domain.vehicle.SystemId
 import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * Arm's sheet (REQ-048): every pre-flight item with its colour, icon, word and reason, red first, an acknowledgement
@@ -53,7 +61,13 @@ internal fun ChecklistSheetContent(sheet: CommandSheet, checklist: List<Checklis
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
         ) {
-            checklist.forEach { ChecklistRow(entry = it, onAcknowledge = actions.onAcknowledgeCaution) }
+            // A row keyed by its kind keeps a press with its item when the list reorders under the finger (#56).
+            val acknowledgeable = sheet.unavailable.let { it == null || it.isPreflight() }
+            checklist.forEach { entry ->
+                key(entry.item.kind) {
+                    ChecklistRow(entry, acknowledgeable, onAcknowledge = actions.onAcknowledgeCaution)
+                }
+            }
         }
         if (sheet.slideAgain) {
             Text(
@@ -71,7 +85,9 @@ internal fun ChecklistSheetContent(sheet: CommandSheet, checklist: List<Checklis
                 onConfirm = actions.onConfirm,
             )
         } else {
-            sheet.unavailable?.let { ArmHeldBy(it) }
+            sheet.unavailable?.let {
+                ArmHeldBy(it, red = checklist.any { item -> item.item.colour == PreflightColour.RED })
+            }
         }
         OutlinedButton(
             onClick = actions.onCancel,
@@ -89,7 +105,7 @@ private fun ChecklistHeader(checklist: List<ChecklistItem>) {
     Column {
         Text(text = stringResource(id = VehicleCommand.ARM.title()), style = MaterialTheme.typography.headlineMedium)
         Text(
-            text = stringResource(id = R.string.hud_checklist_title) + " · " + stringResource(
+            text = stringResource(
                 id = R.string.hud_checklist_summary,
                 checklist.count { it.item.colour == PreflightColour.RED },
                 checklist.count { it.item.colour == PreflightColour.AMBER },
@@ -101,23 +117,30 @@ private fun ChecklistHeader(checklist: List<ChecklistItem>) {
     }
 }
 
+/**
+ * One item. Its acknowledgement counts only once the row has stayed where it is for [ACKNOWLEDGE_GUARD], as the alert
+ * banner's: a tap meant for the row that was there a moment earlier acknowledges nothing.
+ */
 @Composable
-private fun ChecklistRow(entry: ChecklistItem, onAcknowledge: (PreflightItem) -> Unit) {
+private fun ChecklistRow(entry: ChecklistItem, acknowledgeable: Boolean, onAcknowledge: (PreflightItem) -> Unit) {
     val look = entry.item.colour.look()
+    val title = stringResource(id = entry.item.kind.title())
+    val placement = remember(entry.item) { RowPlacement() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = GcsTheme.sizes.minTouchTarget)
+            .onGloballyPositioned { placement.placedAt(it.positionInParent().y) }
             .semantics(mergeDescendants = true) {},
         horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(painter = painterResource(id = look.icon), contentDescription = null, tint = look.color)
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = stringResource(id = entry.item.kind.title()), style = MaterialTheme.typography.titleSmall)
-            if (entry.item.reason != PreflightReason.Ok) {
+            Text(text = title, style = MaterialTheme.typography.titleSmall)
+            entry.reasonWords()?.let { words ->
                 Text(
-                    text = reasonText(entry),
+                    text = words.text(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -130,9 +153,13 @@ private fun ChecklistRow(entry: ChecklistItem, onAcknowledge: (PreflightItem) ->
                         style = MaterialTheme.typography.labelLarge,
                     )
                 } else {
+                    val label = stringResource(id = R.string.hud_checklist_acknowledge_item, title)
                     OutlinedButton(
-                        onClick = { onAcknowledge(entry.item) },
-                        modifier = Modifier.heightIn(min = GcsTheme.sizes.button),
+                        onClick = { if (placement.settled()) onAcknowledge(entry.item) },
+                        enabled = acknowledgeable,
+                        modifier = Modifier
+                            .heightIn(min = GcsTheme.sizes.button)
+                            .semantics { contentDescription = label },
                     ) {
                         Text(text = stringResource(id = R.string.hud_checklist_acknowledge).uppercase())
                     }
@@ -147,10 +174,31 @@ private fun ChecklistRow(entry: ChecklistItem, onAcknowledge: (PreflightItem) ->
     }
 }
 
-/** What holds arming, in the slide's place: never a slide that only looks disabled. */
+/** Where a row last moved to, and since when; a plain holder, so a move never recomposes anything. */
+private class RowPlacement {
+    private var y = Float.NaN
+    private var since = TimeSource.Monotonic.markNow()
+
+    fun placedAt(newY: Float) {
+        if (newY != y) {
+            y = newY
+            since = TimeSource.Monotonic.markNow()
+        }
+    }
+
+    fun settled(): Boolean = since.elapsedNow() >= ACKNOWLEDGE_GUARD
+}
+
+private fun CommandUnavailable.isPreflight(): Boolean =
+    this is CommandUnavailable.PreflightRed || this == CommandUnavailable.CautionsToAcknowledge
+
+/**
+ * What holds arming, in the slide's place: never a slide that only looks disabled. Red whenever an item is, even if
+ * another reason, such as the route, holds it first; announced when it changes.
+ */
 @Composable
-private fun ArmHeldBy(unavailable: CommandUnavailable) {
-    val look = if (unavailable is CommandUnavailable.PreflightRed) {
+private fun ArmHeldBy(unavailable: CommandUnavailable, red: Boolean) {
+    val look = if (red) {
         PreflightColour.RED.look()
     } else {
         PreflightColour.AMBER.look()
@@ -159,7 +207,7 @@ private fun ArmHeldBy(unavailable: CommandUnavailable) {
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = GcsTheme.sizes.minTouchTarget)
-            .semantics(mergeDescendants = true) {},
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
         horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
         verticalAlignment = Alignment.CenterVertically,
     ) {
