@@ -28,12 +28,15 @@ import com.owindev.gcs.core.domain.vehicle.VehicleType
 import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
+import com.owindev.gcs.core.domain.vehicle.command.CommandRouteRepository
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingCommand
 import com.owindev.gcs.core.domain.vehicle.command.PendingState
 import com.owindev.gcs.core.domain.vehicle.command.Rejection
+import com.owindev.gcs.core.domain.vehicle.command.RouteAddress
 import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
+import com.owindev.gcs.core.domain.vehicle.command.VehicleRoute
 import com.owindev.gcs.core.testing.MainDispatcherExtension
 import com.owindev.gcs.core.testing.coVerifyNever
 import com.owindev.gcs.core.testing.coVerifyOnce
@@ -43,6 +46,7 @@ import io.mockk.mockk
 import java.util.stream.Stream
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -66,10 +70,12 @@ class HudCommandsViewModelTest {
 
     private val commandKey = MutableStateFlow<CommandKey?>(KEY)
     private val pending = MutableStateFlow<PendingCommand?>(null)
+    private val route = MutableStateFlow<VehicleRoute?>(pinnedOn(KEY))
     private val vehicles = MutableStateFlow<Map<SystemId, Vehicle>>(emptyMap())
     private val activeTelemetry = MutableStateFlow<Telemetry?>(null)
     private var check = GREEN_CHECK
     private val commandRepository: CommandRepository = mockk()
+    private val routeRepository: CommandRouteRepository = mockk()
     private val vehicleRepository: VehicleRepository = mockk()
     private val telemetryRepository: TelemetryRepository = mockk()
     private val preflightRepository: PreflightRepository = mockk()
@@ -80,11 +86,13 @@ class HudCommandsViewModelTest {
     fun setUp() {
         every { commandRepository.commandKey } returns commandKey
         every { commandRepository.pending } returns pending
+        every { routeRepository.route } returns route
         every { vehicleRepository.vehicles } returns vehicles
         every { telemetryRepository.activeTelemetry } returns activeTelemetry
         every { preflightRepository.checkFor(any()) } answers { check }
         viewModel = HudCommandsViewModel(
             commands = commandRepository,
+            routes = routeRepository,
             vehicles = vehicleRepository,
             telemetry = telemetryRepository,
             preflight = preflightRepository,
@@ -194,7 +202,7 @@ class HudCommandsViewModelTest {
     fun `GIVEN a replay with no command key WHEN observing THEN no command is shown`() = runTest {
         turbineScope {
             onTheGround(armed = true)
-            commandKey.value = null
+            moveKey(null)
 
             val result = viewModel.state.testIn(backgroundScope)
 
@@ -364,7 +372,7 @@ class HudCommandsViewModelTest {
             val states = viewModel.state.testIn(backgroundScope)
             viewModel.onCommandRequested(VehicleCommand.RETURN_TO_LAUNCH)
 
-            commandKey.value = NEXT_KEY
+            moveKey(NEXT_KEY)
             val result = states.expectMostRecentItem().sheet
 
             result shouldBeEqualTo null
@@ -377,7 +385,7 @@ class HudCommandsViewModelTest {
             turbineScope {
                 onTheGround(armed = true)
                 coEvery { commandRepository.returnToLaunch(KEY) } answers {
-                    commandKey.value = NEXT_KEY
+                    moveKey(NEXT_KEY)
                     CommandResult.NotSent(NotSentReason.KeyChanged)
                 }
                 val states = viewModel.state.testIn(backgroundScope)
@@ -515,7 +523,7 @@ class HudCommandsViewModelTest {
                 onTheGround(armed = true)
                 coEvery { commandRepository.returnToLaunch(KEY) } answers {
                     vehicles.value += OTHER_VEHICLE_KEY.systemId to vehicle(OTHER_VEHICLE_KEY.systemId, armed = true)
-                    commandKey.value = OTHER_VEHICLE_KEY
+                    moveKey(OTHER_VEHICLE_KEY)
                     CommandResult.NotSent(NotSentReason.KeyChanged)
                 }
                 val states = viewModel.state.testIn(backgroundScope)
@@ -635,7 +643,7 @@ class HudCommandsViewModelTest {
             viewModel.onCommandRequested(VehicleCommand.RETURN_TO_LAUNCH)
             viewModel.onCommandConfirmed(RTL_KEY)
 
-            commandKey.value = NEXT_KEY
+            moveKey(NEXT_KEY)
             val result = states.expectMostRecentItem().feedback
 
             result shouldBeEqualTo null
@@ -651,7 +659,7 @@ class HudCommandsViewModelTest {
             viewModel.onCommandRequested(VehicleCommand.RETURN_TO_LAUNCH)
             viewModel.onCommandConfirmed(RTL_KEY)
 
-            commandKey.value = NEXT_KEY
+            moveKey(NEXT_KEY)
             val result = states.expectMostRecentItem().feedback
 
             result shouldBeEqualTo
@@ -670,7 +678,7 @@ class HudCommandsViewModelTest {
                 viewModel.onCommandRequested(VehicleCommand.RETURN_TO_LAUNCH)
                 viewModel.onCommandConfirmed(RTL_KEY)
 
-                commandKey.value = OTHER_VEHICLE_KEY
+                moveKey(OTHER_VEHICLE_KEY)
                 val result = states.expectMostRecentItem().feedback
 
                 result shouldBeEqualTo null
@@ -700,6 +708,12 @@ class HudCommandsViewModelTest {
             origin = DataOrigin.LIVE,
         )
 
+    /** The vehicle service moves the route with the key: a route pinned on the new key's address. */
+    private fun moveKey(key: CommandKey?) {
+        route.value = key?.let(::pinnedOn)
+        commandKey.value = key
+    }
+
     /** One way the rules refuse arming. */
     data class ArmRefusal(val landed: LandedState, val check: PreflightCheck, val reason: CommandUnavailable)
 
@@ -721,6 +735,7 @@ class HudCommandsViewModelTest {
             quantity = 3,
         )
         val LOITER = FlightMode.Named("Loiter")
+        val PINNED_ROUTE = RouteAddress("192.168.1.20", port = 14550)
         const val FLYING_ALTITUDE = 5.0
         const val CHOSEN_ALTITUDE = 12f
         const val TOO_HIGH = 31f
@@ -736,6 +751,10 @@ class HudCommandsViewModelTest {
             ),
             connection = 4,
         )
+
+        /** One address heard alone is pinned however old its mark. */
+        fun pinnedOn(key: CommandKey) =
+            VehicleRoute(key, pinned = PINNED_ROUTE, heard = mapOf(PINNED_ROUTE to TimeSource.Monotonic.markNow()))
 
         fun takeOffKey(altitude: Float) = ConfirmKey(VehicleCommand.TAKE_OFF, KEY, altitude)
 

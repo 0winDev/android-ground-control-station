@@ -185,6 +185,21 @@
     <string name="hud_command_not_on_ground">Not known to be on the ground</string>
     <string name="hud_command_only_armed">Only when armed</string>
     <string name="hud_command_acknowledge_cautions">Acknowledge the cautions in the pre-flight checklist</string>
+    <string name="hud_command_route_changed">Vehicle route changed: review it</string>
+    <string name="hud_command_route_alternating">Vehicle heard by more than one route</string>
+    <string name="hud_command_route_unknown">Vehicle route not known yet</string>
+
+    <!-- Vehicle route (REQ-051) -->
+    <string name="hud_route_changed">Vehicle route changed · %1$s → %2$s</string>
+    <string name="hud_route_alternating">Vehicle heard by more than one route (%1$s); commands held, pinned to %2$s. If it lasts, fly it with the transmitter.</string>
+    <string name="hud_route_review">Review</string>
+    <string name="hud_route_title">New vehicle route</string>
+    <string name="hud_route_from">Commands were going to</string>
+    <string name="hud_route_to">The vehicle is now heard only from</string>
+    <string name="hud_route_held">Only commands are held. Telemetry and this GCS\'s HEARTBEAT already follow the new route.</string>
+    <string name="hud_route_not_proof">Accepting does not prove it is your vehicle. If you did not change the network, do not accept: fly it with the transmitter.</string>
+    <string name="hud_route_slide_again">The vehicle\'s link changed. Slide again.</string>
+    <string name="hud_route_action">accept the new route</string>
     <string name="hud_command_sending">%1$s: sending…</string>
     <string name="hud_command_sending_attempt">%1$s: sent, attempt %2$d of %3$d</string>
     <string name="hud_command_in_progress">%1$s: in progress</string>

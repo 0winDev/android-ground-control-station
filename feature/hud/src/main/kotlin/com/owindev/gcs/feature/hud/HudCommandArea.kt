@@ -54,6 +54,7 @@ internal fun CommandArea(
     feedback: CommandFeedback?,
     actions: CommandActions,
     refusal: CommandFeedback? = null,
+    route: RouteNotice? = null,
 ) {
     Column(
         modifier = Modifier
@@ -61,6 +62,7 @@ internal fun CommandArea(
             .padding(horizontal = GcsTheme.spacing.screen, vertical = GcsTheme.spacing.chip),
         verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
     ) {
+        route?.let { RouteLine(notice = it, onReview = actions.onReviewRoute) }
         refusal?.let { FeedbackLine(feedback = it, onDismiss = actions.onDismissRefusal) }
         feedback?.let { FeedbackLine(feedback = it, onDismiss = actions.onDismissFeedback) }
         // The ground command sits apart from RTL and land: arming never leaves a finger where RTL appears next.
@@ -170,6 +172,12 @@ internal fun unavailableText(unavailable: CommandUnavailable, command: VehicleCo
         pluralStringResource(id = R.plurals.hud_command_preflight_red, count = unavailable.items, unavailable.items)
 
     CommandUnavailable.CautionsToAcknowledge -> stringResource(id = R.string.hud_command_acknowledge_cautions)
+
+    CommandUnavailable.RouteChanged -> stringResource(id = R.string.hud_command_route_changed)
+
+    CommandUnavailable.RouteAlternating -> stringResource(id = R.string.hud_command_route_alternating)
+
+    CommandUnavailable.RouteUnknown -> stringResource(id = R.string.hud_command_route_unknown)
 }
 
 @Composable

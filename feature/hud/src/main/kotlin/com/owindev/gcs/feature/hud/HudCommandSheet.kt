@@ -50,8 +50,14 @@ import kotlin.math.roundToInt
  */
 @Composable
 internal fun CommandSheetDialog(sheet: CommandSheet, actions: CommandActions) {
+    BottomSheetDialog(onDismiss = actions.onCancel) { SheetContent(sheet = sheet, actions = actions) }
+}
+
+/** A modal sheet at the bottom of the screen; back or a tap outside calls [onDismiss]. */
+@Composable
+internal fun BottomSheetDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     Dialog(
-        onDismissRequest = actions.onCancel,
+        onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
@@ -63,7 +69,7 @@ internal fun CommandSheetDialog(sheet: CommandSheet, actions: CommandActions) {
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(NormalBorder, MaterialTheme.colorScheme.outline),
             ) {
-                SheetContent(sheet = sheet, actions = actions)
+                content()
             }
         }
     }

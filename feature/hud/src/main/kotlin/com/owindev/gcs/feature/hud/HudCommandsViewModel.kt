@@ -15,10 +15,13 @@ import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandResult
+import com.owindev.gcs.core.domain.vehicle.command.CommandRouteRepository
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingCommand
+import com.owindev.gcs.core.domain.vehicle.command.RouteRule
 import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
+import com.owindev.gcs.core.domain.vehicle.command.VehicleRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.time.Duration
@@ -41,13 +44,15 @@ import kotlinx.coroutines.launch
  * The flight screen's commands (REQ-050): what is offered, its confirmation and the result of the last one sent. Two
  * steps, as every dangerous command: a request opens the sheet, a slide confirms it. Every rule is judged again with
  * fresh values when the operator acts, never on the state last drawn: a tap or a slide drawn a frame earlier confirms
- * nothing that is no longer offered. The command service judges everything once more under its send lock.
+ * nothing that is no longer offered. The command service judges everything once more under its send lock. Every
+ * command is held while the vehicle's route is not the one commands take (REQ-051).
  */
 // One source per part of what a command needs, and the rules the service applies; grouping them would only hide that.
 @Suppress("LongParameterList")
 @HiltViewModel
 class HudCommandsViewModel @Inject constructor(
     private val commands: CommandRepository,
+    private val routes: CommandRouteRepository,
     private val vehicles: VehicleRepository,
     private val telemetry: TelemetryRepository,
     private val preflight: PreflightRepository,
@@ -58,6 +63,7 @@ class HudCommandsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val rules = CommandRules(linkLoss, landed, groundPosition)
+    private val routeRule = RouteRule(linkLoss)
     private val request = MutableStateFlow<Request?>(null)
     private val sent = MutableStateFlow<Sent?>(null)
     private val refused = MutableStateFlow<Refusal?>(null)
@@ -71,13 +77,14 @@ class HudCommandsViewModel @Inject constructor(
     }
 
     private val bar: Flow<Pair<CommandKey?, CommandBar?>> =
-        combine(commands.commandKey, vehicles.vehicles, telemetry.activeTelemetry, ticks) {
+        combine(commands.commandKey, routes.route, vehicles.vehicles, telemetry.activeTelemetry, ticks) {
                 key,
+                route,
                 vehicles,
                 telemetry,
                 _,
             ->
-            key to barOf(key, vehicles, telemetry)
+            key to barOf(key, route, vehicles, telemetry)
         }
 
     val state: StateFlow<CommandsUiState> = combine(bar, request, sent, refused, commands.pending) {
@@ -187,12 +194,19 @@ class HudCommandsViewModel @Inject constructor(
 
     /** Judged on fresh values, never on the state last drawn. */
     private fun canConfirm(command: VehicleCommand): Boolean =
-        barOf(commands.commandKey.value, vehicles.vehicles.value, telemetry.activeTelemetry.value)
+        barOf(commands.commandKey.value, routes.route.value, vehicles.vehicles.value, telemetry.activeTelemetry.value)
             ?.offered(command)
             ?.let { it.unavailable == null } == true
 
-    private fun barOf(key: CommandKey?, vehicles: Map<SystemId, Vehicle>, telemetry: Telemetry?): CommandBar? =
-        key?.let { commandBarOf(it, vehicles[it.systemId], telemetry, preflight.checkFor(it.systemId), rules) }
+    private fun barOf(
+        key: CommandKey?,
+        route: VehicleRoute?,
+        vehicles: Map<SystemId, Vehicle>,
+        telemetry: Telemetry?,
+    ): CommandBar? = key?.let {
+        commandBarOf(it, vehicles[it.systemId], telemetry, preflight.checkFor(it.systemId), rules)
+            ?.heldBy(routeRule.statusOn(it, route))
+    }
 
     /** The command whose confirmation is open, on the link it was opened on. */
     private data class Request(
