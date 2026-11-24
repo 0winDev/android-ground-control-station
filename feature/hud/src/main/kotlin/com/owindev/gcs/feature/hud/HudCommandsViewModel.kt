@@ -2,15 +2,14 @@ package com.owindev.gcs.feature.hud
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.owindev.gcs.core.domain.preflight.PreflightAcknowledgements
+import com.owindev.gcs.core.domain.preflight.PreflightItem
 import com.owindev.gcs.core.domain.preflight.PreflightRepository
 import com.owindev.gcs.core.domain.telemetry.GroundPositionRule
 import com.owindev.gcs.core.domain.telemetry.LandedRule
-import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
+import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
-import com.owindev.gcs.core.domain.vehicle.Vehicle
 import com.owindev.gcs.core.domain.vehicle.VehicleRepository
 import com.owindev.gcs.core.domain.vehicle.command.CommandKey
 import com.owindev.gcs.core.domain.vehicle.command.CommandRepository
@@ -18,10 +17,8 @@ import com.owindev.gcs.core.domain.vehicle.command.CommandResult
 import com.owindev.gcs.core.domain.vehicle.command.CommandRouteRepository
 import com.owindev.gcs.core.domain.vehicle.command.NotSentReason
 import com.owindev.gcs.core.domain.vehicle.command.PendingCommand
-import com.owindev.gcs.core.domain.vehicle.command.RouteRule
 import com.owindev.gcs.core.domain.vehicle.command.TakeOffAltitudeRule
 import com.owindev.gcs.core.domain.vehicle.command.VehicleCommand
-import com.owindev.gcs.core.domain.vehicle.command.VehicleRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.time.Duration
@@ -45,7 +42,8 @@ import kotlinx.coroutines.launch
  * steps, as every dangerous command: a request opens the sheet, a slide confirms it. Every rule is judged again with
  * fresh values when the operator acts, never on the state last drawn: a tap or a slide drawn a frame earlier confirms
  * nothing that is no longer offered. The command service judges everything once more under its send lock. Every
- * command is held while the vehicle's route is not the one commands take (REQ-051).
+ * command is held while the vehicle's route is not the one commands take (REQ-051). Arm's sheet is the pre-flight
+ * checklist, where the operator acknowledges each amber item; the acknowledgements go with the arm (REQ-048).
  */
 // One source per part of what a command needs, and the rules the service applies; grouping them would only hide that.
 @Suppress("LongParameterList")
@@ -57,13 +55,13 @@ class HudCommandsViewModel @Inject constructor(
     private val telemetry: TelemetryRepository,
     private val preflight: PreflightRepository,
     private val altitudeRule: TakeOffAltitudeRule,
+    deviceClock: DeviceClock,
     linkLoss: LinkLossRule,
     landed: LandedRule,
     groundPosition: GroundPositionRule,
 ) : ViewModel() {
 
-    private val rules = CommandRules(linkLoss, landed, groundPosition)
-    private val routeRule = RouteRule(linkLoss)
+    private val judge = CommandJudge(preflight, CommandRules(linkLoss, landed, groundPosition), deviceClock)
     private val request = MutableStateFlow<Request?>(null)
     private val sent = MutableStateFlow<Sent?>(null)
     private val refused = MutableStateFlow<Refusal?>(null)
@@ -76,25 +74,29 @@ class HudCommandsViewModel @Inject constructor(
         }
     }
 
-    private val bar: Flow<Pair<CommandKey?, CommandBar?>> =
-        combine(commands.commandKey, routes.route, vehicles.vehicles, telemetry.activeTelemetry, ticks) {
+    private val rechecks: Flow<Unit> = combine(ticks, judge.acknowledgements) { _, _ -> }
+
+    private val judged: Flow<Judged?> =
+        combine(commands.commandKey, routes.route, vehicles.vehicles, telemetry.activeTelemetry, rechecks) {
                 key,
                 route,
                 vehicles,
                 telemetry,
                 _,
             ->
-            key to barOf(key, route, vehicles, telemetry)
+            judge.judge(key, route, vehicles, telemetry)
         }
 
-    val state: StateFlow<CommandsUiState> = combine(bar, request, sent, refused, commands.pending) {
-            (key, bar),
+    val state: StateFlow<CommandsUiState> = combine(judged, request, sent, refused, commands.pending) {
+            judged,
             opened,
             sent,
             refused,
             pending,
         ->
-        val sheet = if (key != null && bar != null) opened?.toSheet(key, bar) else null
+        val key = judged?.key
+        val bar = judged?.bar
+        val sheet = judged?.let { opened?.toSheet(it) }
         // A sheet that could not be shown once is over: it never comes back by itself when its command does.
         if (opened != null && sheet == null) request.compareAndSet(opened, null)
         CommandsUiState(
@@ -108,10 +110,13 @@ class HudCommandsViewModel @Inject constructor(
         .onCompletion { request.value = null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeout = STOP_TIMEOUT), CommandsUiState())
 
-    /** Opens the confirmation of [command], only if it is offered and can be confirmed right now. */
+    /**
+     * Opens the confirmation of [command], only if it is offered and can be confirmed right now; arm also while only the
+     * pre-flight check holds it, since its sheet is the checklist that says why.
+     */
     fun onCommandRequested(command: VehicleCommand) {
-        val key = commands.commandKey.value ?: return
-        if (!canConfirm(command)) return
+        val key = commands.commandKey.value
+        if (key == null || offeredNow(command)?.canBeRequested != true) return
         val altitude = if (command == VehicleCommand.TAKE_OFF) altitudeRule.defaultMetres else null
         request.value = Request(command, openedOn = key, altitudeMetres = altitude)
     }
@@ -134,13 +139,24 @@ class HudCommandsViewModel @Inject constructor(
      * offered, and another slide if [key] is not the open sheet's (its command, link or altitude changed meanwhile).
      */
     fun onCommandConfirmed(key: ConfirmKey) {
-        val confirming = request.value?.takeIf { canConfirm(it.command) } ?: return
+        val confirming = request.value?.takeIf { offeredNow(it.command)?.unavailable == null } ?: return
         if (key != confirming.confirmKey()) {
             request.value = confirming.copy(slideAgain = true)
         } else {
             request.value = null
             launchSend(confirming, key)
         }
+    }
+
+    /**
+     * Acknowledges the amber [item] the open checklist showed, judged on a fresh check: an item that changed or cleared
+     * meanwhile is not that check's, so a tap meant for it acknowledges nothing (#56).
+     */
+    fun onCautionAcknowledged(item: PreflightItem) {
+        val key = commands.commandKey.value ?: return
+        val open = request.value?.let { it.command == VehicleCommand.ARM && it.openedOn == key } == true
+        if (!open || offeredNow(VehicleCommand.ARM)?.canBeRequested != true) return
+        judge.acknowledge(item, key)
     }
 
     /** Hides an ended command's result; one still waiting for its answer stays. */
@@ -181,8 +197,7 @@ class HudCommandsViewModel @Inject constructor(
     }
 
     private suspend fun send(command: VehicleCommand, key: ConfirmKey): CommandResult = when (command) {
-        // Offered only with no amber item, so there is nothing to acknowledge (#106 brings the checklist).
-        VehicleCommand.ARM -> commands.arm(key.commandKey, PreflightAcknowledgements())
+        VehicleCommand.ARM -> commands.arm(key.commandKey, judge.acknowledgements.value)
 
         VehicleCommand.TAKE_OFF -> key.altitudeMetres?.let { commands.takeOff(key.commandKey, it) }
             ?: CommandResult.NotSent(NotSentReason.AltitudeOutOfRange)
@@ -193,20 +208,14 @@ class HudCommandsViewModel @Inject constructor(
     }
 
     /** Judged on fresh values, never on the state last drawn. */
-    private fun canConfirm(command: VehicleCommand): Boolean =
-        barOf(commands.commandKey.value, routes.route.value, vehicles.vehicles.value, telemetry.activeTelemetry.value)
-            ?.offered(command)
-            ?.let { it.unavailable == null } == true
-
-    private fun barOf(
-        key: CommandKey?,
-        route: VehicleRoute?,
-        vehicles: Map<SystemId, Vehicle>,
-        telemetry: Telemetry?,
-    ): CommandBar? = key?.let {
-        commandBarOf(it, vehicles[it.systemId], telemetry, preflight.checkFor(it.systemId), rules)
-            ?.heldBy(routeRule.statusOn(it, route))
-    }
+    private fun offeredNow(command: VehicleCommand): OfferedCommand? = judge.judge(
+        commands.commandKey.value,
+        routes.route.value,
+        vehicles.vehicles.value,
+        telemetry.activeTelemetry.value,
+    )
+        ?.bar
+        ?.offered(command)
 
     /** The command whose confirmation is open, on the link it was opened on. */
     private data class Request(
@@ -219,15 +228,16 @@ class HudCommandsViewModel @Inject constructor(
         fun confirmKey() = ConfirmKey(command, openedOn, altitudeMetres)
 
         /** Shown only on the link it was opened on, and while its command is still on the bar. */
-        fun toSheet(key: CommandKey, bar: CommandBar): CommandSheet? =
-            bar.offered(command)?.takeIf { key == openedOn }?.let { offered ->
+        fun toSheet(judged: Judged): CommandSheet? =
+            judged.bar?.offered(command)?.takeIf { judged.key == openedOn }?.let { offered ->
                 CommandSheet(
                     command = command,
-                    systemId = key.systemId.value,
+                    systemId = openedOn.systemId.value,
                     altitudeMetres = altitudeMetres,
                     key = confirmKey().takeIf { offered.unavailable == null },
                     unavailable = offered.unavailable,
                     slideAgain = slideAgain,
+                    checklist = judged.checklist.takeIf { command == VehicleCommand.ARM },
                 )
             }
     }

@@ -12,6 +12,7 @@ import com.owindev.gcs.core.domain.telemetry.LandedState
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
 import com.owindev.gcs.core.domain.telemetry.Timed
+import com.owindev.gcs.core.domain.time.DeviceClock
 import com.owindev.gcs.core.domain.vehicle.FlightMode
 import com.owindev.gcs.core.domain.vehicle.LinkLossRule
 import com.owindev.gcs.core.domain.vehicle.SystemId
@@ -77,6 +78,7 @@ class HudCommandsRouteHoldTest {
             telemetry = telemetryRepository,
             preflight = preflightRepository,
             altitudeRule = TakeOffAltitudeRule(),
+            deviceClock = DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
             linkLoss = LinkLossRule(),
             landed = LandedRule(),
             groundPosition = GroundPositionRule(),
