@@ -163,7 +163,7 @@ internal fun HudContent(
                     map = map,
                     modifier = Modifier.weight(1f),
                     // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
-                    header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
+                    header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state, compact = compact) },
                     start = { StartColumn(state = state) },
                     side = {
                         SideColumn(
