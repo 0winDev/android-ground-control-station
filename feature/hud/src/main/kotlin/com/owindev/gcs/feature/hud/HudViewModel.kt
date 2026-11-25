@@ -10,6 +10,9 @@ import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.domain.link.UplinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRule
 import com.owindev.gcs.core.domain.link.UplinkWarning
+import com.owindev.gcs.core.domain.message.MessageRepository
+import com.owindev.gcs.core.domain.message.ShownMessageRule
+import com.owindev.gcs.core.domain.message.VehicleMessage
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
@@ -58,10 +61,14 @@ import kotlinx.coroutines.flow.stateIn
  * timed on the [deviceClock], since a paused replay must not stop the operator's reading time. Link lost hides them,
  * as it outranks every alert (REQ-017).
  *
+ * The active vehicle's messages (REQ-047) are below the alerts: one at a glance, chosen by [messageRule], only while it
+ * is heard, and the whole list, kept while the link is lost. Their ages count on each whole second of the newest
+ * message's age, and the one at a glance is judged again when its hold ends, never only when something arrives.
+ *
  * Nothing remembered is ever shown: when nobody observes the HUD for [STOP_TIMEOUT], the state goes back
  * to [HudUiState.Starting], so coming back never flashes an old CONNECTED before the fresh state.
  */
-// One source per part of the HUD, the two rules that judge them and the clock; grouping them would only hide that.
+// One source per part of the HUD, the rules that judge them and the clock; grouping them would only hide that.
 @Suppress("LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -72,6 +79,8 @@ class HudViewModel @Inject constructor(
     private val alertRepository: AlertRepository,
     uplinkRepository: UplinkRepository,
     uplinkRule: UplinkRule,
+    messageRepository: MessageRepository,
+    private val messageRule: ShownMessageRule,
     private val rule: LinkLossRule,
     private val staleness: StalenessRule,
     private val deviceClock: DeviceClock,
@@ -79,6 +88,9 @@ class HudViewModel @Inject constructor(
 
     /** The alert on the banner and since when; written as each state is built, read by [onAlertAcknowledged]. */
     private var shown: ShownAlert? = null
+
+    /** The message at a glance; written and read only by [messageTicks]' own coroutine (lesson #29). */
+    private var shownMessage: VehicleMessage? = null
 
     /** Ticks only when the active vehicle's age needs re-reading; a new datagram does not restart it. */
     private val ticks: Flow<Unit> = combine(vehicleRepository.activeSystemId, vehicleRepository.vehicles) {
@@ -118,6 +130,20 @@ class HudViewModel @Inject constructor(
             }
         }
 
+    /** The messages and the one at a glance, again on each whole second of the newest's age and when a hold ends. */
+    private val messageTicks: Flow<MessageView> = messageRepository.activeMessages.flatMapLatest { kept ->
+        flow {
+            while (true) {
+                val shownNow = messageRule.next(shownMessage, kept).also { shownMessage = it }
+                emit(MessageView(shownNow, kept))
+                val newest = kept.firstOrNull() ?: awaitCancellation()
+                val toNextSecond = toNextSecond(newest.receivedAt.elapsedNow())
+                val untilChange = messageRule.untilChange(shownNow, kept)
+                delay(minOf(toNextSecond, untilChange ?: toNextSecond).atLeastRecheck())
+            }
+        }
+    }
+
     val state: StateFlow<HudUiState> = combine(
         linkRepository.traffic,
         vehicleRepository.activeSystemId,
@@ -130,6 +156,7 @@ class HudViewModel @Inject constructor(
             state to live
         }
         .combine(uplinkTicks) { (state, live), warning -> state.withUplink(warning.takeIf { live }) }
+        .combine(messageTicks) { state, view -> state.withMessages(view) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(
@@ -277,6 +304,13 @@ private fun Vehicle.toStatus() = VehicleStatus(
  */
 private fun HudUiState.withUplink(warning: UplinkWarning?): HudUiState =
     if (this is HudUiState.Connected) copy(uplink = warning?.toDoubt()) else this
+
+/** Only a heard vehicle has a message at a glance; a lost one keeps its list, read below the emergency (REQ-017). */
+private fun HudUiState.withMessages(view: MessageView): HudUiState = when (this) {
+    is HudUiState.Connected -> copy(messages = view.toMessages(latestVisible = true))
+    is HudUiState.LinkLost -> copy(messages = view.toMessages(latestVisible = false))
+    else -> this
+}
 
 /** Whole seconds, as the link-lost age, so both count alike. */
 private fun UplinkWarning.toDoubt(): UplinkDoubt = when (this) {
