@@ -296,4 +296,13 @@
     <string name="hud_reason_home_unknown">Home position not received</string>
     <string name="hud_reason_emergency_alert">An emergency alert is active</string>
     <string name="hud_reason_alerts_not_evaluated">Alerts not evaluated</string>
+    <!-- The vehicle's messages (REQ-047) -->
+    <string name="hud_messages_count">Messages · %1$d</string>
+    <string name="hud_messages_open">Show the vehicle\'s messages</string>
+    <string name="hud_messages_close">Close</string>
+    <string name="hud_messages_hide">Hide the vehicle\'s messages</string>
+    <string name="hud_message_source">Vehicle</string>
+    <string name="hud_message_age">%1$s ago</string>
+    <string name="hud_message_unknown_level">%1$s · severity %2$d</string>
+    <string name="hud_message_incomplete">%1$s (incomplete)</string>
 </resources>

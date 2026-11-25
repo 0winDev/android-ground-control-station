@@ -25,6 +25,7 @@ sealed interface HudUiState {
      * [telemetry] is the vehicle's, each part with its staleness (REQ-029). [alert] is its alert banner (REQ-028),
      * only while it is heard: [LinkLost] outranks every alert (REQ-017). [port] as in [WaitingForVehicle].
      * [uplink] says why the vehicle may not be hearing this GCS (REQ-045), `null` when nothing points to it.
+     * [messages] are the vehicle's own texts (REQ-047), below every alert.
      */
     data class Connected(
         val vehicle: VehicleStatus,
@@ -35,13 +36,15 @@ sealed interface HudUiState {
         val telemetry: TelemetryPanel = TelemetryPanel(),
         val alert: AlertBanner = AlertBanner.Hidden,
         val uplink: UplinkDoubt? = null,
+        val messages: VehicleMessages = VehicleMessages(),
     ) : HudUiState
 
     /**
      * The active vehicle is no longer heard (REQ-017): [lastKnown] is its state at its last HEARTBEAT,
      * [sinceLastHeartbeat] how long ago that was, in whole seconds, and [lastData] its last telemetry, which is never
      * shown as current. [localFault] is set when the problem is on this device, not the vehicle. [recorded] when the
-     * vehicle is a replay's, so its loss never passes for a live one (REQ-037).
+     * vehicle is a replay's, so its loss never passes for a live one (REQ-037). [messages] keeps the vehicle's texts
+     * to read below the emergency, never one at a glance (REQ-017, REQ-047).
      */
     data class LinkLost(
         val lastKnown: VehicleStatus,
@@ -50,6 +53,7 @@ sealed interface HudUiState {
         val localFault: LocalLinkFault? = null,
         val lastData: TelemetryPanel = TelemetryPanel(),
         val recorded: Boolean = false,
+        val messages: VehicleMessages = VehicleMessages(),
     ) : HudUiState
 
     data class PortUnavailable(val port: Int) : HudUiState

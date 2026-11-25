@@ -130,6 +130,11 @@ internal fun HudContent(
     // Arming closes them: nothing may stand between the operator and an armed vehicle.
     if (licencesOpen && state.licencesAvailable) LicencesDialog(onDismiss = { licencesOpen = false })
     LaunchedEffect(state.licencesAvailable) { if (!state.licencesAvailable) licencesOpen = false }
+    // Above the state's branches, so a list open when the link is lost stays open below the emergency; closed once no
+    // message is kept (a new session, another vehicle), so it never opens by itself with the next one's first message.
+    var messagesOpen by rememberSaveable { mutableStateOf(false) }
+    val anyMessage = state.messages().kept.isNotEmpty()
+    LaunchedEffect(anyMessage) { if (!anyMessage) messagesOpen = false }
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // A phone, upright or on its side: smaller type and spacing, and a status bar as short as it can be.
         val compact = maxWidth < CompactWidth || maxHeight < CompactHeight
@@ -161,7 +166,16 @@ internal fun HudContent(
                     header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
                     start = { StartColumn(state = state) },
                     side = {
-                        SideColumn(state = state, onAcknowledgeAlert = onAcknowledgeAlert, background = background)
+                        SideColumn(
+                            state = state,
+                            onAcknowledgeAlert = onAcknowledgeAlert,
+                            background = background,
+                            messages = SideMessages(
+                                open = messagesOpen,
+                                onToggle = { messagesOpen = !messagesOpen },
+                                compact = compact,
+                            ),
+                        )
                     },
                 )
                 // Under the map, never in a column that scrolls: RTL and land stay in sight whatever the alerts.
@@ -208,6 +222,7 @@ private fun SideColumn(
     state: HudUiState,
     onAcknowledgeAlert: (occurrence: Long) -> Unit,
     background: BackgroundWarnings,
+    messages: SideMessages,
 ) {
     when (state) {
         is HudUiState.Connected -> {
@@ -218,6 +233,8 @@ private fun SideColumn(
             OtherVehiclesBanner(systemIds = state.otherVehicles)
             // Below the link's cautions: battery optimisation is every app's default and must not push them away.
             BackgroundLinkBanners(background.warnings, background.onOpenSettings)
+            // The vehicle's own texts, last: they never replace or push away an alert or a caution (REQ-047).
+            MessagesSection(state.messages, messages.open, messages.onToggle, messages.compact)
         }
 
         is HudUiState.WaitingForVehicle -> {
@@ -225,13 +242,27 @@ private fun SideColumn(
             MessageCard(state = state)
         }
 
-        is HudUiState.LinkLost -> OtherVehiclesBanner(systemIds = state.otherVehicles)
+        // The emergency is in the header above: the list opens here, under it, never over it (REQ-017).
+        is HudUiState.LinkLost -> {
+            OtherVehiclesBanner(systemIds = state.otherVehicles)
+            MessagesSection(state.messages, messages.open, messages.onToggle, messages.compact)
+        }
 
         HudUiState.Starting -> Unit
 
         // Above the map with the banners, never in its middle, where a vehicle still heard is drawn.
         else -> MessageCard(state = state)
     }
+}
+
+/** Whether the vehicle's message list is [open], how to open or close it, and whether the layout is [compact]. */
+private data class SideMessages(val open: Boolean, val onToggle: () -> Unit, val compact: Boolean)
+
+/** The vehicle's messages, only while one is heard or lost. */
+private fun HudUiState.messages(): VehicleMessages = when (this) {
+    is HudUiState.Connected -> messages
+    is HudUiState.LinkLost -> messages
+    else -> VehicleMessages()
 }
 
 @Composable

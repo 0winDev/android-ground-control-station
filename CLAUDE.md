@@ -263,6 +263,7 @@ the issue number to an existing one.
 - A cancelled job cleans up late: key shared state by request identity, never by kind (#98).
 - A start on a transition misses the stop that comes after it: start a service by level, not by edge (#28).
 - A counter moved twice per change lies between the two: compare what a change shows with the value before it (#104).
+- An active ID and its list change in two emissions: the old list comes with the new ID, so never key on the ID (#107).
 
 **Safety review**
 - A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
@@ -285,6 +286,8 @@ the issue number to an existing one.
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
 - A request kept after its sheet hid comes back when its command does: drop it the first time it cannot show (#104).
 - A refusal must never replace the line of a command still waiting or an emergency: show it apart (#104).
+- A vehicle text in the app's level words reads as the app's alert: say whose it is, before the level (#107).
+- A list's cap can push a held emergency out: hold what is shown apart from what is kept (#107).
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).
@@ -301,6 +304,7 @@ the issue number to an existing one.
 - ArduCopter checks the GPS before arming only in a mode that needs position: fail it in LOITER, not STABILIZE (#100).
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
+- A reboot command restarts Mission Planner's simulator process: the relay's TCP link dies with the boot texts (#107).
 - pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
 - The relay's .up.tlog also holds a tool's frames sent through it: drop them before comparing with the app's log (#89).
 - A relay bound to 127.0.0.1 never reaches a phone on the LAN: bind the device's side to 0.0.0.0 (#28).
@@ -319,7 +323,7 @@ the issue number to an existing one.
 - detekt measures tests too: a `when` over message types that grows with the codec becomes a table (#112).
 - Lint's ExperimentalDetector crashes on a fun-interface lambda held or returned: use a class or a reference (#99, #102).
 - KSP's incremental run can drop a module's Hilt outputs: on a whole module missing, `kspDebugKotlin --rerun` (#102).
-- A green `assembleDebug` can still ship an APK without a ViewModel's Hilt factory: `clean` before installing for SITL (#89).
+- A green `assembleDebug`, even after `clean`, can ship an APK without a ViewModel's Hilt factory: launch it before SITL (#89, #107).
 - A reboot can leave an uncommitted file all NUL bytes: rebuild it from the session's edits, check it by bytecode (#89).
 - PowerShell's `>` re-encodes binary output: pull a device file with bash or `adb pull`, never `exec-out ... >` there (#89).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
@@ -328,12 +332,13 @@ the issue number to an existing one.
 - Logic-free types in `:core:domain` sink its Kover ratio: exclude them by name, and drop one that gains logic (#98).
 - On Windows `File.canonicalFile` does not resolve symbolic links: check a path's folder with `toRealPath()` (#71).
 - Never reflow KDoc by script: it merges lists and rewraps untouched paragraphs (#71).
+- Write invisible characters as `\uXXXX`: written raw they vanish from review, and ktlint emptied a raw BOM (#107).
 - MapLibre ignores the system proxy: test no network with a build pointing the style at an unreachable host (#73).
 - MapLibre draws no overlay before a style is presented: start the map on an offline style (#73).
 - A night map is the day style recoloured; OpenFreeMap answers 403 to a script without a User-Agent (#73).
 - A screen holding MapLibre content needs `@UiComposable`, or callers get MapLibre's applier (#73).
 - Never `--no-verify` a split commit: the hooks check the files as staged (#73).
 - `git checkout -- <file>` to undo a mutation also drops the uncommitted fix: copy the file aside first (#74).
-- A fixed-width child in a `Row` leaves its weighted sibling 0 dp: check new button rows at 360 dp on a phone (#61).
+- A fixed-width child in a `Row` leaves its weighted sibling 0 dp: check new button rows at 360 dp on a phone (#61, #107).
 - Check a phone at 360 × 640 dp with every banner on (replay, LINK LOST), not only at 360 × 780 (#61).
 - `input motionevent` gives each event its own down time, so no gesture is held: use root `sendevent` on the emulator (#103).

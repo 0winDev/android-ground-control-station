@@ -10,6 +10,7 @@ import com.owindev.gcs.core.domain.link.LinkTraffic
 import com.owindev.gcs.core.domain.link.UplinkHealth
 import com.owindev.gcs.core.domain.link.UplinkRepository
 import com.owindev.gcs.core.domain.link.UplinkRule
+import com.owindev.gcs.core.domain.message.ShownMessageRule
 import com.owindev.gcs.core.domain.telemetry.StalenessRule
 import com.owindev.gcs.core.domain.telemetry.Telemetry
 import com.owindev.gcs.core.domain.telemetry.TelemetryRepository
@@ -75,6 +76,8 @@ class HudViewModelUplinkTest {
             alertRepository,
             uplinkRepository,
             UplinkRule(),
+            noMessages(),
+            ShownMessageRule(),
             LinkLossRule(),
             StalenessRule(),
             DeviceClock(mainDispatcher.testDispatcher.scheduler.timeSource),
