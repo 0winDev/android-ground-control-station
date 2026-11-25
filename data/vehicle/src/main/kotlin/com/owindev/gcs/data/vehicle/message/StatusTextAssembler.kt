@@ -60,6 +60,7 @@ internal class StatusTextAssembler(
         receivedAt = at,
         origin = origin,
         incomplete = incomplete,
+        severityValue = severity,
     )
 
     /** `MAV_SEVERITY` 0 (emergency) to 7 (debug) are in [MessageSeverity]'s order; anything else is unknown. */

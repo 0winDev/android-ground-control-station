@@ -218,12 +218,12 @@ class StatusTextAssemblerTest {
 
     @ParameterizedTest
     @ValueSource(ints = [8, 255, -1])
-    fun `GIVEN a severity outside MAV_SEVERITY WHEN accepted THEN it is unknown`(value: Int) {
+    fun `GIVEN a severity outside MAV_SEVERITY WHEN accepted THEN it is unknown with its value`(value: Int) {
         val statusText = StatusText(value, SHORT_TEXT, id = 0, chunkSeq = 0, endsInField = true)
 
         val result = assembler.accept(statusText, start)
 
-        result shouldBeEqualTo listOf(message(SHORT_TEXT, severity = MessageSeverity.UNKNOWN))
+        result shouldBeEqualTo listOf(message(SHORT_TEXT, severity = MessageSeverity.UNKNOWN, severityValue = value))
     }
 
     @Test
@@ -247,7 +247,15 @@ class StatusTextAssemblerTest {
         text: String,
         incomplete: Boolean = false,
         severity: MessageSeverity = MessageSeverity.CRITICAL,
-    ) = VehicleMessage(severity, text, receivedAt = start, origin = DataOrigin.LIVE, incomplete = incomplete)
+        severityValue: Int = severity.ordinal,
+    ) = VehicleMessage(
+        severity,
+        text,
+        receivedAt = start,
+        origin = DataOrigin.LIVE,
+        incomplete = incomplete,
+        severityValue = severityValue,
+    )
 
     private companion object {
         const val CRITICAL = 2
