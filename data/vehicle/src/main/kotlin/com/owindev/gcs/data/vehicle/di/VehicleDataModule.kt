@@ -43,6 +43,7 @@ import com.owindev.gcs.data.vehicle.link.DefaultLinkRepository
 import com.owindev.gcs.data.vehicle.link.DefaultUplinkRepository
 import com.owindev.gcs.data.vehicle.link.LinkSession
 import com.owindev.gcs.data.vehicle.message.DefaultMessageRepository
+import com.owindev.gcs.data.vehicle.message.MessageStore
 import com.owindev.gcs.data.vehicle.parameter.DefaultBatteryThresholdRepository
 import com.owindev.gcs.data.vehicle.recording.DefaultRecordingRepository
 import com.owindev.gcs.data.vehicle.recording.FlightRecorder
@@ -192,7 +193,7 @@ abstract class VehicleDataModule {
 
         /** The flight screen's message holds decided in #107 (REQ-047): 5 s, 30 s for an emergency. */
         @Provides
-        fun provideShownMessageRule(): ShownMessageRule = ShownMessageRule()
+        fun provideShownMessageRule(): ShownMessageRule = ShownMessageRule(listCapacity = MessageStore.MAX_MESSAGES)
 
         /** With the alerts' own energy thresholds, so the check and the alerts judge the battery alike (REQ-048). */
         @Provides

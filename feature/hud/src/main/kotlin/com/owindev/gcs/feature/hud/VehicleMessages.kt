@@ -28,13 +28,21 @@ data class MessageLine(
     val recorded: Boolean,
 )
 
-/** The messages [kept], newest first, with the one [shown] at a glance, which is one of them or `null`. */
+/**
+ * The messages [kept], newest first, with the one [shown] at a glance: one of them, one the list dropped while its
+ * hold lasts, or `null`.
+ */
 internal data class MessageView(val shown: VehicleMessage?, val kept: List<VehicleMessage>)
 
 /** Every age read at once, so the line and its row in the list always agree (lesson #73). */
 internal fun MessageView.toMessages(latestVisible: Boolean): VehicleMessages {
     val lines = kept.map { it.toLine() }
-    val latest = shown?.let { kept.indexOf(it) }?.takeIf { latestVisible && it >= 0 }?.let(lines::get)
+    val index = shown?.let(kept::indexOf) ?: -1
+    val latest = when {
+        !latestVisible || shown == null -> null
+        index >= 0 -> lines[index]
+        else -> shown.toLine()
+    }
     return VehicleMessages(latest = latest, kept = lines)
 }
 

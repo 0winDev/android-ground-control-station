@@ -27,6 +27,7 @@ private fun Char.isSpace(): Boolean =
 private fun Char.isReplaced(): Boolean = this in BIDI_EMBEDDINGS ||
     this in BIDI_ISOLATES ||
     this in BIDI_MARKS ||
+    this == ARABIC_LETTER_MARK ||
     this in ZERO_WIDTH ||
     this == WORD_JOINER ||
     this == BYTE_ORDER_MARK
@@ -35,6 +36,7 @@ private const val REPLACEMENT = '\uFFFD'
 private const val DELETE = '\u007F'
 private const val LINE_SEPARATOR = '\u2028'
 private const val PARAGRAPH_SEPARATOR = '\u2029'
+private const val ARABIC_LETTER_MARK = '\u061C'
 private const val WORD_JOINER = '\u2060'
 private const val BYTE_ORDER_MARK = '\uFEFF'
 private val C0_CONTROLS = '\u0000'..'\u001F'

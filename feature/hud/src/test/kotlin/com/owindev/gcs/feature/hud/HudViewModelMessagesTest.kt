@@ -162,6 +162,40 @@ class HudViewModelMessagesTest {
         }
 
     @Test
+    fun `GIVEN an emergency at a glance WHEN 100 newer advisories push it out of the list THEN it stays`() = runTest {
+        turbineScope {
+            vehicles.value = mapOf(SYSTEM_1 to vehicle(VehicleLink.CONNECTED))
+            val emergency = message(MessageSeverity.CRITICAL, PRE_ARM_TEXT)
+            messages.value = listOf(emergency)
+            val state = viewModel.state.testIn(backgroundScope)
+            runCurrent()
+
+            messages.value = (1..KEPT).map { message(MessageSeverity.INFO, "$NEWEST_TEXT $it") }
+            runCurrent()
+
+            state.expectMostRecentItem().messages().latest?.text shouldBeEqualTo PRE_ARM_TEXT
+        }
+    }
+
+    @Test
+    fun `GIVEN an emergency at a glance WHEN another vehicle becomes active THEN its own newest is at a glance`() =
+        runTest {
+            turbineScope {
+                vehicles.value = mapOf(SYSTEM_1 to vehicle(VehicleLink.CONNECTED))
+                messages.value = listOf(message(MessageSeverity.CRITICAL, PRE_ARM_TEXT))
+                val state = viewModel.state.testIn(backgroundScope)
+                runCurrent()
+
+                vehicles.value = mapOf(SYSTEM_2 to vehicle(VehicleLink.CONNECTED, systemId = SYSTEM_2))
+                activeSystemId.value = SYSTEM_2
+                messages.value = listOf(message(MessageSeverity.INFO, NEWEST_TEXT))
+                runCurrent()
+
+                state.expectMostRecentItem().messages().latest?.text shouldBeEqualTo NEWEST_TEXT
+            }
+        }
+
+    @Test
     fun `GIVEN a message at a glance WHEN a second passes THEN its age and its row's count on together`() = runTest {
         turbineScope {
             vehicles.value = mapOf(SYSTEM_1 to vehicle(VehicleLink.CONNECTED))
@@ -287,8 +321,12 @@ class HudViewModelMessagesTest {
             recorded = false,
         )
 
-    private fun TestScope.vehicle(link: VehicleLink, heardAgo: Duration = Duration.ZERO) = Vehicle(
-        state = VehicleState(systemId = SYSTEM_1, type = VehicleType.COPTER, flightMode = GUIDED, armed = false),
+    private fun TestScope.vehicle(
+        link: VehicleLink,
+        heardAgo: Duration = Duration.ZERO,
+        systemId: SystemId = SYSTEM_1,
+    ) = Vehicle(
+        state = VehicleState(systemId = systemId, type = VehicleType.COPTER, flightMode = GUIDED, armed = false),
         link = link,
         lastHeartbeat = testScheduler.timeSource.markNow() - heardAgo,
         origin = DataOrigin.LIVE,
@@ -298,10 +336,12 @@ class HudViewModelMessagesTest {
         const val PORT = 14550
         const val DATAGRAMS = 42L
         const val UNKNOWN_SEVERITY = 9
+        const val KEPT = 100
         const val GPS_TEXT = "GPS 1: detected u-blox"
         const val PRE_ARM_TEXT = "PreArm: GPS 1: Bad fix"
         const val NEWEST_TEXT = "Frame: QUAD/X"
         val SYSTEM_1 = SystemId(1)
+        val SYSTEM_2 = SystemId(2)
         val GUIDED = FlightMode.Named("Guided")
         val LOST_FOR = 5.seconds
         val HALF_SECOND = 500.milliseconds

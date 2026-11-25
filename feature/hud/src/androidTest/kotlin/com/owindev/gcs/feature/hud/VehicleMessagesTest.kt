@@ -1,5 +1,6 @@
 package com.owindev.gcs.feature.hud
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
@@ -43,11 +44,15 @@ class VehicleMessagesTest {
     }
 
     @Test
-    fun `GIVEN_a_severity_outside_MAV_SEVERITY_WHEN_shown_THEN_it_reads_as_an_advisory_with_its_value`() {
+    fun `GIVEN_a_severity_outside_MAV_SEVERITY_WHEN_shown_THEN_it_reads_as_the_vehicle_s_advisory_with_its_value`() {
         show(connected(line(GPS_TEXT, unknownSeverity = UNKNOWN_SEVERITY)))
 
         val result = compose.onAllNodesWithText(
-            "${context.getString(R.string.hud_message_unknown_level, advisory(), UNKNOWN_SEVERITY)} · $GPS_TEXT",
+            listOf(
+                context.getString(R.string.hud_message_source),
+                context.getString(R.string.hud_message_unknown_level, advisory(), UNKNOWN_SEVERITY),
+                GPS_TEXT,
+            ).joinToString(separator = " · "),
             useUnmergedTree = true,
         ).fetchSemanticsNodes().size
 
@@ -96,10 +101,39 @@ class VehicleMessagesTest {
         result shouldBeEqualTo 0
     }
 
+    @Test
+    fun `GIVEN_a_message_at_a_glance_WHEN_TalkBack_reads_it_THEN_its_age_is_left_out`() {
+        show(connected(line(GPS_TEXT)))
+
+        val result = compose.onAllNodesWithText(age(), substring = true).fetchSemanticsNodes().size
+
+        result shouldBeEqualTo 0
+    }
+
+    @Test
+    fun `GIVEN_the_list_open_WHEN_no_message_is_kept_any_more_THEN_it_stays_closed_for_the_next_one`() {
+        val state = mutableStateOf<HudUiState>(connected(line(GPS_TEXT)))
+        compose.setContent { GcsTheme { HudContent(state = state.value, onAcknowledgeAlert = {}) } }
+        compose.onNodeWithText(GPS_TEXT, substring = true, useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        state.value = connected(line = null)
+        compose.waitForIdle()
+
+        state.value = connected(line(NEXT_TEXT))
+        compose.waitForIdle()
+        val result = compose.onAllNodesWithText(NEXT_TEXT, substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .size
+
+        result shouldBeEqualTo 1
+    }
+
     private fun show(state: HudUiState) {
         compose.setContent { GcsTheme { HudContent(state = state, onAcknowledgeAlert = {}) } }
         compose.waitForIdle()
     }
+
+    private fun age() = context.getString(R.string.hud_message_age, "2 s")
 
     private fun SemanticsNodeInteraction.overflows(): Boolean {
         val layouts = mutableListOf<TextLayoutResult>()
@@ -109,12 +143,12 @@ class VehicleMessagesTest {
 
     private fun advisory() = context.getString(R.string.hud_alert_level_advisory)
 
-    private fun connected(line: MessageLine) = HudUiState.Connected(
+    private fun connected(line: MessageLine?) = HudUiState.Connected(
         vehicle = VEHICLE,
         port = PORT,
         datagramCount = DATAGRAMS,
         otherVehicles = emptyList(),
-        messages = VehicleMessages(latest = line, kept = listOf(line)),
+        messages = VehicleMessages(latest = line, kept = listOfNotNull(line)),
     )
 
     private fun linkLost(line: MessageLine) = HudUiState.LinkLost(
@@ -138,6 +172,7 @@ class VehicleMessagesTest {
         const val DATAGRAMS = 42L
         const val UNKNOWN_SEVERITY = 9
         const val GPS_TEXT = "GPS 1: detected u-blox"
+        const val NEXT_TEXT = "Frame: QUAD/X"
         val LONG_TEXT = "EKF3 IMU0 is using GPS, origin set, yaw alignment complete, ".repeat(5).trim()
         val VEHICLE = VehicleStatus(systemId = 1, flightMode = FlightMode.Named("Guided"), armed = false)
         val LOST_FOR = 5.seconds

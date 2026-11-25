@@ -44,13 +44,65 @@ class ShownMessageRuleTest {
     }
 
     @Test
-    fun `GIVEN a message shown WHEN it is no longer kept THEN the newest kept is shown`() {
+    fun `GIVEN an emergency shown for just under 30 s WHEN the list dropped it for newer advisories THEN it stays`() {
         val shown = message(MessageSeverity.CRITICAL, "shown")
-        val newest = message(MessageSeverity.INFO, "another vehicle's")
+        val advisories = advisories(KEPT)
+        clock += SERIOUS_HOLD - 1.milliseconds
 
-        val result = rule.next(shown, messages = listOf(newest))
+        val result = rule.next(shown, messages = advisories)
 
-        result shouldBeEqualTo newest
+        result shouldBeEqualTo shown
+    }
+
+    @Test
+    fun `GIVEN an emergency shown for 30 s WHEN the full list dropped it THEN the newest kept is shown`() {
+        val shown = message(MessageSeverity.CRITICAL, "shown")
+        val advisories = advisories(KEPT)
+        clock += SERIOUS_HOLD
+
+        val result = rule.next(shown, messages = advisories)
+
+        result shouldBeEqualTo advisories.first()
+    }
+
+    @Test
+    fun `GIVEN an emergency shown WHEN it is missing from a list that is not full THEN the newest kept is shown`() {
+        val shown = message(MessageSeverity.CRITICAL, "shown")
+        val advisories = advisories(KEPT - 1)
+
+        val result = rule.next(shown, messages = advisories)
+
+        result shouldBeEqualTo advisories.first()
+    }
+
+    @Test
+    fun `GIVEN a caution the full list dropped WHEN a newer emergency is kept THEN it replaces it at once`() {
+        val shown = message(MessageSeverity.WARNING, "shown")
+        val emergency = message(MessageSeverity.ERROR, "emergency")
+
+        val result = rule.next(shown, messages = advisories(KEPT - 1) + emergency)
+
+        result shouldBeEqualTo emergency
+    }
+
+    @Test
+    fun `GIVEN an emergency the full list dropped 2 s after it came WHEN advisories wait THEN it can change in 28 s`() {
+        val shown = message(MessageSeverity.CRITICAL, "shown")
+        val advisories = advisories(KEPT)
+        clock += 2.seconds
+
+        val result = rule.untilChange(shown, messages = advisories)
+
+        result shouldBeEqualTo 28.seconds
+    }
+
+    @Test
+    fun `GIVEN a zero list capacity WHEN building the rule THEN it is refused`() {
+        val listCapacity = 0
+
+        val result = invoking { ShownMessageRule(listCapacity = listCapacity) }
+
+        result shouldThrow IllegalArgumentException::class
     }
 
     @Test
@@ -198,6 +250,8 @@ class ShownMessageRuleTest {
         result shouldThrow IllegalArgumentException::class
     }
 
+    private fun advisories(count: Int) = (1..count).map { message(MessageSeverity.INFO, "advisory $it") }.reversed()
+
     private fun message(severity: MessageSeverity, text: String) = VehicleMessage(
         severity = severity,
         text = text,
@@ -207,6 +261,7 @@ class ShownMessageRuleTest {
 
     private companion object {
         const val BOOT_BURST = 23
+        const val KEPT = 100
         val HOLD = 5.seconds
         val SERIOUS_HOLD = 30.seconds
     }

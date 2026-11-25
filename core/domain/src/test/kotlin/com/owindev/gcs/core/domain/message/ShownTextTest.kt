@@ -69,7 +69,7 @@ class ShownTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = [0x200E, 0x200F])
+    @ValueSource(ints = [0x061C, 0x200E, 0x200F])
     fun `GIVEN a bidirectional mark WHEN shown THEN it is a replacement character`(code: Int) {
         val text = "GPS${code.toChar()}fix"
 
@@ -89,7 +89,12 @@ class ShownTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = [0x20, 0x7E, 0xA0, 0x200A, 0x2027, 0x202F, 0x205F, 0x2061, 0x2065, 0x206A, 0xFFFD, 0xFEFE])
+    @ValueSource(
+        ints = [
+            0x20, 0x7E, 0xA0, 0x061B, 0x061D, 0x200A, 0x2027, 0x202F,
+            0x205F, 0x2061, 0x2065, 0x206A, 0xFFFD, 0xFEFE,
+        ],
+    )
     fun `GIVEN a character next to a replaced range WHEN shown THEN it is kept`(code: Int) {
         val text = "GPS${code.toChar()}fix"
 
