@@ -46,11 +46,19 @@ import kotlin.math.roundToInt
 
 /**
  * The confirmation (REQ-050): what the command does, the take off altitude and the slide naming the action and the
- * vehicle. Back or a tap outside cancels it; nothing is sent but by the slide.
+ * vehicle; arm's is the pre-flight checklist (REQ-048). Back or a tap outside cancels it; nothing is sent but by the
+ * slide.
  */
 @Composable
 internal fun CommandSheetDialog(sheet: CommandSheet, actions: CommandActions) {
-    BottomSheetDialog(onDismiss = actions.onCancel) { SheetContent(sheet = sheet, actions = actions) }
+    BottomSheetDialog(onDismiss = actions.onCancel) {
+        val checklist = sheet.checklist
+        if (checklist != null) {
+            ChecklistSheetContent(sheet = sheet, checklist = checklist, actions = actions)
+        } else {
+            SheetContent(sheet = sheet, actions = actions)
+        }
+    }
 }
 
 /** A modal sheet at the bottom of the screen; back or a tap outside calls [onDismiss]. */
