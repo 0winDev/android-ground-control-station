@@ -1,0 +1,36 @@
+sender	message	fields
+255/190	MISSION_COUNT	target_system=1, target_component=1, count=5, mission_type=0
+1/1	MISSION_REQUEST	target_system=255, target_component=190, seq=0, mission_type=0
+255/190	MISSION_ITEM_INT	target_system=1, target_component=1, seq=0, frame=0, command=16, current=1, autocontinue=1, param1=0.0, param2=0.0, param3=0.0, param4=0.0, x=-353633515, y=1491652412, z=585.0, mission_type=0
+1/1	MISSION_REQUEST	target_system=255, target_component=190, seq=1, mission_type=0
+255/190	MISSION_ITEM_INT	target_system=1, target_component=1, seq=1, frame=3, command=22, current=0, autocontinue=1, param1=0.0, param2=0.0, param3=0.0, param4=nan, x=-353633515, y=1491652412, z=10.0, mission_type=0
+1/1	MISSION_REQUEST	target_system=255, target_component=190, seq=2, mission_type=0
+255/190	MISSION_ITEM_INT	target_system=1, target_component=1, seq=2, frame=3, command=16, current=0, autocontinue=1, param1=5.0, param2=0.0, param3=0.0, param4=nan, x=-353623715, y=1491639215, z=10.0, mission_type=0
+1/1	MISSION_REQUEST	target_system=255, target_component=190, seq=3, mission_type=0
+255/190	MISSION_ITEM_INT	target_system=1, target_component=1, seq=3, frame=3, command=16, current=0, autocontinue=1, param1=5.0, param2=0.0, param3=0.0, param4=nan, x=-353625115, y=1491624946, z=10.0, mission_type=0
+1/1	MISSION_REQUEST	target_system=255, target_component=190, seq=4, mission_type=0
+255/190	MISSION_ITEM_INT	target_system=1, target_component=1, seq=4, frame=3, command=16, current=0, autocontinue=1, param1=0.0, param2=0.0, param3=0.0, param4=nan, x=-353631765, y=1491626662, z=10.0, mission_type=0
+1/1	MISSION_ACK	target_system=255, target_component=190, type=0, mission_type=0
+255/190	MISSION_COUNT	target_system=1, target_component=1, count=0, mission_type=1
+1/1	MISSION_ACK	target_system=255, target_component=190, type=0, mission_type=1
+255/190	MISSION_COUNT	target_system=1, target_component=1, count=0, mission_type=2
+1/1	MISSION_ACK	target_system=255, target_component=190, type=0, mission_type=2
+255/190	MISSION_REQUEST_LIST	target_system=1, target_component=1, mission_type=0
+1/1	MISSION_COUNT	target_system=255, target_component=190, count=5, mission_type=0
+255/190	MISSION_REQUEST_INT	target_system=1, target_component=1, seq=0, mission_type=0
+1/1	MISSION_ITEM_INT	target_system=255, target_component=190, seq=0, frame=0, command=16, current=0, autocontinue=1, param1=0.0, param2=0.0, param3=0.0, param4=0.0, x=-353633515, y=1491652412, z=587.1499633789062, mission_type=0
+255/190	MISSION_REQUEST_INT	target_system=1, target_component=1, seq=1, mission_type=0
+1/1	MISSION_ITEM_INT	target_system=255, target_component=190, seq=1, frame=3, command=22, current=0, autocontinue=1, param1=0.0, param2=0.0, param3=0.0, param4=0.0, x=-353633515, y=1491652412, z=10.0, mission_type=0
+255/190	MISSION_REQUEST_INT	target_system=1, target_component=1, seq=2, mission_type=0
+1/1	MISSION_ITEM_INT	target_system=255, target_component=190, seq=2, frame=3, command=16, current=0, autocontinue=1, param1=5.0, param2=0.0, param3=0.0, param4=0.0, x=-353623715, y=1491639215, z=10.0, mission_type=0
+255/190	MISSION_REQUEST_INT	target_system=1, target_component=1, seq=3, mission_type=0
+1/1	MISSION_ITEM_INT	target_system=255, target_component=190, seq=3, frame=3, command=16, current=0, autocontinue=1, param1=5.0, param2=0.0, param3=0.0, param4=0.0, x=-353625115, y=1491624946, z=10.0, mission_type=0
+255/190	MISSION_REQUEST_INT	target_system=1, target_component=1, seq=4, mission_type=0
+1/1	MISSION_ITEM_INT	target_system=255, target_component=190, seq=4, frame=3, command=16, current=0, autocontinue=1, param1=0.0, param2=0.0, param3=0.0, param4=0.0, x=-353631765, y=1491626662, z=10.0, mission_type=0
+255/190	MISSION_ACK	target_system=1, target_component=1, type=0, mission_type=0
+255/190	MISSION_REQUEST_LIST	target_system=1, target_component=1, mission_type=1
+1/1	MISSION_COUNT	target_system=255, target_component=190, count=0, mission_type=1
+255/190	MISSION_ACK	target_system=1, target_component=1, type=0, mission_type=1
+255/190	MISSION_REQUEST_LIST	target_system=1, target_component=1, mission_type=2
+1/1	MISSION_COUNT	target_system=255, target_component=190, count=0, mission_type=2
+255/190	MISSION_ACK	target_system=1, target_component=1, type=0, mission_type=2

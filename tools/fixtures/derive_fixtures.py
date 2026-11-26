@@ -270,6 +270,12 @@ TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_STATUSTEXT: "statustext",
     common.MAVLINK_MSG_ID_PARAM_REQUEST_READ: "param_request_read",
     common.MAVLINK_MSG_ID_PARAM_VALUE: "param_value",
+    common.MAVLINK_MSG_ID_MISSION_REQUEST: "mission_request",
+    common.MAVLINK_MSG_ID_MISSION_REQUEST_LIST: "mission_request_list",
+    common.MAVLINK_MSG_ID_MISSION_COUNT: "mission_count",
+    common.MAVLINK_MSG_ID_MISSION_ACK: "mission_ack",
+    common.MAVLINK_MSG_ID_MISSION_REQUEST_INT: "mission_request_int",
+    common.MAVLINK_MSG_ID_MISSION_ITEM_INT: "mission_item_int",
 }
 SET_MESSAGE_INTERVAL = common.MAV_CMD_SET_MESSAGE_INTERVAL
 MAV_COMP_ID_MISSIONPLANNER = 190
