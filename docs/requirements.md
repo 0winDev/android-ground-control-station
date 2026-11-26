@@ -107,7 +107,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-014 | `MavlinkParserTest` | Verified |
 | REQ-015 | `MavlinkDecoderTest` (real SITL HEARTBEATs) | Verified |
 | REQ-016 | `DefaultVehicleRepositoryTest`, `HeartbeatMapperTest`, `LinkSessionTest` | Verified |
-| REQ-017 | `LinkLossRuleTest`, `DefaultVehicleRepositoryTest`, `ElapsedRealtimeTimeSourceTest`, `HudViewModelTest`, `ElapsedTimeTest`, `HudViewModelLastDataTest`, `MapViewModelTest`. **S:** PR #27; #73 (a downlink cut in flight: the banner over the map, the last data greyed, back by itself) | Verified |
+| REQ-017 | `LinkLossRuleTest`, `DefaultVehicleRepositoryTest`, `ElapsedRealtimeTimeSourceTest`, `HudViewModelTest`, `ElapsedTimeTest`, `HudViewModelLastDataTest`, `MapViewModelTest`, `LinkLostPhoneTest` (instrumented, on a device only: at 360 × 640 dp upright, on its side, in English and Spanish, at font scale 1.3, in a replay, with another vehicle, with the message list open and with the panel scrolled when the link is lost, the emergency first and largest, the last data on screen and the vehicle clear of the banners), `AttributionFoldTest`. **S:** PR #27; #73 (a downlink cut in flight: the banner over the map, the last data greyed, back by itself); #138 (a downlink cut at 360 × 640 dp in English and Spanish, at 360 × 780 dp, on its side, at font scale 1.3 and on a tablet: the emergency first, the last data in sight) | Verified |
 | REQ-018 | `DefaultVehicleRepositoryTest`, `ArduCopterFlightModesTest`, `HeartbeatMapperTest`, `HudViewModelTest`. **S:** PR #27 | Verified |
 | REQ-019 | `DefaultVehicleRepositoryTest`, `LinkSessionTest`, `DefaultLinkRepositoryTest`, `HudViewModelTest`. **S:** PR #27, PR #32 | Verified |
 | REQ-020 | `DefaultVehicleRepositoryTest`, `HudViewModelTest`. **S:** PR #27 (`tools/sitl/send_second_vehicle.py`) | Verified |
@@ -124,7 +124,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 | REQ-031 | `TelemetryMapperTest`, `TelemetryStoreTest`, `TelemetrySessionTest` (ranges from `common.xml`, `standard.xml` and WGS84) | Verified |
 | REQ-032 | `MavlinkDecoderTest`, `MavlinkMessagesTest` (ArduCopter's real HOME_POSITION, against pymavlink and `mavlink/mavlink` master) | Verified |
 | REQ-033 | `TelemetryMapperTest`, `TelemetryStoreTest`, `TelemetryRequesterTest`, `DefaultTelemetryRepositoryTest`, `DefaultVehicleRepositoryTest`. **S:** #69 (ArduCopter 4.7.2: home as QGroundControl shows it, forgotten on a reboot) | Verified |
-| REQ-034 | `MapViewModelTest`, `MapStyleTest`, `MapOverlapTest`, `OffScreenTest`, `NightStyleTest`, `ContrastTest`, `AttributionTest`, `FollowDeadZoneTest`, `StableInsetTest`, `LicencesAvailableTest` (ADR 0005). **S:** #73 (ArduCopter 4.7.2, QGroundControl 5.0.8: a Guided flight to a Go-to point where QGroundControl's map shows it; a map without network checked on the emulator with an unreachable style host) | Verified |
+| REQ-034 | `MapViewModelTest`, `MapStyleTest`, `MapOverlapTest`, `OffScreenTest`, `NightStyleTest`, `ContrastTest`, `AttributionTest`, `FollowDeadZoneTest`, `StableInsetTest`, `LicencesAvailableTest` (ADR 0005). **S:** #138 (on a phone the attribution shows, then folds into a button after 5 s); #73 (ArduCopter 4.7.2, QGroundControl 5.0.8: a Guided flight to a Go-to point where QGroundControl's map shows it; a map without network checked on the emulator with an unreachable style host) | Verified |
 | REQ-035 | `GreatCircleTest`, `TrailRuleTest`, `TelemetryStoreTrailTest`, `DefaultTelemetryRepositoryTrailTest`, `MapViewModelTest`. **S:** #73 (the trail as QGroundControl draws it) | Verified |
 | REQ-036 | See REQ-049 | Superseded by REQ-049 |
 | REQ-037 | `ReplayClockTest`, `PipelineClockTest`, `TlogDatagramSourceTest`, `LinkSessionReplayTest`, `ReplayPipelineTest`, `SessionChangeTest`, `DefaultReplayRepositoryTest`, `ReplayRuleTest`, `ReplayStateTest`, `RecheckTest`, `HudViewModelReplayTest`, `HudViewModelAlertTest`, `LinkChipStateTest`, `ReplayViewModelTest`, `AlertBannerTest`, `FlightAttentionRuleTest`, `FlightGuardViewModelTest`, `DestinationTest`. **S:** #71 (refused while a live vehicle is connected or armed); #74's SITL session (replayed without the simulator under the REPLAY banner, with no socket bound, HUD values equal to pymavlink's) | Verified |
@@ -167,6 +167,8 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-030: before Android 12 a day launch shows the night starting window for an instant.
 - REQ-032: zero-fill restores a truncated `q` as 0, not NaN; the data layer takes both as no orientation (#69).
 - REQ-034: MapLibre ignores the system proxy, so a dead network is checked with an unreachable style host.
+- REQ-034: on a map too narrow for the attribution beside its buttons, it folds into a button 5 s after the map shows or on a gesture (OSMF attribution guidelines 1.5.2).
+- REQ-017: on a 360 × 640 dp phone at font scale 1.3, a two-line age makes the LINK LOST emergency cover the vehicle on the map; the last data stay in sight.
 - REQ-049: MAVLink 1 frames from other stations are not recorded (ADR 0006).
 - REQ-049: a flight's recording can be replayed only after it closes: 30 s after the vehicles disarm, or 10 min after the link is lost while one is still armed; and a replay needs no live vehicle connected (REQ-037).
 - REQ-049: a disarm on the ground followed by an arm after 30 s splits the session into two logs, as does ArduCopter's own disarm 10 s after an arm without a take off.
@@ -202,7 +204,7 @@ Verification methods: **T** = automated test, **A** = automated check in the bui
 - REQ-047: a hold counts from when a message was received, not shown, so one that waited behind an emergency's hold can be replaced as soon as it shows.
 - REQ-047: a forged burst can still push a shown emergency off the line once its 30 s hold ends, and out of the list at once.
 - REQ-047: the shown text replaces C0, C1, line separators, bidirectional controls (U+061C included) and zero-width characters; other invisible ones (U+00AD, U+034F, U+180E, U+2061–U+2064, tag characters) are kept.
-- REQ-047: the list is not a modal sheet but sits under the alerts or the LINK LOST emergency; on a 360 × 640 dp phone with LINK LOST the last-data panel has no room, with the list open or not.
+- REQ-047: the list is not a modal sheet but sits under the alerts or the LINK LOST emergency; on a phone with LINK LOST it sits under the last data instead, so the map keeps the vehicle in sight.
 - REQ-041: PARAM_REQUEST_READ is checked against pymavlink and ArduCopter 4.7.3 SITL (#101) only, not a real autopilot.
 - REQ-042: the ACK has no sequence number, so one later than its late window, or that of an RTL superseded by another RTL, answers the next same command.
 - REQ-042: a command sent before the link is lost ends as no answer, never as not sent: the vehicle may have executed it.

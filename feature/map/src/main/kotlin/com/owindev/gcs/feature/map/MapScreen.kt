@@ -17,7 +17,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.UiComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -111,12 +113,18 @@ internal fun MapContent(
     val currentOnMapPan by rememberUpdatedState(onMapPan)
     // The camera centres the vehicle above the map's own controls too, so on a short map it is never drawn under them.
     var controlsCovered by remember { mutableStateOf(0.dp) }
+    var mapHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
+    val bottomCovered = viewportInsets.calculateBottomPadding() + controlsCovered
+    // However much the top is covered, the camera leaves the vehicle's marker room above the bottom: on a short map
+    // under a tall banner the marker may sit under the banner's edge, and the recenter button still says when it is
+    // hidden, since the controls are told the whole covered top.
     val cameraInsets = PaddingValues(
         start = viewportInsets.calculateStartPadding(layoutDirection),
-        top = viewportInsets.calculateTopPadding(),
+        top = cameraTopInset(viewportInsets.calculateTopPadding(), mapHeight, bottomCovered, room = MARKER_SIZE),
         end = viewportInsets.calculateEndPadding(layoutDirection),
-        bottom = viewportInsets.calculateBottomPadding() + controlsCovered,
+        bottom = bottomCovered,
     )
     LaunchedEffect(mapState) {
         mapState.awaitViewport()
@@ -146,7 +154,9 @@ internal fun MapContent(
         style = baseStyle,
     )
     MaplibreMap(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { mapHeight = with(density) { it.height.toDp() } },
         state = mapState,
         viewportInsets = cameraInsets,
         overlay = {

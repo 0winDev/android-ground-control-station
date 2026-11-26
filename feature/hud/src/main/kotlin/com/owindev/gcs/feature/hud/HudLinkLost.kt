@@ -21,7 +21,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.owindev.gcs.core.designsystem.R as DesignSystemR
 import com.owindev.gcs.core.designsystem.theme.GcsTheme
@@ -30,11 +32,12 @@ import com.owindev.gcs.core.designsystem.time.elapsedText
 /**
  * The active vehicle's link loss (REQ-017): an emergency banner across the top of the map, the largest and first
  * thing on screen, with the time without signal and the last known state. Under it the HUD greys the last data and
- * the map the vehicle where it was last reported, each with its age, so nothing reads as current.
+ * the map the vehicle where it was last reported, each with its age, so nothing reads as current. When [compact] (a
+ * phone) the icon sits on the title's line and the lines under it are a step smaller, so the banner leaves room for
+ * the last data; the title stays the largest text on screen.
  */
 @Composable
-internal fun EmergencyBanner(state: HudUiState.LinkLost) {
-    val lastKnown = state.lastKnown
+internal fun EmergencyBanner(state: HudUiState.LinkLost, compact: Boolean = false) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -44,49 +47,92 @@ internal fun EmergencyBanner(state: HudUiState.LinkLost) {
         color = GcsTheme.colors.emergencyContainer,
         border = BorderStroke(width = EmergencyBorder, color = GcsTheme.colors.emergency),
     ) {
-        Row(
-            modifier = Modifier.padding(all = GcsTheme.spacing.screen),
-            horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.screen),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Decorative: the title right beside it says the same in words.
-            Icon(
-                painter = painterResource(id = DesignSystemR.drawable.ic_link_lost),
-                contentDescription = null,
-                tint = GcsTheme.colors.emergency,
-                modifier = Modifier.size(GcsTheme.spacing.largeIcon),
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip)) {
+        if (compact) {
+            Column(
+                modifier = Modifier.padding(all = GcsTheme.spacing.screen),
+                verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
+            ) {
                 if (state.recorded) RecordedTag()
-                Text(
-                    text = stringResource(id = R.string.hud_link_lost_title).uppercase(),
-                    style = MaterialTheme.typography.displayMedium,
-                    color = GcsTheme.colors.onEmergencyContainer,
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    LinkLostIcon(size = CompactIcon)
+                    LinkLostTitle()
+                }
+                LinkLostDetails(
+                    state = state,
+                    sinceStyle = GcsTheme.telemetryTypography.value,
+                    lastKnownStyle = MaterialTheme.typography.titleMedium,
                 )
-                Text(
-                    text = stringResource(id = R.string.hud_link_lost_since, elapsedText(state.sinceLastHeartbeat)),
-                    style = GcsTheme.telemetryTypography.valueLarge,
-                    color = GcsTheme.colors.onEmergencyContainer,
-                )
-                Text(
-                    text = listOf(
-                        stringResource(id = R.string.hud_last_known),
-                        stringResource(id = R.string.hud_system, lastKnown.systemId),
-                        flightModeText(lastKnown.flightMode),
-                        armedText(lastKnown.armed),
-                    ).joinToString(separator = " · ").uppercase(),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = GcsTheme.colors.onEmergencyContainer,
-                )
-                state.localFault?.let { fault -> LocalFaultText(fault = fault) }
+            }
+        } else {
+            Row(
+                modifier = Modifier.padding(all = GcsTheme.spacing.screen),
+                horizontalArrangement = Arrangement.spacedBy(GcsTheme.spacing.screen),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LinkLostIcon(size = GcsTheme.spacing.largeIcon)
+                Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip)) {
+                    if (state.recorded) RecordedTag()
+                    LinkLostTitle()
+                    LinkLostDetails(
+                        state = state,
+                        sinceStyle = GcsTheme.telemetryTypography.valueLarge,
+                        lastKnownStyle = MaterialTheme.typography.titleLarge,
+                    )
+                }
             }
         }
     }
 }
 
+/** Decorative: the title right beside it says the same in words. */
+@Composable
+private fun LinkLostIcon(size: Dp) {
+    Icon(
+        painter = painterResource(id = DesignSystemR.drawable.ic_link_lost),
+        contentDescription = null,
+        tint = GcsTheme.colors.emergency,
+        modifier = Modifier.size(size),
+    )
+}
+
+@Composable
+private fun LinkLostTitle() {
+    Text(
+        text = stringResource(id = R.string.hud_link_lost_title).uppercase(),
+        style = MaterialTheme.typography.displayMedium,
+        color = GcsTheme.colors.onEmergencyContainer,
+    )
+}
+
+@Composable
+private fun LinkLostDetails(state: HudUiState.LinkLost, sinceStyle: TextStyle, lastKnownStyle: TextStyle) {
+    val lastKnown = state.lastKnown
+    Column(verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.chip)) {
+        Text(
+            text = stringResource(id = R.string.hud_link_lost_since, elapsedText(state.sinceLastHeartbeat)),
+            style = sinceStyle,
+            color = GcsTheme.colors.onEmergencyContainer,
+        )
+        Text(
+            text = listOf(
+                stringResource(id = R.string.hud_last_known),
+                stringResource(id = R.string.hud_system, lastKnown.systemId),
+                flightModeText(lastKnown.flightMode),
+                armedText(lastKnown.armed),
+            ).joinToString(separator = " · ").uppercase(),
+            style = lastKnownStyle,
+            color = GcsTheme.colors.onEmergencyContainer,
+        )
+        state.localFault?.let { fault -> LocalFaultText(fault = fault, style = lastKnownStyle) }
+    }
+}
+
 /** Says the fault is on this device, so the operator does not look for it on the vehicle. */
 @Composable
-private fun LocalFaultText(fault: LocalLinkFault) {
+private fun LocalFaultText(fault: LocalLinkFault, style: TextStyle) {
     Text(
         text = when (fault) {
             is LocalLinkFault.PortUnavailable -> stringResource(id = R.string.hud_local_fault_port, fault.port)
@@ -98,7 +144,7 @@ private fun LocalFaultText(fault: LocalLinkFault) {
 
             LocalLinkFault.Unstable -> stringResource(id = R.string.hud_local_fault_unstable)
         },
-        style = MaterialTheme.typography.titleLarge,
+        style = style,
         color = GcsTheme.colors.onEmergencyContainer,
         textAlign = TextAlign.Center,
     )
@@ -159,3 +205,5 @@ private fun CautionBanner(text: String) {
 }
 
 private val EmergencyBorder = 2.dp
+
+private val CompactIcon = 28.dp

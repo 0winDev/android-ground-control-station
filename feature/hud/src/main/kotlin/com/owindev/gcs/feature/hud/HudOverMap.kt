@@ -1,5 +1,6 @@
 package com.owindev.gcs.feature.hud
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,19 +41,21 @@ import kotlin.math.ceil
  * On a wide screen [start] is on the left and [side] beside it, both over the map, and at most [MAX_COVERED] of each
  * side counts as covered, so some map is always left to centre it in. Below [CompactWidth] the [header] and [side]
  * stay over the top of the map and [start] goes under it, so no column is squeezed beside another. Wherever the
- * columns do not fit, they scroll instead of being cut.
+ * columns do not fit, they scroll instead of being cut; when the link is lost ([linkLost]) the column under the map
+ * starts again from its top, so the last data's header is in sight.
  */
 @Composable
 internal fun HudOverMap(
     map: @Composable (insets: PaddingValues) -> Unit,
     modifier: Modifier = Modifier,
+    linkLost: Boolean = false,
     header: @Composable ColumnScope.() -> Unit = {},
     start: @Composable ColumnScope.() -> Unit = {},
     side: @Composable ColumnScope.() -> Unit = {},
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         if (maxWidth < CompactWidth) {
-            StackedHud(map = map, header = header, start = start, side = side)
+            StackedHud(map = map, linkLost = linkLost, header = header, start = start, side = side)
         } else {
             WideHud(map = map, header = header, start = start, side = side)
         }
@@ -120,6 +123,7 @@ private fun WideHud(
 @Composable
 private fun StackedHud(
     map: @Composable (insets: PaddingValues) -> Unit,
+    linkLost: Boolean,
     header: @Composable ColumnScope.() -> Unit,
     start: @Composable ColumnScope.() -> Unit,
     side: @Composable ColumnScope.() -> Unit,
@@ -127,12 +131,14 @@ private fun StackedHud(
     val density = LocalDensity.current
     var topHeight by remember { mutableStateOf(0.dp) }
     val covered = topHeight.coveredWithMargin()
+    val panelScroll = remember(linkLost) { ScrollState(initial = 0) }
     MapAbovePanel(
         // The minimum is the map left visible under the banners, never counting them.
         minMapHeight = covered + MinMapHeight,
         map = {
             Box(modifier = Modifier.fillMaxSize()) {
                 map(PaddingValues(top = stableInset(covered)))
+                // Bounded by the map: the header (the link-lost emergency) is never scrolled away, the rest scrolls.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -142,7 +148,14 @@ private fun StackedHud(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     header()
-                    side()
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        content = side,
+                    )
                 }
             }
         },
@@ -151,7 +164,7 @@ private fun StackedHud(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.background)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(panelScroll)
                     .padding(all = OverlayMargin),
                 verticalArrangement = Arrangement.spacedBy(GcsTheme.spacing.content),
                 content = start,
@@ -162,13 +175,14 @@ private fun StackedHud(
 
 /**
  * The [map] on top and the [panel] under it, both the whole width: the panel takes the height it needs, but never so
- * much that the map gets less than [minMapHeight], and scrolls past that; the map takes the rest.
+ * much that the map gets less than [minMapHeight], and scrolls past that; the map takes the rest. The panel always
+ * gets up to [MinPanelHeight] first, so the vehicle's last data stay in sight however much the banners take (REQ-017).
  */
 @Composable
 private fun MapAbovePanel(minMapHeight: Dp, map: @Composable () -> Unit, panel: @Composable () -> Unit) {
     Layout(contents = listOf(map, panel), modifier = Modifier.fillMaxSize()) { (mapPart, panelPart), constraints ->
         val height = constraints.maxHeight
-        val panelMaxHeight = (height - minMapHeight.roundToPx()).coerceAtLeast(0)
+        val panelMaxHeight = maxOf(height - minMapHeight.roundToPx(), MinPanelHeight.roundToPx()).coerceIn(0, height)
         val panelPlaced = panelPart.single().measure(constraints.copy(minHeight = 0, maxHeight = panelMaxHeight))
         val mapHeight = height - panelPlaced.height
         val mapPlaced = mapPart.single().measure(Constraints.fixed(width = constraints.maxWidth, height = mapHeight))
@@ -200,3 +214,9 @@ private val StartWidth = 320.dp
  * bottom controls (a margin, 56 dp buttons and the scale bar, about 110 dp), which the map centres it clear of.
  */
 private val MinMapHeight = 280.dp
+
+/**
+ * The last data's minimum under the map on a phone: their "last data" header, the attitude line and the first row of
+ * values, past which the panel scrolls.
+ */
+private val MinPanelHeight = 120.dp

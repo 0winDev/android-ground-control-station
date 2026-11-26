@@ -138,6 +138,13 @@ internal fun HudContent(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // A phone, upright or on its side: smaller type and spacing, and a status bar as short as it can be.
         val compact = maxWidth < CompactWidth || maxHeight < CompactHeight
+        val sideMessages = SideMessages(
+            open = messagesOpen,
+            onToggle = { messagesOpen = !messagesOpen },
+            compact = compact,
+            // As HudOverMap stacks it: the map over the last data, which take the messages so the map keeps the vehicle.
+            underLastData = maxWidth < CompactWidth,
+        )
         GcsCompact(enabled = compact) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Surface(color = MaterialTheme.colorScheme.surface) {
@@ -162,19 +169,16 @@ internal fun HudContent(
                 HudOverMap(
                     map = map,
                     modifier = Modifier.weight(1f),
+                    linkLost = state is HudUiState.LinkLost,
                     // Link lost changes the HUD at once, never animated in: it must not be missed or delayed.
-                    header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state) },
-                    start = { StartColumn(state = state) },
+                    header = { if (state is HudUiState.LinkLost) EmergencyBanner(state = state, compact = compact) },
+                    start = { StartColumn(state = state, messages = sideMessages) },
                     side = {
                         SideColumn(
                             state = state,
                             onAcknowledgeAlert = onAcknowledgeAlert,
                             background = background,
-                            messages = SideMessages(
-                                open = messagesOpen,
-                                onToggle = { messagesOpen = !messagesOpen },
-                                compact = compact,
-                            ),
+                            messages = sideMessages,
                         )
                     },
                 )
@@ -204,14 +208,20 @@ internal fun HudContent(
 }
 
 @Composable
-private fun StartColumn(state: HudUiState) {
+private fun StartColumn(state: HudUiState, messages: SideMessages) {
     when (state) {
         is HudUiState.Connected -> {
             TelemetryPanelContent(panel = state.telemetry)
             DatagramLine(port = state.port, datagramCount = state.datagramCount)
         }
 
-        is HudUiState.LinkLost -> TelemetryPanelContent(panel = state.lastData, lostFor = state.sinceLastHeartbeat)
+        is HudUiState.LinkLost -> {
+            TelemetryPanelContent(panel = state.lastData, lostFor = state.sinceLastHeartbeat)
+            // On a phone, under the last data: over the map they would hide the vehicle's last position (REQ-017).
+            if (messages.underLastData) {
+                MessagesSection(state.messages, messages.open, messages.onToggle, messages.compact)
+            }
+        }
 
         else -> Unit
     }
@@ -245,7 +255,9 @@ private fun SideColumn(
         // The emergency is in the header above: the list opens here, under it, never over it (REQ-017).
         is HudUiState.LinkLost -> {
             OtherVehiclesBanner(systemIds = state.otherVehicles)
-            MessagesSection(state.messages, messages.open, messages.onToggle, messages.compact)
+            if (!messages.underLastData) {
+                MessagesSection(state.messages, messages.open, messages.onToggle, messages.compact)
+            }
         }
 
         HudUiState.Starting -> Unit
@@ -255,8 +267,16 @@ private fun SideColumn(
     }
 }
 
-/** Whether the vehicle's message list is [open], how to open or close it, and whether the layout is [compact]. */
-private data class SideMessages(val open: Boolean, val onToggle: () -> Unit, val compact: Boolean)
+/**
+ * Whether the vehicle's message list is [open], how to open or close it, whether the layout is [compact], and whether
+ * with the link lost they go [underLastData], below the map, instead of under the emergency.
+ */
+private data class SideMessages(
+    val open: Boolean,
+    val onToggle: () -> Unit,
+    val compact: Boolean,
+    val underLastData: Boolean,
+)
 
 /** The vehicle's messages, only while one is heard or lost. */
 private fun HudUiState.messages(): VehicleMessages = when (this) {
