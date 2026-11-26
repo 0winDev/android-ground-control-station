@@ -175,7 +175,7 @@ private fun DrawScope.drawArrow(rotation: Float, color: Color, outline: Color, f
     }
 }
 
-private val MARKER_SIZE = 60.dp
+internal val MARKER_SIZE = 60.dp
 private val HOME_SIZE = 34.dp
 private val HOME_BORDER = 2.5.dp
 private val RING_WIDTH = 1.5.dp

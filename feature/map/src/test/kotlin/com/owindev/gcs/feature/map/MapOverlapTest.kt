@@ -74,6 +74,33 @@ class MapOverlapTest {
     }
 
     @Test
+    fun `GIVEN a short map under a tall banner WHEN placing the camera THEN it leaves the marker room`() {
+        val covered = 176.dp
+
+        val result = cameraTopInset(covered, height = 327.dp, bottom = 104.dp, room = 60.dp)
+
+        result shouldBeEqualTo 163.dp
+    }
+
+    @Test
+    fun `GIVEN a tall map WHEN placing the camera THEN it keeps the whole covered top`() {
+        val covered = 176.dp
+
+        val result = cameraTopInset(covered, height = 611.dp, bottom = 104.dp, room = 60.dp)
+
+        result shouldBeEqualTo covered
+    }
+
+    @Test
+    fun `GIVEN a map shorter than its controls WHEN placing the camera THEN the inset is never negative`() {
+        val covered = 176.dp
+
+        val result = cameraTopInset(covered, height = 100.dp, bottom = 104.dp, room = 60.dp)
+
+        result shouldBeEqualTo 0.dp
+    }
+
+    @Test
     fun `GIVEN no attribution yet WHEN placing the controls THEN they stay at the bottom`() {
         val width = 312.dp
 

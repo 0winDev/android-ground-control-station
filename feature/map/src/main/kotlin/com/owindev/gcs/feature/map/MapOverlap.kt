@@ -22,3 +22,10 @@ internal fun labelCoversHome(home: DpOffset?, labelStart: Dp, label: DpSize, hom
  */
 internal fun controlsAboveAttribution(width: Dp, controls: Dp, attribution: Dp, gap: Dp): Boolean =
     attribution > 0.dp && attribution + gap + controls > width
+
+/**
+ * The camera's top inset: the [covered] top of a map [height] tall, but never so much that less than [room] is left
+ * above its [bottom] strip, so the camera keeps the vehicle in sight however much the top is covered.
+ */
+internal fun cameraTopInset(covered: Dp, height: Dp, bottom: Dp, room: Dp): Dp =
+    minOf(covered, (height - bottom - room).coerceAtLeast(0.dp))
