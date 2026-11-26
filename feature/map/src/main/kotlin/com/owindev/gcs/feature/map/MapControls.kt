@@ -55,7 +55,9 @@ import org.maplibre.compose.overlay.attributions
 /**
  * The map's own controls, inside the part of the map nothing covers and on the theme's opaque surfaces, so their
  * contrast holds over any tiles: north up, zoom, recenter, the scale and the tiles' attribution, always visible and
- * plain text, never a link a stray tap would follow out of the app.
+ * plain text, never a link a stray tap would follow out of the app. On a map too narrow for the attribution beside the
+ * buttons it shows first, then folds into a button after five seconds or a gesture (OSMF attribution
+ * guidelines 1.5.2), so the buttons stay low and leave the vehicle room above them.
  * They cover the map too, so a vehicle under them counts as off the visible map, and [onBottomCoverChange] has the strip
  * they cover at the bottom, so the camera can centre the vehicle above it. [insets] is the part other content covers.
  */
@@ -73,12 +75,17 @@ internal fun MapOverlayScope.MapControls(
     var width by remember { mutableStateOf(0.dp) }
     var controls by remember { mutableStateOf(DpSize.Zero) }
     var attribution by remember { mutableStateOf(DpSize.Zero) }
-    // On a narrow map the buttons and the scale go above the attribution instead of over it.
-    val stacked = controlsAboveAttribution(width, controls.width, attribution.width, CONTROLS_SPACING)
+    val attributions = mapState.style.attributions()
+    LaunchedEffect(attributions) { if (attributions.isEmpty()) attribution = DpSize.Zero }
+    val foldable = controlsAboveAttribution(width, controls.width, attribution.width, CONTROLS_SPACING)
+    val fold = rememberAttributionFold(mapState, attributions, foldable)
+    val folded = foldable && fold.folded
+    // On a narrow map the buttons and the scale go above the open attribution instead of over it.
+    val stacked = foldable && !folded
     val bottomCovered = CONTROLS_MARGIN + if (stacked) {
         controls.height + CONTROLS_SPACING + attribution.height
     } else {
-        maxOf(controls.height, attribution.height)
+        maxOf(controls.height, if (folded) GcsTheme.sizes.button else attribution.height)
     }
     val currentOnBottomCoverChange by rememberUpdatedState(onBottomCoverChange)
     LaunchedEffect(bottomCovered) { currentOnBottomCoverChange(bottomCovered) }
@@ -126,21 +133,13 @@ internal fun MapOverlayScope.MapControls(
                 )
             }
         }
-        val attributions = mapState.style.attributions()
-        if (attributions.isNotEmpty()) {
-            OnSurface(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .onSizeChanged { attribution = with(density) { it.toSize().toDpSize() } },
-            ) {
-                Text(
-                    text = plainAttribution(attributions),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
+        MapAttribution(
+            attributions = attributions,
+            folded = folded,
+            onOpen = fold::onOpen,
+            onSizeChange = { attribution = it },
+            modifier = Modifier.align(Alignment.BottomStart),
+        )
     }
 }
 
@@ -223,7 +222,7 @@ private fun CompassButton(bearing: Double, onClick: () -> Unit, modifier: Modifi
 }
 
 @Composable
-private fun ControlButton(
+internal fun ControlButton(
     description: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
@@ -247,7 +246,7 @@ private fun ControlButton(
 }
 
 @Composable
-private fun OnSurface(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun OnSurface(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.extraSmall,
@@ -289,12 +288,12 @@ private fun DrawScope.drawPointer(degrees: Float, color: Color) {
 
 private val CONTROLS_MARGIN = 16.dp
 private val CONTROLS_SPACING = 8.dp
-private val ICON_SIZE: Dp = 24.dp
-private val ICON_STROKE: Dp = 2.dp
+internal val ICON_SIZE: Dp = 24.dp
+internal val ICON_STROKE: Dp = 2.dp
 private const val ICON_INSET = 0.2f
 
 /** The prototype's icons are drawn on a 24-unit grid. */
-private const val ICON_UNITS = 24f
+internal const val ICON_UNITS = 24f
 private const val CROSSHAIR_RING = 4f
 private const val CROSSHAIR_TICK_START = 6f
 private const val CROSSHAIR_TICK_END = 10f

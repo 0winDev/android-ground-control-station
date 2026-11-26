@@ -11,4 +11,5 @@
     <string name="map_zoom_out">Zoom out</string>
     <string name="map_north_up">North up</string>
     <string name="map_north_letter">N</string>
+    <string name="map_attribution_show">Show the map credits</string>
 </resources>

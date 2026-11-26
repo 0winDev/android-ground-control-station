@@ -74,6 +74,15 @@ class MapOverlapTest {
     }
 
     @Test
+    fun `GIVEN a phone's map and the attribution folded WHEN placing the controls THEN they stay beside it`() {
+        val width = 312.dp
+
+        val result = controlsAboveAttribution(width, controls = 184.dp, attribution = 56.dp, gap = GAP)
+
+        result shouldBeEqualTo false
+    }
+
+    @Test
     fun `GIVEN a short map under a tall banner WHEN placing the camera THEN it leaves the marker room`() {
         val covered = 176.dp
 
