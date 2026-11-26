@@ -60,6 +60,18 @@ sim_vehicle.py -v ArduCopter --console --map \
 ```
 MAVProxy writes the session to `mav.tlog` in the working directory.
 
+**Relay (`tools/sitl/sitl_relay.py`)** — between SITL's TCP 5763 and the app, to see, drop or cut what the app
+sends; its header lists the keys and options (#14, #28, #29, #98).
+
+- Restarting the relay changes its port: restart the app too, or every command is refused as a route change (#99).
+- A phone on the LAN needs `--bind 0.0.0.0`; bound to 127.0.0.1 it never reaches the device (#28).
+- With every SITL TCP port taken, send through the relay's UDP socket and read the answers in its `.down.tlog` (#53).
+- Its `.up.tlog` also holds a tool's frames sent through it: drop them before comparing with the app's log (#89).
+- A reboot command restarts Mission Planner's simulator: the relay's TCP link dies with the boot texts (#107).
+- SITL tools send their own HEARTBEAT and stream requests; pass pymavlink `retries` across a reboot (#41, #42, #100).
+- pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame)
+  (#112).
+
 ## 2. Connect the app
 
 | Target | How |

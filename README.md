@@ -34,7 +34,7 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 | v0.1 Connection | MAVLink v2 codec (framing, CRC, CRC_EXTRA), HEARTBEAT, link-loss watchdog, state per system ID | The app shows connected/disconnected, mode and armed state, and warns when the simulator stops; codec tested with real and corrupted packets | ✅ |
 | v0.2 Telemetry | Position, attitude, battery, speeds in a HUD with data age, MGRS, prioritized alerts, night and day themes | Values match QGroundControl, MGRS matches a reference converter, low battery triggers the right alert | ✅ |
 | v0.3 Map and recording | Vehicle, heading, trail and home on MapLibre; flight recording (.tlog) and replay | The drone moves on the map during a simulated flight and the flight can be replayed without the simulator | ✅ |
-| v0.4 Commands and pre-flight | Arm, takeoff, RTL, land with ACK, timeout, retries and confirmation; pre-flight check that blocks arming | An unanswered command is retried and ends in a clear error; arming is impossible with a red check | 🚧 |
+| v0.4 Commands and pre-flight | Arm, takeoff, RTL, land with ACK, timeout, retries and confirmation; pre-flight check that blocks arming | An unanswered command is retried and ends in a clear error; arming is impossible with a red check | ✅ |
 | v0.5 Automatic routes | Waypoint editor, Room, validation, mission upload protocol | A route is created, uploaded and flown; a route outside the geofence is rejected before sending | ⏳ |
 | v0.6 Link security | MAVLink 2 message signing, key in Android Keystore, MASVS checklist | An unsigned or replayed packet is discarded and logged | ⏳ |
 | v0.7 Interoperability | Vehicle position as Cursor on Target, visible in ATAK-CIV | The simulated drone appears in ATAK moving in real time | ⏳ |
@@ -52,8 +52,15 @@ Each phase ends with a git tag, a GitHub Release and an update of this table.
 - **The app can only suspect a failed uplink.** UDP gives no delivery proof: the HUD warns that the vehicle
   may not be hearing this GCS when this device fails to send its HEARTBEAT or a command gets no answer, but an
   uplink cut beyond the device shows nothing until a command is sent (#29).
-- **A flight just ended cannot be replayed yet.** Its recording closes 10 min after the link is lost, or
-  when another replay starts; closing it after landing is planned for v0.4 (#89).
+- **A flight can be replayed only once its recording closes:** 30 s after the vehicles disarm, or 10 min after
+  the link is lost while one is still armed (#89).
+- **A command without answer may still have run.** A command sent before the link is lost ends as "no answer",
+  never as "not sent", and COMMAND_ACK has no sequence number, so a very late answer can answer the next same
+  command; the vehicle's HEARTBEAT is the truth for its armed state and mode.
+- **A take off stopped after its mode change leaves the vehicle in GUIDED,** armed on the ground, until ArduPilot's
+  `DISARM_DELAY` disarms it (never if it is 0); the screen says so.
+- **The pre-flight check gates arming only.** The vehicle's pre-arm bit says nothing once armed, and TalkBack does
+  not announce a command's result.
 - **A recording can grow past the 256 MiB limit while it is open.** Old flight logs are deleted only when a
   recording opens or closes, so one very long session keeps growing (about 1.1 kB/s from ArduCopter SITL, so
   256 MiB in some 65 hours).

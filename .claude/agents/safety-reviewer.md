@@ -33,6 +33,15 @@ You are read-only: never edit, commit or push. First read `CLAUDE.md`, `docs/req
 - ArduPilot's own GCS failsafe (`FS_GCS_ENABLE`) is configured/displayed, not replaced — the app
   never assumes the vehicle will do what the app shows.
 
+**Gates and held state** (`CLAUDE.md` → Architecture)
+- A gate opens only on a fresh positive sign (an answer, a current value), never on a missing warning (#29).
+- The gate has its own age bound, not a display staleness threshold, and the stream it reads has the rate it needs
+  (#112).
+- A sign that does not come is asked for again; asked once, its lost answer keeps the gate shut for good (#102).
+- Anything held (a state against flicker, an acknowledgement, an alert) ends on its own by age or connection (#31,
+  #102), and a held alert is still judged, keeping the more urgent (#53).
+- Each check of a gate has a test where it fails alone (#99).
+
 **Commands (COMMAND_LONG / COMMAND_ACK)**
 - Arm, takeoff and mission change in flight require explicit confirmation; one tap never sends.
 - Each command has a timeout, a bounded number of retries and ends in a clear result
