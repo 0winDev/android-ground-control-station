@@ -230,6 +230,8 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - ArduPilot 4.7 replaced `ARMING_CHECK` with `ARMING_SKIPCHK` (checks to skip, -1 all): ask the vehicle for each name (#102).
 - A PARAM_VALUE names no target and comes unrequested too: it never proves the vehicle heard this GCS (#102).
 - ArduPilot's reason for refusing an arm comes as STATUSTEXT, never in the COMMAND_ACK (#104).
+- ArduPilot asks for uploaded mission items with the deprecated MISSION_REQUEST by default (`GCS_config.h`): decode it (#148).
+- pymavlink 2.4.50's bundled XML lacks newer extensions (`opaque_id`): pack those with a `mavgen` dialect from master (#148).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -242,6 +244,7 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - A reader without checksums anchors its plausibility window on two consecutive records, never one (#68).
 - Count a stream's messages, not only its gaps: one that stops leaves no gap between those counted (#28).
 - A capture's .tlog holds only what the vehicle sent: keep its AUTOPILOT_VERSION and raw counts in a file beside it (#112).
+- Real frames share values (QGroundControl targets 1/1): derive one with every field distinct, a uint32 ≥ 2³¹, for each side (#148).
 - MGRS reference points stay 1 cm off a 1 m boundary; GEOTRANS and GeoConvert disagree at exactly 84°N (#40).
 
 **Flow and time**
@@ -295,6 +298,7 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - ColorOS refuses `pm grant` from adb, and Android 13 never lets a foreground notification be dismissed (#28).
 - ColorOS names battery settings its own way ("allow background activity"): a fix in the UI names both (#28).
 - A receiver's own app passes its permission: prove the guard from another UID or by the installed manifest (#98).
+- To capture what QGroundControl sends, point the relay's `--app` at its UDP 14550 and turn its TCP link off (#148).
 
 **Emulator, Windows and tooling**
 - `adb emu redir` rules die with the emulator and stale ones keep feeding it: run `adb emu redir list` first (#13, #14).
