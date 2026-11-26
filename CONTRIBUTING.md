@@ -90,6 +90,11 @@ Always:
 - **Update the requirement → test matrix** in `docs/requirements.md` in the same PR. The PR that adds a
   requirement's tests marks it **Verified** directly: the tests and the status reach `main` together, so
   there is no intermediate "pending until merged" state.
+- A test that guards a rule is checked with a mutation of that rule, one condition at a time, without `--rerun`
+  (`android-tests`).
+- Launch the built APK before a SITL or device check: a green `assembleDebug`, even after `clean`, can ship without a
+  ViewModel's Hilt factory. If a whole module's Hilt outputs are missing, run `kspDebugKotlin --rerun` (#89, #102,
+  #107).
 
 Additionally, depending on what the change touches:
 

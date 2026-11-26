@@ -128,6 +128,26 @@ These tests are written **before** the code under test (test-first) and start re
   (`mavlink.io/en/messages/common.html`, `message_definitions/v1.0/common.xml`). If unsure, ask —
   never invent them.
 
+## Mutation checks
+
+A green test proves its rule only once a mutation of that rule turns it red (#68, #71, #74, #98, #99, #104, #139,
+#143).
+
+1. Copy the file aside before mutating it: `git checkout -- <file>` also drops the uncommitted fix.
+2. Mutate one condition at a time: in a gate of two checks, one failing hides the other.
+3. Run the narrow task without `--rerun` and read the build output: a mutant that does not compile, or a task that is
+   UP-TO-DATE or FROM-CACHE, looks like a survivor.
+4. The test must fail for the mutated reason, not another; then restore the copy and run it green.
+
+A test that reads a source file (`values-es/strings.xml`, `res/xml`, `assets`) declares it as an input of the module's
+test task, or the build cache replays an old pass:
+
+```kotlin
+tasks.withType<Test>().configureEach {
+    inputs.file("src/main/res/values-es/strings.xml").withPathSensitivity(PathSensitivity.RELATIVE)
+}
+```
+
 ## What to test
 
 Every domain rule, use case, repository, mapper with logic, state machine and ViewModel. Not data

@@ -34,6 +34,19 @@ Rules:
 - Stale data is visible: every telemetry value shown carries its age (from the domain), and the UI
   greys it out past the threshold.
 
+## State keyed by identity
+
+What runs or is shown is keyed by what it is, never by its kind or by a value that arrives separately (#71, #72, #98,
+#104, #107):
+
+- Two sessions of one kind look alike in a conflated `StateFlow`: tell them apart by an epoch (#71).
+- A cancelled job cleans up late: key shared state by request identity, never by kind (#98).
+- A value read in `combine` from outside its inputs can be newer than them: publish what must match as one value
+  (#72).
+- An active ID and its list change in two emissions, so the old list comes with the new ID: never key on the ID alone
+  (#107).
+- In tests, a mock stubbed for one system ID freezes the state when the key moves: stub `any()` (#104).
+
 ## Files per screen
 
 ```
