@@ -33,3 +33,8 @@ dependencies {
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
 }
+
+// BackupRulesTest reads these rules directly: without them as an input, a cached result hides a changed rule.
+tasks.withType<Test>().configureEach {
+    inputs.dir("src/main/res/xml").withPathSensitivity(PathSensitivity.RELATIVE)
+}
