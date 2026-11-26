@@ -43,6 +43,12 @@ class MavlinkCrcTest {
         "statustext/arming-motors.bin, 83",
         "param/stat-runtime.bin, 220",
         "landed/on-ground.bin, 130",
+        "mission/request-seq-0.bin, 230",
+        "mission/request-list.bin, 132",
+        "mission/count-upload.bin, 221",
+        "mission/ack-accepted.bin, 153",
+        "mission/request-int-seq-0.bin, 196",
+        "mission/item-home.bin, 38",
     )
     fun `GIVEN a real SITL frame WHEN computing its checksum THEN it matches the checksum bytes`(
         fixture: String,
