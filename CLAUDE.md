@@ -341,4 +341,6 @@ the issue number to an existing one.
 - `git checkout -- <file>` to undo a mutation also drops the uncommitted fix: copy the file aside first (#74).
 - A fixed-width child in a `Row` leaves its weighted sibling 0 dp: check new button rows at 360 dp on a phone (#61, #107).
 - Check a phone at 360 × 640 dp with every banner on (replay, LINK LOST), not only at 360 × 780 (#61).
+- A stand-in map has none of the real map's controls: check the vehicle in sight in SITL, in Spanish too (#138).
+- OSM's attribution may fold into a button only after it has shown (5 s or a gesture): never start it folded (#138).
 - `input motionevent` gives each event its own down time, so no gesture is held: use root `sendevent` on the emulator (#103).
