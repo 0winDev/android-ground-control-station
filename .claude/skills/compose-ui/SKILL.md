@@ -49,6 +49,27 @@ Check `core/designsystem/src/main/kotlin/...` for the real token names before us
 - **Dangerous commands** (arm, takeoff, mission change in flight) need an explicit confirmation step
   (see `android-mvi`); destructive buttons are visually distinct and never adjacent to their undo.
 
+## Alert and level wording
+
+- A warning says its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
+- A vehicle text in the app's level words reads as the app's alert: say whose it is before the level (#107).
+- One word per level in every language: a JVM test reads each `values-*` file and checks the level words against each
+  other (`SpanishLevelWordsTest`, #139).
+- Show apart what must not be replaced: a refusal never takes the line of a command still waiting or of an emergency
+  (#104); a list's cap never pushes a held emergency out, so hold what is shown apart from what is kept (#107).
+
+## Phone layouts (360 × 640 dp)
+
+- Check every new screen or row on a 360 × 640 dp phone with every banner on (replay, LINK LOST) and in Spanish, the
+  longest language; 360 × 780 hides it (#61, #138, #139).
+- A fixed-width child in a `Row` leaves its weighted sibling 0 dp (#61, #107).
+- A stand-in map has none of the real map's controls: check the vehicle in sight in SITL too (#138).
+- A device test pins the size and language: `DeviceConfigurationOverride.ForcedSize(DpSize(360.dp, 564.dp)) then
+  DeviceConfigurationOverride.Locales(LocaleList("es"))` (564 dp is 640 less the system bars; import
+  `androidx.compose.ui.test.then`). See `ChecklistPhoneTest`.
+- `hasVisualOverflow` holds for any one-line text. A cut text is one with zero width, an ellipsised line
+  (`isLineEllipsized`), a line ending inside a word (`getLineEnd`) or a right edge past the root (#139).
+
 ## Strings and accessibility
 
 - All user-facing text in `values/strings.xml` (English) and `values-es/strings.xml` (Spanish);
