@@ -36,6 +36,8 @@ Security checklist: `docs/security.md`.
 3. **Never invent** MAVLink message fields, IDs, enums, CRC_EXTRA values, ArduPilot parameters or
    library versions. Check the official docs (mavlink.io, `common.xml`, ArduPilot docs, Maven
    Central / Google Maven / Gradle Plugin Portal) and cite them. If you cannot verify, ask.
+   ArduPilot's behaviour comes from its code (the vehicle's override, not a base class or the XML alone) and is
+   confirmed in SITL before anything relies on it (#39, #41, #42, #100, #101, #102, #104, #112).
 4. Only the `common`-dialect messages the current phase needs — never generate the whole dialect.
 5. **No dependencies before their phase** (no MapLibre before v0.3, no Room before v0.5, …).
 6. **Everything in the repo is in English** — code, comments, docs, ADRs, requirements, issues, PRs,
@@ -76,6 +78,9 @@ Security checklist: `docs/security.md`.
   from the start, runs the link watchdog, command retries and the mission protocol.
 - UI state is exposed as an **immutable `StateFlow`**; **no protocol logic in ViewModels**.
 - Dangerous commands (arm, takeoff, mission change in flight) always need explicit confirmation.
+- A safety gate opens only on a fresh positive sign with its own time bound, never on a missing warning or a display
+  threshold; a sign that does not come is asked for again. Anything held (a state, an acknowledgement, an alert) ends
+  on its own, and a held alert can still get worse (#29, #31, #53, #102, #112).
 - Module rules are enforced by `./gradlew verifyModuleGraph`. Details: `android-modularization` skill.
 
 ## Workflow summary
@@ -93,7 +98,8 @@ Full version in [`CONTRIBUTING.md`](CONTRIBUTING.md).
    review → line-by-line review.
 5. Verify: `./gradlew ktlintCheck detekt verifyModuleGraph lintDebug test assembleDebug`; SITL vs
    QGroundControl (`sitl-verify`) for protocol/telemetry/commands; `safety-reviewer` for failsafe,
-   commands, missions or signing; always update the REQ → test matrix.
+   commands, missions or signing; always update the REQ → test matrix. Launch the built APK before SITL or a device
+   check: a green `assembleDebug` can ship without a ViewModel's Hilt factory (#89, #102, #107).
 6. Commit with `/smart-commit`: Conventional Commits `feat|fix|refactor|test|docs|build|ci|chore`,
    one concept per commit, `(#<issue>)` at the end.
 7. PR with the template, title without prefix, only true checkboxes, milestone, labels (phase, type, areas) and the
@@ -195,10 +201,15 @@ No Robolectric. Details and examples: `android-tests` skill.
   values come from a reference decoder, never from the implementation.
 - `()` instead of `.invoke()`. For boolean pairs, write the enabled case first.
 
+**Mutation checks**
+- A test guarding a rule is proven by a mutation of that rule failing it, one condition at a time; read the build
+  output, since a mutant that does not compile or a cached task looks like a survivor. A test reading a source file
+  declares it as a task input (#68, #71, #74, #98, #99, #104, #139, #143). Procedure: `android-tests`.
+
 ## Lessons learned
 
 What surprised us and what to do differently, by topic. After each issue, add a line under its topic or append
-the issue number to an existing one.
+the issue number to an existing one. A lesson that repeats becomes a rule above or a skill section and leaves this list.
 
 **Protocol and XML**
 - Messages hide in includes (HEARTBEAT in `minimal.xml`, GLOBAL_POSITION_INT in `standard.xml`): search all (#8, #37).
@@ -206,7 +217,6 @@ the issue number to an existing one.
 - Zero-fill cannot give a field's "invalid" value, and a field may have two: read each `invalid` (#35, #38).
 - Truncation cuts bytes, not fields, and never HEARTBEAT: CRC over the wire bytes, then zero-fill (#5, #10, #37).
 - A uint64 extension below 2⁵⁶ always truncates: a full-length fixture needs its top byte non-zero (#66).
-- Read ArduPilot's code, not only the XML: a fresh message is not a fresh value (#39, #41, #42).
 - A UDP send that succeeds proves nothing reached the vehicle: only an answer does (#29).
 - ArduPilot keeps rates per channel, streams only to a TCP channel it hears and forgets them on reboot (#36, #41).
 - An ArduPilot reboot never goes LOST: detect it from `time_boot_ms` going back, then request the streams (#69).
@@ -215,7 +225,6 @@ the issue number to an existing one.
 - Battery optimisation is every stock app's default: a caution on it fires everywhere; measure a signal first (#28).
 - A restricted app's foreground service loses the foreground once hidden: start it again on every app start (#28).
 - Rejecting a value never erases state: drop the frame; compare ±π as float32 and integers with `in` (#49).
-- A base class default is not the vehicle's: read the override (ArduCopter's `vtol_state` is MC, not UNDEFINED) (#112).
 - ArduPilot cuts a `PreArm:` format at 50 bytes before its arguments: a fixed text never comes in chunks (#100).
 - An enable parameter hides its group from the list, not from a request by name: test a source's claim in SITL (#101).
 - ArduPilot 4.7 replaced `ARMING_CHECK` with `ARMING_SKIPCHK` (checks to skip, -1 all): ask the vehicle for each name (#102).
@@ -232,10 +241,7 @@ the issue number to an existing one.
 - pymavlink drops all a corrupted LEN claims, our parser only the marker: it proves a frame invalid, no more (#67).
 - A reader without checksums anchors its plausibility window on two consecutive records, never one (#68).
 - Count a stream's messages, not only its gaps: one that stops leaves no gap between those counted (#28).
-- A tolerant reader's test can pass for the wrong reason: check it with a mutation of the rule it guards (#68, #71).
 - A capture's .tlog holds only what the vehicle sent: keep its AUTOPILOT_VERSION and raw counts in a file beside it (#112).
-- A mutation that does not compile looks like a survivor: read the build output before trusting it (#98, #104).
-- A mock answering one system ID throws inside `combine` when the key moves: the state freezes, so stub `any()` (#104).
 - MGRS reference points stay 1 cm off a 1 m boundary; GEOTRANS and GeoConvert disagree at exactly 84°N (#40).
 
 **Flow and time**
@@ -249,33 +255,21 @@ the issue number to an existing one.
 - Anything waiting for an answer reopens a closed socket: gate background sends on "the link is listened to" (#39).
 - A 1 Hz loop misses a LOST shorter than its period: reset on the watchdog's transition, not on a poll (#29).
 - Set a mark and clear it in the same coroutine, or an answer applied first leaves the mark forever (#29).
-- Two sessions of one kind look alike in a conflated `StateFlow`: tell them apart by an epoch (#71).
 - Compare a new state with the published one, not a fresh copy, or a vehicle's first change is never published (#100).
 - A consumer started lazily starts from the producer's first state, never its current one (#71).
 - A clock followed after it started running is anchored on its position, or time jumps ahead then freezes (#71).
 - A value passed into a Navigation 3 entry never changes: read the palette and changing state inside the screen (#61).
-- A value read in `combine` from outside its inputs can be newer than them: publish what must match as one value (#72).
 - A camera move restarted at 5 Hz never moves the camera: follow with one conflated loop (#73).
 - Ages shown side by side need one clock and one rounding, or the banner says 116 s and the panel 117 s (#73).
 - An activity-scoped `Eagerly` collector keeps the link alive in the background: use `repeatOnLifecycle` (#74).
 - A blocking read ignores cancellation: close its stream on cancel, or a stalled provider holds the lock (#74).
 - A fake transport that never suspends hides `withContext`'s cancellation on return: make it suspend (#98).
-- A cancelled job cleans up late: key shared state by request identity, never by kind (#98).
 - A start on a transition misses the stop that comes after it: start a service by level, not by edge (#28).
 - A counter moved twice per change lies between the two: compare what a change shows with the value before it (#104).
-- An active ID and its list change in two emissions: the old list comes with the new ID, so never key on the ID (#107).
 
 **Safety review**
-- A state held to avoid flicker needs a time limit, or a silent socket keeps it forever (#31).
-- No warning is no evidence: a gate (pre-flight) needs a positive sign, never the absence of a doubt (#29).
 - Whatever is kept per system ID grows with made-up IDs: keep history (the trail) for the active vehicle only (#72).
 - An occurrence id fixes the repository's race, not the screen's: a banner swapping under a finger needs a guard (#56).
-- A warning must say its true reason: "No 3D GPS fix" over a stale RTK fix sent the operator the wrong way (#73).
-- A display staleness threshold is no safety gate: give the gate its own bound and the stream the rate it needs (#112).
-- A gate of two checks needs a test where each fails alone, or one hides the other: mutate them one at a time (#99).
-- A positive sign asked for once is lost for good with its answer: ask again until it comes, or the gate never opens (#102).
-- An acknowledgement must end on its own (connection, age): nothing prunes it while nobody looks (#102).
-- An alert held because a value is not known must still get worse: judge it as well and keep the more urgent (#53).
 - A threshold set is no failsafe armed: read every condition the vehicle's code checks before it acts (#101).
 - A clear and the text it closes can arrive together: apply the clear last, it is the newer (#100).
 - A hidden button still gets a tap drawn a frame earlier: check the rule again when the action runs (#74).
@@ -285,30 +279,19 @@ the issue number to an existing one.
 - A close and the next log in one writer queue lose no frame; a gap between them would, until the next HEARTBEAT (#89).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
 - A request kept after its sheet hid comes back when its command does: drop it the first time it cannot show (#104).
-- A refusal must never replace the line of a command still waiting or an emergency: show it apart (#104).
-- A vehicle text in the app's level words reads as the app's alert: say whose it is, before the level (#107).
-- A list's cap can push a held emergency out: hold what is shown apart from what is kept (#107).
-- A translation can give two levels one word: test each language's level words against each other (#139).
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).
 - The simulator updates itself: query AUTOPILOT_VERSION each session, record it with every capture (#5, #39, #41, #29).
-- SITL tools send their own HEARTBEAT and stream requests; pass pymavlink `retries` across a reboot (#41, #42, #100).
 - Changing `BATT_CAPACITY` does not recharge the battery: relaunch the simulator (#56).
 - Check QGroundControl's UI in the installed version's docs and compare values with its MAVLink Inspector (#42).
 - Measure timings in SITL before documenting them: API 36 blocks a background app's network after about 5 s (#14).
 - In airplane mode the emulator's bound UDP socket never fails: a transport failure cannot be reproduced there (#25).
 - A SITL TCP port can stay silent for a whole session: count raw bytes on it first (#70).
-- With every SITL TCP port taken, send through the relay's UDP socket and read the answers in its `.down.tlog` (#53).
 - Mission Planner's simulator never drains with `SIM_BATT_CAP_AH` 0: step `SIM_BATT_VOLTAGE` down instead (#53).
-- Restarting the relay changes its port: restart the app too, or every command is refused as a route change (#99).
 - ArduCopter checks the GPS before arming only in a mode that needs position: fail it in LOITER, not STABILIZE (#100).
 - Check the map in flight, moving, not only hovering: a camera bug showed only at 10 m/s (#73).
 - Other GCSs' HEARTBEATs keep the GCS failsafe off: check that the app's own HEARTBEAT stops instead (#74).
-- A reboot command restarts Mission Planner's simulator process: the relay's TCP link dies with the boot texts (#107).
-- pymavlink's `setup_logfile` on SITL's TCP wrote nothing: write each .tlog record yourself (µs timestamp + frame) (#112).
-- The relay's .up.tlog also holds a tool's frames sent through it: drop them before comparing with the app's log (#89).
-- A relay bound to 127.0.0.1 never reaches a phone on the LAN: bind the device's side to 0.0.0.0 (#28).
 - ColorOS refuses `pm grant` from adb, and Android 13 never lets a foreground notification be dismissed (#28).
 - ColorOS names battery settings its own way ("allow background activity"): a fix in the UI names both (#28).
 - A receiver's own app passes its permission: prove the guard from another UID or by the installed manifest (#98).
@@ -323,8 +306,6 @@ the issue number to an existing one.
 - ktlint and detekt skip KDoc line length: check it by hand (#35).
 - detekt measures tests too: a `when` over message types that grows with the codec becomes a table (#112).
 - Lint's ExperimentalDetector crashes on a fun-interface lambda held or returned: use a class or a reference (#99, #102).
-- KSP's incremental run can drop a module's Hilt outputs: on a whole module missing, `kspDebugKotlin --rerun` (#102).
-- A green `assembleDebug`, even after `clean`, can ship an APK without a ViewModel's Hilt factory: launch it before SITL (#89, #107).
 - A reboot can leave an uncommitted file all NUL bytes: rebuild it from the session's edits, check it by bytecode (#89).
 - PowerShell's `>` re-encodes binary output: pull a device file with bash or `adb pull`, never `exec-out ... >` there (#89).
 - Claude Code's auto mode silently denies edits under `.claude/`: leave auto mode for those (#8).
@@ -339,11 +320,5 @@ the issue number to an existing one.
 - A night map is the day style recoloured; OpenFreeMap answers 403 to a script without a User-Agent (#73).
 - A screen holding MapLibre content needs `@UiComposable`, or callers get MapLibre's applier (#73).
 - Never `--no-verify` a split commit: the hooks check the files as staged (#73).
-- `git checkout -- <file>` to undo a mutation also drops the uncommitted fix: copy the file aside first (#74).
-- A fixed-width child in a `Row` leaves its weighted sibling 0 dp: check new button rows at 360 dp on a phone (#61, #107).
-- Check a phone at 360 × 640 dp with every banner on (replay, LINK LOST), not only at 360 × 780 (#61).
-- A stand-in map has none of the real map's controls: check the vehicle in sight in SITL, in Spanish too (#138).
 - OSM's attribution may fold into a button only after it has shown (5 s or a gesture): never start it folded (#138).
 - `input motionevent` gives each event its own down time, so no gesture is held: use root `sendevent` on the emulator (#103).
-- A test reading a source file needs it as a task input, or the build cache replays an old pass (#139, #143).
-- `hasVisualOverflow` holds for any one-line text: find a cut text by its ellipsis or a word broken across lines (#139).
