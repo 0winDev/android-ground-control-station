@@ -9,9 +9,11 @@ package com.owindev.gcs.core.mavlink
  * https://github.com/mavlink/mavlink, as bundled with pymavlink 2.4.50 and cross-checked against
  * `mavlink/mavlink` master (#8); COMMAND_LONG and COMMAND_ACK (#35), ATTITUDE, GLOBAL_POSITION_INT and
  * VFR_HUD (#37), SYS_STATUS and GPS_RAW_INT (#38), HOME_POSITION (#66), STATUSTEXT (#96), PARAM_REQUEST_READ and
- * PARAM_VALUE (#97), EXTENDED_SYS_STATE (#112) computed with pymavlink's `mavparse` from both.
- * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG and PARAM_REQUEST_READ are
- * only sent by the codec, so a received one stays undecoded.
+ * PARAM_VALUE (#97), EXTENDED_SYS_STATE (#112) computed with pymavlink's `mavparse` from both. The mission transfer
+ * messages (#148) from `common.xml` on master too, whose MISSION_COUNT and MISSION_ACK carry the extension `opaque_id`
+ * that pymavlink 2.4.50's bundled copy lacks (same CRC_EXTRA: extensions are not in it).
+ * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG, PARAM_REQUEST_READ and
+ * MISSION_REQUEST_LIST are only sent by the codec, so a received one stays undecoded.
  */
 object MavlinkMessages : CrcExtraLookup {
 
@@ -30,6 +32,12 @@ object MavlinkMessages : CrcExtraLookup {
     private const val HOME_POSITION_ID = 242
     private const val EXTENDED_SYS_STATE_ID = 245
     private const val STATUSTEXT_ID = 253
+    private const val MISSION_REQUEST_ID = 40
+    private const val MISSION_REQUEST_LIST_ID = 43
+    private const val MISSION_COUNT_ID = 44
+    private const val MISSION_ACK_ID = 47
+    private const val MISSION_REQUEST_INT_ID = 51
+    private const val MISSION_ITEM_INT_ID = 73
 
     private val heartbeat = Definition(crcExtra = 50, fullLength = 9)
     private val paramRequestRead = Definition(crcExtra = 214, fullLength = 20)
@@ -58,6 +66,16 @@ object MavlinkMessages : CrcExtraLookup {
     // 51 bytes without its extensions (id, chunk_seq).
     private val statusText = Definition(crcExtra = 83, fullLength = 54)
 
+    // Without their extensions: MISSION_REQUEST and MISSION_REQUEST_INT 4 bytes (mission_type), MISSION_REQUEST_LIST
+    // 2 (mission_type), MISSION_COUNT 4 and MISSION_ACK 3 (mission_type, opaque_id), MISSION_ITEM_INT 37
+    // (mission_type).
+    private val missionRequest = Definition(crcExtra = 230, fullLength = 5)
+    private val missionRequestList = Definition(crcExtra = 132, fullLength = 3)
+    private val missionCount = Definition(crcExtra = 221, fullLength = 9)
+    private val missionAck = Definition(crcExtra = 153, fullLength = 8)
+    private val missionRequestInt = Definition(crcExtra = 196, fullLength = 5)
+    private val missionItemInt = Definition(crcExtra = 38, fullLength = 38)
+
     override fun crcExtraFor(msgId: Int): Int? = definitionOf(msgId)?.crcExtra
 
     /** Full payload length of [msgId] in bytes, extension fields included, or `null` if not supported. */
@@ -82,6 +100,12 @@ object MavlinkMessages : CrcExtraLookup {
         HOME_POSITION_ID -> homePosition
         EXTENDED_SYS_STATE_ID -> extendedSysState
         STATUSTEXT_ID -> statusText
+        MISSION_REQUEST_ID -> missionRequest
+        MISSION_REQUEST_LIST_ID -> missionRequestList
+        MISSION_COUNT_ID -> missionCount
+        MISSION_ACK_ID -> missionAck
+        MISSION_REQUEST_INT_ID -> missionRequestInt
+        MISSION_ITEM_INT_ID -> missionItemInt
         else -> null
     }
 

@@ -431,6 +431,103 @@ sealed interface MavlinkMessage {
     data class ExtendedSysState(val vtolState: Int, val landedState: Int) : MavlinkMessage
 
     /**
+     * MISSION_REQUEST_LIST (id 43, https://mavlink.io/en/messages/common.html#MISSION_REQUEST_LIST): asks a system for
+     * its list of [missionType] items, answered with a [MissionCount]. The codec only encodes it.
+     *
+     * @property missionType `MAV_MISSION_TYPE`, an extension: 0 (mission) is truncated on the wire.
+     */
+    data class MissionRequestList(val targetSystem: Int, val targetComponent: Int, val missionType: Int) :
+        MavlinkMessage
+
+    /**
+     * MISSION_COUNT (id 44, https://mavlink.io/en/messages/common.html#MISSION_COUNT): starts an upload, or answers a
+     * [MissionRequestList], with the number of items.
+     *
+     * @property count "Number of mission items in the sequence", a uint16; ArduPilot counts home as item 0.
+     * @property missionType `MAV_MISSION_TYPE`, an extension.
+     * @property opaqueId an extension, a uint32 (hence [Long]): "Id of current on-vehicle mission, fence, or rally
+     * point plan (on download from vehicle)"; 0 when not sent.
+     */
+    data class MissionCount(
+        val targetSystem: Int,
+        val targetComponent: Int,
+        val count: Int,
+        val missionType: Int,
+        val opaqueId: Long,
+    ) : MavlinkMessage
+
+    /**
+     * MISSION_REQUEST (id 40, https://mavlink.io/en/messages/common.html#MISSION_REQUEST): asks for item [seq] during
+     * an upload. Deprecated in `common.xml` for [MissionRequestInt], but ArduPilot sends it by default
+     * (`AP_MAVLINK_MSG_MISSION_REQUEST_SENDING_ENABLED` in `GCS_config.h`), so the codec decodes it and never sends it.
+     *
+     * @property seq the item asked for, a uint16.
+     * @property missionType `MAV_MISSION_TYPE`, an extension.
+     */
+    data class MissionRequest(val targetSystem: Int, val targetComponent: Int, val seq: Int, val missionType: Int) :
+        MavlinkMessage
+
+    /**
+     * MISSION_REQUEST_INT (id 51, https://mavlink.io/en/messages/common.html#MISSION_REQUEST_INT): asks for item [seq],
+     * answered with a [MissionItemInt]. Sent by the GCS on download; a vehicle may send it on upload.
+     *
+     * @property seq the item asked for, a uint16.
+     * @property missionType `MAV_MISSION_TYPE`, an extension.
+     */
+    data class MissionRequestInt(val targetSystem: Int, val targetComponent: Int, val seq: Int, val missionType: Int) :
+        MavlinkMessage
+
+    /**
+     * MISSION_ITEM_INT (id 73, https://mavlink.io/en/messages/common.html#MISSION_ITEM_INT): one item of a mission, in
+     * either direction. What the params and `z` mean depends on [command] (`MAV_CMD`) and [frame] (`MAV_FRAME`).
+     *
+     * @property seq the item's index, a uint16; ArduPilot's item 0 is home.
+     * @property frame `MAV_FRAME` of [x], [y] and [z].
+     * @property command `MAV_CMD`, a uint16.
+     * @property current "false:0, true:1".
+     * @property autocontinue "Autocontinue to next waypoint. 0: false, 1: true."
+     * @property x latitude in degrees × 1e7 in a global frame ("local: x position in meters * 1e4").
+     * @property y longitude in degrees × 1e7 in a global frame.
+     * @property z altitude in metres, relative or absolute depending on [frame].
+     * @property missionType `MAV_MISSION_TYPE`, an extension.
+     */
+    // One property per field of the message definition; grouping the params would hide that mapping.
+    @Suppress("LongParameterList")
+    data class MissionItemInt(
+        val targetSystem: Int,
+        val targetComponent: Int,
+        val seq: Int,
+        val frame: Int,
+        val command: Int,
+        val current: Int,
+        val autocontinue: Int,
+        val param1: Float,
+        val param2: Float,
+        val param3: Float,
+        val param4: Float,
+        val x: Int,
+        val y: Int,
+        val z: Float,
+        val missionType: Int,
+    ) : MavlinkMessage
+
+    /**
+     * MISSION_ACK (id 47, https://mavlink.io/en/messages/common.html#MISSION_ACK): ends an upload or a download.
+     *
+     * @property type `MAV_MISSION_RESULT`, as sent: 0 (accepted) truncated on the wire reads as 0 too.
+     * @property missionType `MAV_MISSION_TYPE`, an extension.
+     * @property opaqueId an extension, a uint32 (hence [Long]): "Id of new on-vehicle mission, fence, or rally point
+     * plan (on upload to vehicle)"; 0 when not sent.
+     */
+    data class MissionAck(
+        val targetSystem: Int,
+        val targetComponent: Int,
+        val type: Int,
+        val missionType: Int,
+        val opaqueId: Long,
+    ) : MavlinkMessage
+
+    /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.
      *
