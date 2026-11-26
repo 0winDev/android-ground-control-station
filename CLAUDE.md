@@ -345,5 +345,5 @@ the issue number to an existing one.
 - A stand-in map has none of the real map's controls: check the vehicle in sight in SITL, in Spanish too (#138).
 - OSM's attribution may fold into a button only after it has shown (5 s or a gesture): never start it folded (#138).
 - `input motionevent` gives each event its own down time, so no gesture is held: use root `sendevent` on the emulator (#103).
-- A test reading a source file needs it as a task input, or the build cache replays an old pass (#139).
+- A test reading a source file needs it as a task input, or the build cache replays an old pass (#139, #143).
 - `hasVisualOverflow` holds for any one-line text: find a cut text by its ellipsis or a word broken across lines (#139).
