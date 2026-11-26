@@ -176,7 +176,7 @@
     <string name="hud_command_only_on_ground">Solo en tierra</string>
     <string name="hud_command_not_on_ground">No consta que esté en tierra</string>
     <string name="hud_command_only_armed">Solo armado</string>
-    <string name="hud_command_acknowledge_cautions">Confirma los avisos en el chequeo prevuelo</string>
+    <string name="hud_command_acknowledge_cautions">Reconoce las precauciones en el chequeo prevuelo</string>
     <string name="hud_command_route_changed">La ruta del dron cambió: revísala</string>
     <string name="hud_command_route_alternating">Se oye el dron por más de una ruta</string>
     <string name="hud_command_route_unknown">Ruta del dron aún desconocida</string>
@@ -221,7 +221,7 @@
     <string name="hud_not_sent_busy">otra orden está pendiente</string>
     <string name="hud_not_sent_send_failed">este dispositivo no pudo enviarla</string>
     <string name="hud_not_sent_preflight_red">chequeo prevuelo en rojo</string>
-    <string name="hud_not_sent_preflight_unacknowledged">avisos de prevuelo sin confirmar</string>
+    <string name="hud_not_sent_preflight_unacknowledged">precauciones de prevuelo sin reconocer</string>
     <plurals name="hud_command_preflight_red">
         <item quantity="one">Chequeo prevuelo: %1$d elemento en rojo</item>
         <item quantity="many">Chequeo prevuelo: %1$d elementos en rojo</item>
@@ -242,9 +242,9 @@
         <item quantity="many">%1$s: sin respuesta tras %2$d intentos; después se detuvo (%3$s). Comprueba el dron.</item>
         <item quantity="other">%1$s: sin respuesta tras %2$d intentos; después se detuvo (%3$s). Comprueba el dron.</item>
     </plurals>
-    <string name="hud_checklist_summary">Chequeo prevuelo · fallos: %1$d · avisos: %2$d · OK: %3$d</string>
+    <string name="hud_checklist_summary">Chequeo prevuelo · fallos: %1$d · precauciones: %2$d · OK: %3$d</string>
     <string name="hud_checklist_ok">OK</string>
-    <string name="hud_checklist_caution">Aviso</string>
+    <string name="hud_checklist_caution">Precaución</string>
     <string name="hud_checklist_fail">Fallo</string>
     <string name="hud_checklist_acknowledge">Reconocer</string>
     <string name="hud_checklist_acknowledge_item">Reconocer: %1$s</string>
