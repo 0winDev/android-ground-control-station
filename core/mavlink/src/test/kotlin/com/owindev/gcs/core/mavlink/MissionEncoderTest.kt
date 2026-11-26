@@ -117,7 +117,7 @@ class MissionEncoderTest {
         val message = item(seq = 5, frame = MAV_FRAME_GLOBAL, command = MAV_CMD_NAV_RETURN_TO_LAUNCH, z = 0f)
             .copy(param4 = 0f, x = 0, y = 0)
 
-        val result = encoder.encode(TAKEOFF_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, message)
+        val result = encoder.encode(DERIVED_ITEM_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, message)
 
         result shouldBeEqualTo readFixture("derived/mission-item-rtl.bin")
     }
@@ -128,7 +128,7 @@ class MissionEncoderTest {
             targetSystem = OTHER_SYSTEM_ID,
             targetComponent = OTHER_COMPONENT_ID,
             seq = 0x0102,
-            frame = 6,
+            frame = UNKNOWN_FRAME,
             command = 0x0304,
             current = 1,
             autocontinue = 0,
@@ -142,7 +142,7 @@ class MissionEncoderTest {
             missionType = 2,
         )
 
-        val result = encoder.encode(TAKEOFF_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, message)
+        val result = encoder.encode(DERIVED_ITEM_SEQUENCE, GCS_SYSTEM_ID, GCS_COMPONENT_ID, message)
 
         result shouldBeEqualTo readFixture("derived/mission-item-full.bin")
     }
@@ -209,6 +209,19 @@ class MissionEncoderTest {
         result shouldThrow IllegalArgumentException::class
     }
 
+    @ParameterizedTest(name = "type {0}, mission_type {1}")
+    @CsvSource(
+        "256, 0",
+        "0, 256",
+    )
+    fun `GIVEN a MISSION_ACK field outside one byte WHEN encoding THEN it throws`(type: Int, missionType: Int) {
+        val message = MissionAck(VEHICLE_SYSTEM_ID, VEHICLE_COMPONENT_ID, type, missionType, opaqueId = 0)
+
+        val result = invoking { encoder.encode(0, GCS_SYSTEM_ID, GCS_COMPONENT_ID, message) }
+
+        result shouldThrow IllegalArgumentException::class
+    }
+
     @ParameterizedTest(name = "seq {0}, command {1}, frame {2}")
     @CsvSource(
         "-1, 16, 3",
@@ -263,7 +276,11 @@ class MissionEncoderTest {
         // pymavlink-derived frames: a target whose system and component differ, every field distinct.
         const val OTHER_SYSTEM_ID = 2
         const val OTHER_COMPONENT_ID = 3
-        const val OPAQUE_ID = 0x1234_5678L
+        const val OPAQUE_ID = 0x8765_4321L
+        const val UNKNOWN_FRAME = 255
+
+        // The derived items keep the take off's sequence number, 91.
+        const val DERIVED_ITEM_SEQUENCE = 91
         const val MAV_MISSION_TYPE_FENCE = 1
         const val MAV_MISSION_TYPE_RALLY = 2
         const val MAV_MISSION_INVALID_SEQUENCE = 13

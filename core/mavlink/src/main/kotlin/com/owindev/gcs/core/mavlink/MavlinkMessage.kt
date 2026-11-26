@@ -446,7 +446,7 @@ sealed interface MavlinkMessage {
      * @property count "Number of mission items in the sequence", a uint16; ArduPilot counts home as item 0.
      * @property missionType `MAV_MISSION_TYPE`, an extension.
      * @property opaqueId an extension, a uint32 (hence [Long]): "Id of current on-vehicle mission, fence, or rally
-     * point plan (on download from vehicle)"; 0 when not sent.
+     * point plan (on download from vehicle)", "0 on upload to the vehicle from GCS"; 0 when not sent.
      */
     data class MissionCount(
         val targetSystem: Int,
@@ -517,7 +517,7 @@ sealed interface MavlinkMessage {
      * @property type `MAV_MISSION_RESULT`, as sent: 0 (accepted) truncated on the wire reads as 0 too.
      * @property missionType `MAV_MISSION_TYPE`, an extension.
      * @property opaqueId an extension, a uint32 (hence [Long]): "Id of new on-vehicle mission, fence, or rally point
-     * plan (on upload to vehicle)"; 0 when not sent.
+     * plan (on upload to vehicle)", "0 on download from the vehicle to the GCS"; 0 when not sent.
      */
     data class MissionAck(
         val targetSystem: Int,

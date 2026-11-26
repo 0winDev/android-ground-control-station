@@ -52,7 +52,10 @@ MISSION_TYPES = {
     "MISSION_REQUEST_INT",
     "MISSION_ITEM_INT",
 }
-ARBITRARY_OPAQUE_ID = 0x12345678
+# At or above 2^31, so a signed read of the uint32 shows.
+ARBITRARY_OPAQUE_ID = 0x87654321
+# Past the last MAV_FRAME in common.xml: a frame the codec does not know.
+UNKNOWN_FRAME = 255
 # A target whose system and component differ, unlike every frame QGroundControl sent (1/1): a swap shows.
 OTHER_TARGET = {"target_system": 2, "target_component": 3}
 
@@ -80,12 +83,15 @@ def records(path: Path):
     """Each record of a .tlog: (timestamp in µs as stored, frame bytes), with the message pymavlink reads there."""
     data = path.read_bytes()
     log = mavutil.mavlink_connection(str(path), dialect="common", robust_parsing=True)
+    end = 0
     while True:
         msg = log.recv_match(blocking=False)
         if msg is None:
             return
         frame = bytes(msg.get_msgbuf())
-        offset = data.find(frame)
+        # Search past the previous record, so a repeated identical frame gets its own timestamp.
+        offset = data.find(frame, end + 8)
+        end = offset + len(frame)
         stamp = struct.unpack(">Q", data[offset - 8:offset])[0]
         yield stamp, frame, msg
 
@@ -162,7 +168,7 @@ def main() -> None:
         ),
         # Every field non-zero and distinct, mission_type 2 (rally): full length, every offset shows.
         derived_dir / "mission-item-full.bin": with_message_fields(
-            takeoff, **OTHER_TARGET, seq=0x0102, frame=common.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT, command=0x0304, current=1,
+            takeoff, **OTHER_TARGET, seq=0x0102, frame=UNKNOWN_FRAME, command=0x0304, current=1,
             autocontinue=0, param1=1.5, param2=-2.25, param3=100000.0, param4=-1.0, x=-353633515, y=1491652412,
             z=-0.5, mission_type=common.MAV_MISSION_TYPE_RALLY,
         ),
@@ -178,6 +184,7 @@ def main() -> None:
         derived_dir / "mission-ack-type-past-enum.bin": with_message_fields(
             real["ack-accepted"], type=common.MAV_MISSION_RESULT_ENUM_END,
         ),
+        derived_dir / "mission-request-seq-high.bin": with_message_fields(real["request-seq-4"], seq=0xFFFE),
         derived_dir / "mission-request-rally.bin": with_message_fields(
             real["request-seq-4"], mission_type=common.MAV_MISSION_TYPE_RALLY,
         ),
