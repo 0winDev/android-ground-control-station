@@ -50,6 +50,12 @@ pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and m
 | PARAM_REQUEST_READ (20) | `common.xml` | 214 |
 | PARAM_VALUE (22) | `common.xml` | 220 |
 | EXTENDED_SYS_STATE (245) | `common.xml` | 130 |
+| MISSION_REQUEST (40) | `common.xml` | 230 |
+| MISSION_REQUEST_LIST (43) | `common.xml` | 132 |
+| MISSION_COUNT (44) | `common.xml` | 221 |
+| MISSION_ACK (47) | `common.xml` | 153 |
+| MISSION_REQUEST_INT (51) | `common.xml` | 196 |
+| MISSION_ITEM_INT (73) | `common.xml` | 38 |
 
 ATTITUDE, GLOBAL_POSITION_INT and VFR_HUD were also computed with `mavparse` from `common.xml` and
 `standard.xml` on `mavlink/mavlink` master (#37), and SYS_STATUS and GPS_RAW_INT from `common.xml` on master
@@ -622,6 +628,83 @@ landed/in-air.bin                            fd 02 00 00 ac 01 01 f5 00 00 03 02
 landed/landing.bin                           fd 02 00 00 d1 01 01 f5 00 00 03 04 17 e8
 derived/extended-sys-state-undefined.bin     fd 01 00 00 bd 01 01 f5 00 00 03 73 96
 derived/extended-sys-state-landed-5.bin      fd 02 00 00 bd 01 01 f5 00 00 03 05 ba a0
+```
+
+## Mission transfer (#148)
+
+`mission/session.tlog`: one upload and one download of a mission by QGroundControl 5.0.8 through
+`tools/sitl/sitl_relay.py --tlog`, between Mission Planner's SITL (ArduCopter 4.8.0-dev, git `6034266b`) and
+QGroundControl on UDP 14550: every record of the relay's two logs holding a mission transfer message, copied byte for
+byte in timestamp order (35 records). `mission/session.tsv` is those frames as pymavlink decodes them, and
+`mission/session.txt` holds AUTOPILOT_VERSION and the counts. Extracted and built by `py tools/fixtures/mission_fixtures.py`
+(pymavlink 2.4.50; the `opaque_id` frames with a dialect generated from `common.xml` on `mavlink/mavlink` master,
+which 2.4.50's bundled `common.xml` lacks; the CRC_EXTRA is the same, since extensions are not in it).
+
+What the capture shows:
+
+- ArduCopter asks for each uploaded item with MISSION_REQUEST (40), never MISSION_REQUEST_INT (51): all 25 requests of
+  the session's five uploads (`AP_MAVLINK_MSG_MISSION_REQUEST_SENDING_ENABLED` defaults to 1 in ArduPilot's
+  `GCS_config.h`). QGroundControl downloads with MISSION_REQUEST_INT.
+- Seq 0 is home: QGroundControl uploads it as a NAV_WAYPOINT in frame 0 (`MAV_FRAME_GLOBAL`, altitude above mean sea
+  level) with `current` 1, and the vehicle asks for it like any item and sends it back first on download.
+- QGroundControl also sends a MISSION_COUNT of 0 for the fence and the rally points (`mission_type` 1 and 2), each
+  answered by an accepted MISSION_ACK, and downloads both.
+- The vehicle sends `param4` 0 where QGroundControl uploaded NaN (`item-takeoff.bin` against the download).
+
+Wire layouts (base fields by size, then the extensions in XML order):
+
+- MISSION_REQUEST and MISSION_REQUEST_INT, full LEN 5: `seq` (uint16, 0), `target_system` (2), `target_component` (3),
+  `mission_type` (4).
+- MISSION_REQUEST_LIST, full LEN 3: `target_system` (0), `target_component` (1), `mission_type` (2).
+- MISSION_COUNT, full LEN 9: `count` (uint16, 0), `target_system` (2), `target_component` (3), `mission_type` (4),
+  `opaque_id` (uint32, 5).
+- MISSION_ACK, full LEN 8: `target_system` (0), `target_component` (1), `type` (2), `mission_type` (3), `opaque_id`
+  (uint32, 4).
+- MISSION_ITEM_INT, full LEN 38: `param1`…`param4` (float, 0–12), `x` (int32, 16), `y` (int32, 20), `z` (float, 24),
+  `seq` (uint16, 28), `command` (uint16, 30), `target_system` (32), `target_component` (33), `frame` (34), `current` (35),
+  `autocontinue` (36), `mission_type` (37).
+
+| File | Origin | What it proves |
+|---|---|---|
+| `mission/count-upload.bin` | QGroundControl's MISSION_COUNT (seq 89): count 5, `mission_type` 0, LEN 4 | encoder byte for byte; decoder (REQ-053) |
+| `mission/count-fence-empty.bin` | QGroundControl's MISSION_COUNT (seq 95): count 0, `mission_type` 1, LEN 5 | encoder: a zero count before a non-zero type |
+| `mission/request-seq-0.bin`, `mission/request-seq-4.bin` | the vehicle's MISSION_REQUEST (seq 124, 128) for items 0 and 4, LEN 4 | decoder: ArduPilot's default request |
+| `mission/item-home.bin` | QGroundControl's MISSION_ITEM_INT seq 0 (seq 90): home, frame 0, command 16, current 1, x -353633515, y 1491652412, z 585.0 | encoder byte for byte; decoder |
+| `mission/item-takeoff.bin` | its seq 1 (seq 91): NAV_TAKEOFF (22), frame 3, `param4` NaN, z 10.0 | encoder: NaN's bytes `00 00 c0 7f` |
+| `mission/item-waypoint-hold.bin` | its seq 2 (seq 92): NAV_WAYPOINT (16), hold `param1` 5.0 | encoder; decoder |
+| `mission/ack-accepted.bin` | the vehicle's MISSION_ACK (seq 129): `MAV_MISSION_ACCEPTED`, LEN **2**: `type` 0 is truncated | decoder: zero-fill restores the result (REQ-013) |
+| `mission/ack-accepted-fence.bin` | its ACK for the fence (seq 158): `mission_type` 1, LEN 4 | decoder |
+| `mission/request-list.bin`, `mission/request-list-fence.bin` | QGroundControl's MISSION_REQUEST_LIST (seq 133, 140), `mission_type` 0 (LEN 2) and 1 (LEN 3) | encoder byte for byte |
+| `mission/count-download.bin` | the vehicle's MISSION_COUNT (seq 108): count 5 | decoder |
+| `mission/request-int-seq-0.bin` | QGroundControl's MISSION_REQUEST_INT (seq 134) for item 0 | encoder byte for byte; decoder |
+| `mission/item-download-waypoint.bin` | the vehicle's MISSION_ITEM_INT seq 2 (seq 116), `param4` 0.0 | decoder |
+| `mission/ack-download.bin` | QGroundControl's MISSION_ACK (seq 139): accepted, LEN 2 | encoder byte for byte |
+| `derived/mission-item-rtl.bin` | `item-takeoff.bin` as seq 5, NAV_RETURN_TO_LAUNCH (20), frame 0, every param and position 0 | encoder: the route's last item |
+| `derived/mission-item-full.bin` | `item-takeoff.bin` with every field distinct, target 2/3, seq `0x0102`, frame 255 (past `MAV_FRAME`), command `0x0304` (no `MAV_CMD`), `mission_type` 2: LEN 38 | encoder and decoder: every offset, the extension, an unknown frame and command kept as sent |
+| `derived/mission-count-opaque-id.bin` | `count-download.bin` with `opaque_id` `0x87654321`: LEN 9 | decoder: `opaque_id` after `mission_type`, unsigned (at or above 2³¹) |
+| `derived/mission-ack-opaque-id.bin` | `ack-accepted.bin` with `mission_type` 1 and `opaque_id` `0x87654321`: LEN 8 | decoder: the same in the ACK |
+| `derived/mission-ack-invalid-sequence.bin` | `ack-accepted.bin` with `type` 13 (`MAV_MISSION_INVALID_SEQUENCE`) | decoder: an error result |
+| `derived/mission-ack-type-past-enum.bin` | the same with `type` 16, past `MAV_MISSION_RESULT` | decoder: an unknown result is kept as sent |
+| `derived/mission-request-seq-high.bin` | `request-seq-4.bin` with seq 65534 | decoder: an unsigned 16-bit `seq` |
+| `derived/mission-request-rally.bin` | `request-seq-4.bin` with `mission_type` 2: LEN 5 | decoder: the extension |
+| `derived/mission-request-int-seq-high.bin` | `request-int-seq-0.bin` with seq 65534 and `mission_type` 1 | decoder: an unsigned `seq` |
+| `derived/mission-request-int-fields.bin` | `request-int-seq-0.bin` with target 2/3, seq `0x0102`, `mission_type` 1 | encoder and decoder: every field has its offset (QGroundControl's frames all target 1/1, so a swapped target would not show) |
+| `derived/mission-request-list-fields.bin` | `request-list.bin` with target 2/3, `mission_type` 2 | encoder: the same |
+| `derived/mission-count-fields.bin` | `count-upload.bin` with target 2/3, count `0x0102`, `mission_type` 1, `opaque_id` `0x87654321`: LEN 9 | encoder and decoder: the same, `opaque_id` included |
+| `derived/mission-ack-fields.bin` | `ack-download.bin` with target 2/3, `type` 13, `mission_type` 1, `opaque_id` `0x87654321`: LEN 8 | encoder and decoder: the same |
+
+Raw bytes:
+
+```
+mission/count-upload.bin                     fd 04 00 00 59 ff be 2c 00 00 05 00 01 01 e4 22
+mission/count-fence-empty.bin                fd 05 00 00 5f ff be 2c 00 00 00 00 01 01 01 9b 01
+mission/request-seq-0.bin                    fd 04 00 00 7c 01 01 28 00 00 00 00 ff be 3a 07
+mission/ack-accepted.bin                     fd 02 00 00 81 01 01 2f 00 00 ff be f6 dd
+mission/request-list.bin                     fd 02 00 00 85 ff be 2b 00 00 01 01 67 26
+mission/request-int-seq-0.bin                fd 04 00 00 86 ff be 33 00 00 00 00 01 01 2d 51
+mission/ack-download.bin                     fd 02 00 00 8b ff be 2f 00 00 01 01 7a 26
+derived/mission-count-opaque-id.bin          fd 09 00 00 6c 01 01 2c 00 00 05 00 ff be 00 21 43 65 87 86 a2
+derived/mission-ack-opaque-id.bin            fd 08 00 00 81 01 01 2f 00 00 ff be 00 01 21 43 65 87 9f 87
 ```
 
 ## Raw frames for the flight log (#67)

@@ -7,6 +7,11 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.GlobalPositionInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.GpsRawInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionAck
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionCount
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionItemInt
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionRequest
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionRequestInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamValue
 import com.owindev.gcs.core.mavlink.MavlinkMessage.StatusText
 import com.owindev.gcs.core.mavlink.MavlinkMessage.SysStatus
@@ -177,6 +182,55 @@ object MavlinkDecoder {
     private const val TEXT_ID_OFFSET = 51
     private const val TEXT_CHUNK_SEQ_OFFSET = 53
 
+    private const val MISSION_REQUEST_ID = 40
+    private const val MISSION_COUNT_ID = 44
+    private const val MISSION_ACK_ID = 47
+    private const val MISSION_REQUEST_INT_ID = 51
+    private const val MISSION_ITEM_INT_ID = 73
+
+    // MISSION_REQUEST and MISSION_REQUEST_INT share a layout: seq (uint16) first, the targets, then the extension
+    // mission_type.
+    private const val REQUEST_SEQ_OFFSET = 0
+    private const val REQUEST_TARGET_SYSTEM_OFFSET = 2
+    private const val REQUEST_TARGET_COMPONENT_OFFSET = 3
+    private const val REQUEST_MISSION_TYPE_OFFSET = 4
+
+    // MISSION_COUNT: count (uint16) first, the targets, then the extensions mission_type and opaque_id (uint32), in
+    // XML order.
+    private const val COUNT_OFFSET = 0
+    private const val COUNT_TARGET_SYSTEM_OFFSET = 2
+    private const val COUNT_TARGET_COMPONENT_OFFSET = 3
+    private const val COUNT_MISSION_TYPE_OFFSET = 4
+    private const val COUNT_OPAQUE_ID_OFFSET = 5
+
+    // MISSION_ACK: the targets and type, then the extensions mission_type and opaque_id (uint32), in XML order.
+    private const val MISSION_ACK_TARGET_SYSTEM_OFFSET = 0
+    private const val MISSION_ACK_TARGET_COMPONENT_OFFSET = 1
+    private const val MISSION_ACK_TYPE_OFFSET = 2
+    private const val MISSION_ACK_MISSION_TYPE_OFFSET = 3
+    private const val MISSION_ACK_OPAQUE_ID_OFFSET = 4
+
+    // MISSION_ITEM_INT: param1..param4 (float), x and y (int32), z (float), seq and command (uint16), the six uint8
+    // fields in XML order, then the extension mission_type.
+    private const val ITEM_PARAM1_OFFSET = 0
+    private const val ITEM_PARAM2_OFFSET = 4
+    private const val ITEM_PARAM3_OFFSET = 8
+    private const val ITEM_PARAM4_OFFSET = 12
+    private const val ITEM_X_OFFSET = 16
+    private const val ITEM_Y_OFFSET = 20
+    private const val ITEM_Z_OFFSET = 24
+    private const val ITEM_SEQ_OFFSET = 28
+    private const val ITEM_COMMAND_OFFSET = 30
+    private const val ITEM_TARGET_SYSTEM_OFFSET = 32
+    private const val ITEM_TARGET_COMPONENT_OFFSET = 33
+    private const val ITEM_FRAME_OFFSET = 34
+    private const val ITEM_CURRENT_OFFSET = 35
+    private const val ITEM_AUTOCONTINUE_OFFSET = 36
+    private const val ITEM_MISSION_TYPE_OFFSET = 37
+
+    // One flat branch per message, as in MavlinkMessages.definitionOf: the complexity grows with the table, not with
+    // any logic.
+    @Suppress("CyclomaticComplexMethod")
     fun decode(frame: MavlinkFrame): MavlinkMessage {
         val fullLength = MavlinkMessages.fullLengthOf(frame.messageId)
             ?: return Undecoded(frame.messageId, frame.payload.copyOf())
@@ -192,6 +246,11 @@ object MavlinkDecoder {
             HOME_POSITION_ID -> homePosition(frame.payload)
             EXTENDED_SYS_STATE_ID -> extendedSysState(frame.payload)
             STATUSTEXT_ID -> statusText(frame.payload)
+            MISSION_REQUEST_ID -> missionRequest(frame.payload)
+            MISSION_COUNT_ID -> missionCount(frame.payload)
+            MISSION_ACK_ID -> missionAck(frame.payload)
+            MISSION_REQUEST_INT_ID -> missionRequestInt(frame.payload)
+            MISSION_ITEM_INT_ID -> missionItemInt(frame.payload)
             else -> Undecoded(frame.messageId, frame.payload.copyOf(fullLength))
         }
     }
@@ -289,6 +348,54 @@ object MavlinkDecoder {
         resultParam2 = payload.int32(ACK_RESULT_PARAM2_OFFSET),
         targetSystem = payload.uint8(ACK_TARGET_SYSTEM_OFFSET),
         targetComponent = payload.uint8(ACK_TARGET_COMPONENT_OFFSET),
+    )
+
+    private fun missionRequest(payload: ByteArray) = MissionRequest(
+        targetSystem = payload.uint8(REQUEST_TARGET_SYSTEM_OFFSET),
+        targetComponent = payload.uint8(REQUEST_TARGET_COMPONENT_OFFSET),
+        seq = payload.uint16(REQUEST_SEQ_OFFSET),
+        missionType = payload.uint8(REQUEST_MISSION_TYPE_OFFSET),
+    )
+
+    private fun missionRequestInt(payload: ByteArray) = MissionRequestInt(
+        targetSystem = payload.uint8(REQUEST_TARGET_SYSTEM_OFFSET),
+        targetComponent = payload.uint8(REQUEST_TARGET_COMPONENT_OFFSET),
+        seq = payload.uint16(REQUEST_SEQ_OFFSET),
+        missionType = payload.uint8(REQUEST_MISSION_TYPE_OFFSET),
+    )
+
+    private fun missionCount(payload: ByteArray) = MissionCount(
+        targetSystem = payload.uint8(COUNT_TARGET_SYSTEM_OFFSET),
+        targetComponent = payload.uint8(COUNT_TARGET_COMPONENT_OFFSET),
+        count = payload.uint16(COUNT_OFFSET),
+        missionType = payload.uint8(COUNT_MISSION_TYPE_OFFSET),
+        opaqueId = payload.uint32(COUNT_OPAQUE_ID_OFFSET),
+    )
+
+    private fun missionAck(payload: ByteArray) = MissionAck(
+        targetSystem = payload.uint8(MISSION_ACK_TARGET_SYSTEM_OFFSET),
+        targetComponent = payload.uint8(MISSION_ACK_TARGET_COMPONENT_OFFSET),
+        type = payload.uint8(MISSION_ACK_TYPE_OFFSET),
+        missionType = payload.uint8(MISSION_ACK_MISSION_TYPE_OFFSET),
+        opaqueId = payload.uint32(MISSION_ACK_OPAQUE_ID_OFFSET),
+    )
+
+    private fun missionItemInt(payload: ByteArray) = MissionItemInt(
+        targetSystem = payload.uint8(ITEM_TARGET_SYSTEM_OFFSET),
+        targetComponent = payload.uint8(ITEM_TARGET_COMPONENT_OFFSET),
+        seq = payload.uint16(ITEM_SEQ_OFFSET),
+        frame = payload.uint8(ITEM_FRAME_OFFSET),
+        command = payload.uint16(ITEM_COMMAND_OFFSET),
+        current = payload.uint8(ITEM_CURRENT_OFFSET),
+        autocontinue = payload.uint8(ITEM_AUTOCONTINUE_OFFSET),
+        param1 = payload.float(ITEM_PARAM1_OFFSET),
+        param2 = payload.float(ITEM_PARAM2_OFFSET),
+        param3 = payload.float(ITEM_PARAM3_OFFSET),
+        param4 = payload.float(ITEM_PARAM4_OFFSET),
+        x = payload.int32(ITEM_X_OFFSET),
+        y = payload.int32(ITEM_Y_OFFSET),
+        z = payload.float(ITEM_Z_OFFSET),
+        missionType = payload.uint8(ITEM_MISSION_TYPE_OFFSET),
     )
 
     private fun extendedSysState(payload: ByteArray) = ExtendedSysState(

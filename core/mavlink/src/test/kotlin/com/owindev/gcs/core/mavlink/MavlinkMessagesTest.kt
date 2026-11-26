@@ -29,6 +29,7 @@ class MavlinkMessagesTest {
     @Tag("REQ-040")
     @Tag("REQ-041")
     @Tag("REQ-052")
+    @Tag("REQ-053")
     @ParameterizedTest(name = "msgid {0}")
     @CsvSource(
         "0, 50, 9",
@@ -46,6 +47,12 @@ class MavlinkMessagesTest {
         "20, 214, 20",
         "22, 220, 25",
         "245, 130, 2",
+        "40, 230, 5",
+        "43, 132, 3",
+        "44, 221, 9",
+        "47, 153, 8",
+        "51, 196, 5",
+        "73, 38, 38",
     )
     fun `GIVEN a supported message WHEN looking it up THEN it has the CRC_EXTRA and full length of its definition`(
         msgId: Int,

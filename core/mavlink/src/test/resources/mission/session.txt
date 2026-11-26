@@ -1,0 +1,16 @@
+# Capture of #148, 2026-11-26: Mission Planner's ArduCopter SITL, tools/sitl/sitl_relay.py --tlog between SITL's TCP 5763
+# and QGroundControl 5.0.8 on UDP 14550 (QGroundControl's TCP link off, so all its traffic went through the relay).
+# mission/session.tlog is the records from 1795714423.5 s to 1795714435.6 s (Unix) of the relay's two logs holding a
+# mission transfer message: one upload from QGroundControl (Plan, Upload) and one download (Plan, Download).
+
+# AUTOPILOT_VERSION, requested by pymavlink 2.4.50 on TCP 5762 right after the capture:
+flight_sw_version 67633152 = 4.8.0, FIRMWARE_VERSION_TYPE_DEV (0); flight_custom_version "6034266b" (ASCII git hash)
+
+# Mission frames in the session, by sender (pymavlink): 35 records
+255/190 MISSION_COUNT 3, MISSION_ITEM_INT 5, MISSION_REQUEST_LIST 3, MISSION_REQUEST_INT 5, MISSION_ACK 3
+1/1     MISSION_REQUEST 5, MISSION_ACK 3, MISSION_COUNT 3, MISSION_ITEM_INT 5
+
+# Mission transfer frames over the whole relay session (five uploads, one download), by pymavlink:
+up   MISSION_COUNT 15, MISSION_ITEM_INT 25, MISSION_REQUEST_LIST 3, MISSION_REQUEST_INT 5, MISSION_ACK 3
+down MISSION_REQUEST 25, MISSION_ACK 15, MISSION_COUNT 3, MISSION_ITEM_INT 5
+# The vehicle asked for all 25 uploaded items with MISSION_REQUEST (40), never with MISSION_REQUEST_INT (51).
