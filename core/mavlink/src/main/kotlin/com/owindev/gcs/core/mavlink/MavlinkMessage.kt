@@ -528,6 +528,40 @@ sealed interface MavlinkMessage {
     ) : MavlinkMessage
 
     /**
+     * MISSION_CURRENT (id 42, https://mavlink.io/en/messages/common.html#MISSION_CURRENT): the mission item the vehicle
+     * flies towards or executes, streamed at the rate the GCS asks for, so it repeats the same [seq] for a whole leg.
+     * Every field after [seq] is an extension, and each zero-filled one reads as its `invalid` value.
+     *
+     * @property seq the current item, a uint16; ArduPilot sends 0 when there is none.
+     * @property total "Total number of mission items on vehicle", home excluded; 0 "not supported", 65535 "no
+     * mission".
+     * @property missionState `MISSION_STATE`, as sent; 0 (unknown) when not sent.
+     * @property missionMode "0: Unknown, 1: In mission mode, 2: Suspended"; ArduPilot sends 0 outside AUTO, never 2.
+     * @property missionId a uint32 (hence [Long]), the on-vehicle mission plan's id; 0 when not supported or not sent.
+     * @property fenceId the same for the fence plan.
+     * @property rallyPointsId the same for the rally point plan.
+     */
+    // One property per field of the message definition.
+    @Suppress("LongParameterList")
+    data class MissionCurrent(
+        val seq: Int,
+        val total: Int,
+        val missionState: Int,
+        val missionMode: Int,
+        val missionId: Long,
+        val fenceId: Long,
+        val rallyPointsId: Long,
+    ) : MavlinkMessage
+
+    /**
+     * MISSION_ITEM_REACHED (id 46, https://mavlink.io/en/messages/common.html#MISSION_ITEM_REACHED): an item has been
+     * reached. Sent once per item, so a lost frame is never repeated: progress comes from [MissionCurrent].
+     *
+     * @property seq the item reached, a uint16.
+     */
+    data class MissionItemReached(val seq: Int) : MavlinkMessage
+
+    /**
      * A message the codec does not decode into fields. For a message in [MavlinkMessages], [payload] is
      * already zero-filled to the message's full length; otherwise it is the payload as received.
      *

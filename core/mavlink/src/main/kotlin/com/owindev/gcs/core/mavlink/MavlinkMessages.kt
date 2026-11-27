@@ -11,7 +11,9 @@ package com.owindev.gcs.core.mavlink
  * VFR_HUD (#37), SYS_STATUS and GPS_RAW_INT (#38), HOME_POSITION (#66), STATUSTEXT (#96), PARAM_REQUEST_READ and
  * PARAM_VALUE (#97), EXTENDED_SYS_STATE (#112) computed with pymavlink's `mavparse` from both. The mission transfer
  * messages (#148) from `common.xml` on master too, whose MISSION_COUNT and MISSION_ACK carry the extension `opaque_id`
- * that pymavlink 2.4.50's bundled copy lacks (same CRC_EXTRA: extensions are not in it).
+ * that pymavlink 2.4.50's bundled copy lacks (same CRC_EXTRA: extensions are not in it). MISSION_CURRENT and
+ * MISSION_ITEM_REACHED (#149) from master too, whose MISSION_CURRENT carries `mission_id`, `fence_id` and
+ * `rally_points_id`, also missing from 2.4.50's copy.
  * SERVO_OUTPUT_RAW and POWER_STATUS are only validated and restored so far. COMMAND_LONG, PARAM_REQUEST_READ and
  * MISSION_REQUEST_LIST are only sent by the codec, so a received one stays undecoded.
  */
@@ -33,8 +35,10 @@ object MavlinkMessages : CrcExtraLookup {
     private const val EXTENDED_SYS_STATE_ID = 245
     private const val STATUSTEXT_ID = 253
     private const val MISSION_REQUEST_ID = 40
+    private const val MISSION_CURRENT_ID = 42
     private const val MISSION_REQUEST_LIST_ID = 43
     private const val MISSION_COUNT_ID = 44
+    private const val MISSION_ITEM_REACHED_ID = 46
     private const val MISSION_ACK_ID = 47
     private const val MISSION_REQUEST_INT_ID = 51
     private const val MISSION_ITEM_INT_ID = 73
@@ -76,6 +80,10 @@ object MavlinkMessages : CrcExtraLookup {
     private val missionRequestInt = Definition(crcExtra = 196, fullLength = 5)
     private val missionItemInt = Definition(crcExtra = 38, fullLength = 38)
 
+    // 2 bytes without its extensions (total, mission_state, mission_mode, mission_id, fence_id, rally_points_id).
+    private val missionCurrent = Definition(crcExtra = 28, fullLength = 18)
+    private val missionItemReached = Definition(crcExtra = 11, fullLength = 2)
+
     override fun crcExtraFor(msgId: Int): Int? = definitionOf(msgId)?.crcExtra
 
     /** Full payload length of [msgId] in bytes, extension fields included, or `null` if not supported. */
@@ -106,6 +114,8 @@ object MavlinkMessages : CrcExtraLookup {
         MISSION_ACK_ID -> missionAck
         MISSION_REQUEST_INT_ID -> missionRequestInt
         MISSION_ITEM_INT_ID -> missionItemInt
+        MISSION_CURRENT_ID -> missionCurrent
+        MISSION_ITEM_REACHED_ID -> missionItemReached
         else -> null
     }
 
