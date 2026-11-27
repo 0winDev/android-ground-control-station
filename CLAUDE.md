@@ -220,7 +220,7 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - A UDP send that succeeds proves nothing reached the vehicle: only an answer does (#29).
 - ArduPilot keeps rates per channel, streams only to a TCP channel it hears and forgets them on reboot (#36, #41).
 - An ArduPilot reboot never goes LOST: detect it from `time_boot_ms` going back, then request the streams (#69).
-- ArduPilot sends HOME_POSITION only when it sets or moves home: its silence is never a reason to ask (#69).
+- ArduPilot sends HOME_POSITION unasked only when it sets or moves home, at a requested rate once set: never before (#69, #150).
 - An OEM battery manager kills a foreground service holding a wake lock: test on the real device's defaults (#28).
 - Battery optimisation is every stock app's default: a caution on it fires everywhere; measure a signal first (#28).
 - A restricted app's foreground service loses the foreground once hidden: start it again on every app start (#28).
@@ -235,6 +235,8 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - ArduCopter on the ground takes off in AUTO only after `MAV_CMD_MISSION_START`: a mode change disarms after 10 s (#149).
 - ArduPilot's MISSION_CURRENT has `mission_mode` 0 outside AUTO (never 2) and no plan ids: read the sender (#149).
 - MISSION_ITEM_REACHED goes once per item and a channel keeps only the last: progress comes from MISSION_CURRENT (#149).
+- A mission area holds (size − 4) / 15 commands, home included, and a larger MISSION_COUNT gets NO_SPACE: SITL holds 650 (#150).
+- ArduPilot 4.8 renamed `RTL_ALT` (cm) to `RTL_ALT_M` (m): a parameter's name and unit come from the vehicle's version (#150).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -249,6 +251,8 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - A capture's .tlog holds only what the vehicle sent: keep its AUTOPILOT_VERSION and raw counts in a file beside it (#112).
 - Real frames share values (QGroundControl targets 1/1): derive one with every field distinct, a uint32 ≥ 2³¹, for each side (#148).
 - MGRS reference points stay 1 cm off a 1 m boundary; GEOTRANS and GeoConvert disagree at exactly 84°N (#40).
+- A test that builds its input from the limit it guards moves with it: write the limit there as a literal (#150).
+- Radii of curvature at one end of a 500 m line are 2 cm off at 70°: take them at the mean latitude (#150).
 
 **Flow and time**
 - A `SharedFlow` with replay hands old messages over as new: messages go without replay, state in a `StateFlow` (#11).
@@ -285,6 +289,7 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - A close and the next log in one writer queue lose no frame; a gap between them would, until the next HEARTBEAT (#89).
 - Log no recording names or exception messages: an imported file carries the name the operator picked (#74).
 - A request kept after its sheet hid comes back when its command does: drop it the first time it cannot show (#104).
+- NaN fails every comparison: write a limit as what is allowed (`in`, `<=`), so NaN and ±∞ fall outside (#150).
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).
