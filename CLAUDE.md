@@ -215,7 +215,7 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - Messages hide in includes (HEARTBEAT in `minimal.xml`, GLOBAL_POSITION_INT in `standard.xml`): search all (#8, #37).
 - Extension fields keep XML order on the wire; only base fields are sorted by size (#35).
 - Zero-fill cannot give a field's "invalid" value, and a field may have two: read each `invalid` (#35, #38).
-- Truncation cuts bytes, not fields, and never HEARTBEAT: CRC over the wire bytes, then zero-fill (#5, #10, #37).
+- Truncation cuts bytes, not fields, and never HEARTBEAT: CRC over the wire bytes, then zero-fill (#5, #10, #37, #149).
 - A uint64 extension below 2⁵⁶ always truncates: a full-length fixture needs its top byte non-zero (#66).
 - A UDP send that succeeds proves nothing reached the vehicle: only an answer does (#29).
 - ArduPilot keeps rates per channel, streams only to a TCP channel it hears and forgets them on reboot (#36, #41).
@@ -231,7 +231,10 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - A PARAM_VALUE names no target and comes unrequested too: it never proves the vehicle heard this GCS (#102).
 - ArduPilot's reason for refusing an arm comes as STATUSTEXT, never in the COMMAND_ACK (#104).
 - ArduPilot asks for uploaded mission items with the deprecated MISSION_REQUEST by default (`GCS_config.h`): decode it (#148).
-- pymavlink 2.4.50's bundled XML lacks newer extensions (`opaque_id`): pack those with a `mavgen` dialect from master (#148).
+- pymavlink 2.4.50's bundled XML lacks newer extensions (`opaque_id`): use a `mavgen` dialect from master (#148, #149).
+- ArduCopter on the ground takes off in AUTO only after `MAV_CMD_MISSION_START`: a mode change disarms after 10 s (#149).
+- ArduPilot's MISSION_CURRENT has `mission_mode` 0 outside AUTO (never 2) and no plan ids: read the sender (#149).
+- MISSION_ITEM_REACHED goes once per item and a channel keeps only the last: progress comes from MISSION_CURRENT (#149).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -285,7 +288,7 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 
 **SITL and QGroundControl**
 - Mission Planner's simulator on Windows is enough; QGroundControl connects to SITL directly on TCP 5762 (#5).
-- The simulator updates itself: query AUTOPILOT_VERSION each session, record it with every capture (#5, #39, #41, #29).
+- The simulator updates itself: query AUTOPILOT_VERSION each session, record it with every capture (#5, #39, #41, #29, #149).
 - Changing `BATT_CAPACITY` does not recharge the battery: relaunch the simulator (#56).
 - Check QGroundControl's UI in the installed version's docs and compare values with its MAVLink Inspector (#42).
 - Measure timings in SITL before documenting them: API 36 blocks a background app's network after about 5 s (#14).
