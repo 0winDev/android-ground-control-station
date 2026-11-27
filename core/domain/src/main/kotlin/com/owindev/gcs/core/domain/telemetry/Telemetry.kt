@@ -58,8 +58,8 @@ data class GlobalPosition(
 )
 
 /**
- * Where the vehicle returns to and measures its altitude above home from, as the vehicle reports it. It never goes
- * stale: a home does not change by getting older, and the vehicle sends none until it has one.
+ * Where the vehicle returns to and measures its altitude above home from, as the vehicle reports it. It is never shown
+ * as stale, since the vehicle sends none until it has one; only a route judges its age (REQ-055).
  *
  * @property latitude in degrees, WGS84.
  * @property longitude in degrees, WGS84.
