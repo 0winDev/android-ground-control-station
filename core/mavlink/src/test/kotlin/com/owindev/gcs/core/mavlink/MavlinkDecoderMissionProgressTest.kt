@@ -109,7 +109,15 @@ class MavlinkDecoderMissionProgressTest {
             ),
             arguments(
                 "derived/mission-current-full.bin",
-                MissionCurrent(0x0102, 0x0304, MISSION_STATE_PAUSED, SUSPENDED, MISSION_ID, FENCE_ID, RALLY_POINTS_ID),
+                MissionCurrent(
+                    DISTINCT_SEQ,
+                    DISTINCT_TOTAL,
+                    MISSION_STATE_PAUSED,
+                    SUSPENDED,
+                    MISSION_ID,
+                    FENCE_ID,
+                    RALLY_POINTS_ID,
+                ),
             ),
             arguments("derived/mission-current-seq-only.bin", MissionCurrent(2, 0, 0, 0, 0, 0, 0)),
             arguments(
@@ -123,6 +131,10 @@ class MavlinkDecoderMissionProgressTest {
         )
 
         const val TOTAL = 4
+
+        // mission-current-full.bin: every byte distinct, so a swapped byte order shows.
+        const val DISTINCT_SEQ = 0x0102
+        const val DISTINCT_TOTAL = 0x0304
         const val TOTAL_NO_MISSION = 65_535
         const val MISSION_STATE_NO_MISSION = 1
         const val MISSION_STATE_NOT_STARTED = 2

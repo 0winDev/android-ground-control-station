@@ -105,7 +105,7 @@ def main() -> None:
             mission_mode=MISSION_MODE_SUSPENDED, mission_id=ARBITRARY_MISSION_ID, fence_id=ARBITRARY_FENCE_ID,
             rally_points_id=ARBITRARY_RALLY_POINTS_ID,
         ),
-        # Only seq, as from an autopilot that predates the extensions: LEN 2, every extension zero-filled.
+        # Only seq, as from an autopilot that predates the extensions: LEN 1 (seq 2's zero high byte truncated too).
         derived_dir / "mission-current-seq-only.bin": with_message_fields(
             real["current-active"], master, total=0, mission_state=0, mission_mode=0,
         ),

@@ -29,6 +29,7 @@ class MavlinkCrcTest {
     }
 
     @Tag("REQ-011")
+    @Tag("REQ-054")
     @ParameterizedTest(name = "{0}")
     @CsvSource(
         "heartbeat/disarmed-stabilize.bin, 50",

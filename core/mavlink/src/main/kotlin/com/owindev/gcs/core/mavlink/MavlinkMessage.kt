@@ -530,13 +530,16 @@ sealed interface MavlinkMessage {
     /**
      * MISSION_CURRENT (id 42, https://mavlink.io/en/messages/common.html#MISSION_CURRENT): the mission item the vehicle
      * flies towards or executes, streamed at the rate the GCS asks for, so it repeats the same [seq] for a whole leg.
-     * Every field after [seq] is an extension, and each zero-filled one reads as its `invalid` value.
+     * Every field after [seq] is an extension: a zero-filled one reads as 0, which is the `invalid` value of all but
+     * [total].
      *
-     * @property seq the current item, a uint16; ArduPilot sends 0 when there is none.
-     * @property total "Total number of mission items on vehicle", home excluded; 0 "not supported", 65535 "no
-     * mission".
+     * @property seq the current item, a uint16; ArduPilot sends 0 when there is none, and echoes the item a
+     * MISSION_SET_CURRENT asked for even if it never holds it.
+     * @property total "Total number of mission items on vehicle", home excluded; 0 "not supported" (also when not
+     * sent), 65535 ("no mission", its `invalid` value) never from zero-fill.
      * @property missionState `MISSION_STATE`, as sent; 0 (unknown) when not sent.
-     * @property missionMode "0: Unknown, 1: In mission mode, 2: Suspended"; ArduPilot sends 0 outside AUTO, never 2.
+     * @property missionMode "0: Unknown, 1: In mission mode, 2: Suspended (not in mission mode)"; ArduPilot sends 0
+     * outside AUTO, never 2.
      * @property missionId a uint32 (hence [Long]), the on-vehicle mission plan's id; 0 when not supported or not sent.
      * @property fenceId the same for the fence plan.
      * @property rallyPointsId the same for the rally point plan.
@@ -555,7 +558,8 @@ sealed interface MavlinkMessage {
 
     /**
      * MISSION_ITEM_REACHED (id 46, https://mavlink.io/en/messages/common.html#MISSION_ITEM_REACHED): an item has been
-     * reached. Sent once per item, so a lost frame is never repeated: progress comes from [MissionCurrent].
+     * reached. Sent once per item, so a lost frame is never repeated: progress comes from [MissionCurrent]. ArduPilot
+     * also sends [seq] 0 when GUIDED reaches its target, and may send only the later of two items completed at once.
      *
      * @property seq the item reached, a uint16.
      */

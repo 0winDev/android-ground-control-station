@@ -692,6 +692,7 @@ class MavlinkDecoderTest {
     @Tag("REQ-032")
     @Tag("REQ-040")
     @Tag("REQ-041")
+    @Tag("REQ-054")
     @Test
     fun `GIVEN the SITL session WHEN parsing and decoding THEN each table message comes out as pymavlink counts`() {
         val parser = MavlinkParser(MavlinkMessages)
