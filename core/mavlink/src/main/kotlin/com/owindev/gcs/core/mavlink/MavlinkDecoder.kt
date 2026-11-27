@@ -9,7 +9,9 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionCount
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionCurrent
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionItemInt
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionItemReached
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionRequest
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionRequestInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamValue
@@ -183,7 +185,9 @@ object MavlinkDecoder {
     private const val TEXT_CHUNK_SEQ_OFFSET = 53
 
     private const val MISSION_REQUEST_ID = 40
+    private const val MISSION_CURRENT_ID = 42
     private const val MISSION_COUNT_ID = 44
+    private const val MISSION_ITEM_REACHED_ID = 46
     private const val MISSION_ACK_ID = 47
     private const val MISSION_REQUEST_INT_ID = 51
     private const val MISSION_ITEM_INT_ID = 73
@@ -228,6 +232,18 @@ object MavlinkDecoder {
     private const val ITEM_AUTOCONTINUE_OFFSET = 36
     private const val ITEM_MISSION_TYPE_OFFSET = 37
 
+    // MISSION_CURRENT: seq (uint16), then the extensions in XML order: total (uint16), mission_state, mission_mode,
+    // mission_id, fence_id, rally_points_id (uint32).
+    private const val CURRENT_SEQ_OFFSET = 0
+    private const val CURRENT_TOTAL_OFFSET = 2
+    private const val CURRENT_MISSION_STATE_OFFSET = 4
+    private const val CURRENT_MISSION_MODE_OFFSET = 5
+    private const val CURRENT_MISSION_ID_OFFSET = 6
+    private const val CURRENT_FENCE_ID_OFFSET = 10
+    private const val CURRENT_RALLY_POINTS_ID_OFFSET = 14
+
+    private const val REACHED_SEQ_OFFSET = 0
+
     // One flat branch per message, as in MavlinkMessages.definitionOf: the complexity grows with the table, not with
     // any logic.
     @Suppress("CyclomaticComplexMethod")
@@ -251,6 +267,8 @@ object MavlinkDecoder {
             MISSION_ACK_ID -> missionAck(frame.payload)
             MISSION_REQUEST_INT_ID -> missionRequestInt(frame.payload)
             MISSION_ITEM_INT_ID -> missionItemInt(frame.payload)
+            MISSION_CURRENT_ID -> missionCurrent(frame.payload)
+            MISSION_ITEM_REACHED_ID -> MissionItemReached(seq = frame.payload.uint16(REACHED_SEQ_OFFSET))
             else -> Undecoded(frame.messageId, frame.payload.copyOf(fullLength))
         }
     }
@@ -396,6 +414,16 @@ object MavlinkDecoder {
         y = payload.int32(ITEM_Y_OFFSET),
         z = payload.float(ITEM_Z_OFFSET),
         missionType = payload.uint8(ITEM_MISSION_TYPE_OFFSET),
+    )
+
+    private fun missionCurrent(payload: ByteArray) = MissionCurrent(
+        seq = payload.uint16(CURRENT_SEQ_OFFSET),
+        total = payload.uint16(CURRENT_TOTAL_OFFSET),
+        missionState = payload.uint8(CURRENT_MISSION_STATE_OFFSET),
+        missionMode = payload.uint8(CURRENT_MISSION_MODE_OFFSET),
+        missionId = payload.uint32(CURRENT_MISSION_ID_OFFSET),
+        fenceId = payload.uint32(CURRENT_FENCE_ID_OFFSET),
+        rallyPointsId = payload.uint32(CURRENT_RALLY_POINTS_ID_OFFSET),
     )
 
     private fun extendedSysState(payload: ByteArray) = ExtendedSysState(

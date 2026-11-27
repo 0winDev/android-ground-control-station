@@ -56,6 +56,8 @@ pymavlink 2.4.50's bundled definitions with `pymavlink.generator.mavparse` and m
 | MISSION_ACK (47) | `common.xml` | 153 |
 | MISSION_REQUEST_INT (51) | `common.xml` | 196 |
 | MISSION_ITEM_INT (73) | `common.xml` | 38 |
+| MISSION_CURRENT (42) | `common.xml` | 28 |
+| MISSION_ITEM_REACHED (46) | `common.xml` | 11 |
 
 ATTITUDE, GLOBAL_POSITION_INT and VFR_HUD were also computed with `mavparse` from `common.xml` and
 `standard.xml` on `mavlink/mavlink` master (#37), and SYS_STATUS and GPS_RAW_INT from `common.xml` on master
@@ -705,6 +707,63 @@ mission/request-int-seq-0.bin                fd 04 00 00 86 ff be 33 00 00 00 00
 mission/ack-download.bin                     fd 02 00 00 8b ff be 2f 00 00 01 01 7a 26
 derived/mission-count-opaque-id.bin          fd 09 00 00 6c 01 01 2c 00 00 05 00 ff be 00 21 43 65 87 86 a2
 derived/mission-ack-opaque-id.bin            fd 08 00 00 81 01 01 2f 00 00 ff be 00 01 21 43 65 87 9f 87
+```
+
+## Mission progress (#149)
+
+`mission/progress-session.tlog`: a route (home, NAV_TAKEOFF to 10 m, two NAV_WAYPOINTs, the first with a 3 s hold, RTL)
+uploaded, armed in GUIDED and started with `MAV_CMD_MISSION_START` by pymavlink on Mission Planner's SITL TCP 5763
+(ArduCopter 4.8.0-dev, git `caa5f0d2`), with MISSION_CURRENT requested at 1 Hz: every record holding a MISSION_CURRENT
+or MISSION_ITEM_REACHED, copied byte for byte (124 records). `mission/progress-session.tsv` is those frames as pymavlink
+decodes them, and `mission/progress-session.txt` holds AUTOPILOT_VERSION, the counts and the flight's events. Extracted
+and built by `py tools/fixtures/mission_progress_fixtures.py` (pymavlink 2.4.50, decoded with a dialect generated from
+`common.xml` on `mavlink/mavlink` master, since 2.4.50's lacks `mission_id`, `fence_id` and `rally_points_id`; same
+CRC_EXTRA, since extensions are not in it).
+
+How ArduCopter sends them (`GCS_Common.cpp`, `mode_auto.cpp`, `GCS_MAVLink_Parameters.cpp`), and what the session
+counted:
+
+- MISSION_CURRENT is in the EXTENDED_STATUS stream (`SRn_EXT_STAT`) and goes at the rate the channel asks for: none in
+  10 s on a fresh channel, then 120 in 119 s at 1 Hz, armed or not, in AUTO or not. It also goes once after
+  MISSION_SET_CURRENT (echoing the item asked for, even one it never holds), `MAV_CMD_DO_SET_MISSION_CURRENT` and
+  `MAV_CMD_DO_JUMP_TAG`.
+- ArduPilot fills only `seq`, `total`, `mission_state` and `mission_mode`: `mission_id`, `fence_id` and
+  `rally_points_id` are never sent (0, truncated), so the full LEN is at most 6. `total` excludes home; `seq` is the
+  current navigation item, 0 when there is none (after the mission completes).
+- `mission_state` is only NO_MISSION, NOT_STARTED, ACTIVE or COMPLETE (never PAUSED). `mission_mode` is 1 in a mode
+  that runs the mission and **0** otherwise, never `common.xml`'s 2 (suspended): its 0 means "not in AUTO", not
+  "unknown".
+- MISSION_ITEM_REACHED goes once to every channel when a command completes in AUTO (1, 2, 3 and 4 in order, each
+  0.2 to 0.7 s before the next 1 Hz MISSION_CURRENT shows the next item), and, by the code (not in this session), with
+  `seq` 0 when GUIDED reaches its target. A channel keeps one index:
+  a second item completed before the first is sent overwrites it.
+- A mode change to AUTO on the ground runs the take off without lifting (`auto_armed` false) and disarms after 10 s;
+  `MAV_CMD_MISSION_START` sets it.
+
+Wire layouts: MISSION_CURRENT, full LEN 18: `seq` (uint16, 0), then the extensions `total` (uint16, 2),
+`mission_state` (4), `mission_mode` (5), `mission_id` (uint32, 6), `fence_id` (uint32, 10), `rally_points_id`
+(uint32, 14). MISSION_ITEM_REACHED, full LEN 2: `seq` (uint16, 0). Truncation cuts bytes: a `seq` below 256 alone is
+LEN 1.
+
+| File | Origin | What it proves |
+|---|---|---|
+| `mission/current-not-started.bin` | the vehicle's MISSION_CURRENT (seq 71), GUIDED disarmed: seq 1, total 4, state 2 (NOT_STARTED), mode 0, LEN **5** | decoder: the truncated mode reads as 0 (REQ-054) |
+| `mission/current-active.bin` | its frame (seq 120) on the way to item 2: seq 2, total 4, state 3 (ACTIVE), mode 1, LEN 6 | decoder: a mission being flown (REQ-054) |
+| `mission/current-complete.bin` | its frame (seq 101) after the RTL landed: seq 0, total 4, state 5 (COMPLETE), mode 1 | decoder: seq 0 after the end (REQ-054) |
+| `mission/reached-takeoff.bin`, `mission/reached-rtl.bin` | the vehicle's MISSION_ITEM_REACHED (seq 116, 96) for items 1 and 4, LEN **1** | decoder: `seq`'s high byte truncated (REQ-013, REQ-054) |
+| `derived/mission-current-full.bin` | `current-active.bin` with seq `0x0102`, total `0x0304`, state 4 (PAUSED), mode 2, `mission_id` `0x87654321`, `fence_id` `0x98765432`, `rally_points_id` `0xA9876543`: LEN 18 | decoder: every offset, the uint32s unsigned (at or above 2³¹) |
+| `derived/mission-current-seq-only.bin` | `current-active.bin` with every extension 0: LEN 1 | decoder: every extension zero-filled to 0: the `invalid` value of all but `total`, whose 0 is "not supported" (its `invalid` is 65535) |
+| `derived/mission-current-no-mission.bin` | `current-not-started.bin` with seq 0, total 65535 (`common.xml`'s "no mission"), state 1 (NO_MISSION) | decoder: an unsigned `total` |
+| `derived/mission-current-state-past-enum.bin` | `current-active.bin` with state 6, past `MISSION_STATE` | decoder: an unknown state is kept as sent |
+| `derived/mission-item-reached-seq-high.bin` | `reached-rtl.bin` with seq 65534: LEN 2 | decoder: an unsigned 16-bit `seq` |
+
+Raw bytes:
+
+```
+mission/current-not-started.bin              fd 05 00 00 47 01 01 2a 00 00 01 00 04 00 02 3c 83
+mission/current-active.bin                   fd 06 00 00 78 01 01 2a 00 00 02 00 04 00 03 01 a0 b6
+mission/reached-takeoff.bin                  fd 01 00 00 74 01 01 2e 00 00 01 c1 06
+derived/mission-current-full.bin             fd 12 00 00 78 01 01 2a 00 00 02 01 04 03 04 02 21 43 65 87 32 54 76 98 43 65 87 a9 39 1f
 ```
 
 ## Raw frames for the flight log (#67)

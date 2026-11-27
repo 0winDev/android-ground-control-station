@@ -1,0 +1,39 @@
+Capture of #149, 2026-11-27, Mission Planner's SITL (multirotor), pymavlink 2.4.50 on SITL TCP 5763 as 255/190.
+AUTOPILOT_VERSION: flight_sw_version 67633152 (0x04080000: 4.8.0, type 0 DEV), flight_custom_version caa5f0d2, capabilities 64495.
+
+Attempt 1 (route started by a mode change to AUTO; not in progress-session.tlog): what the vehicle sent in the first 10 s on the channel, before any request:
+10.1 UNREQUESTED_COUNTS {'SYS_STATUS': 1, 'GPS_GLOBAL_ORIGIN': 1, 'HOME_POSITION': 1, 'HEARTBEAT': 10, 'TIMESYNC': 1}
+Armed in GUIDED then mode AUTO: 'Mission: 1 Takeoff', never took off, disarmed after 10 s (ArduCopter's auto_armed is set only by MAV_CMD_MISSION_START or AUTO_OPTIONS bit 1).
+
+Session (progress-session.tlog), started with MAV_CMD_MISSION_START; MISSION_CURRENT at 1 Hz from attempt 1's request, kept by the channel:
+  10.1 UNREQUESTED_COUNTS {'GLOBAL_POSITION_INT': 11, 'MISSION_CURRENT': 11, 'HEARTBEAT': 10, 'TIMESYNC': 1}
+  10.1 VERSION 67633152 [99, 97, 97, 53, 102, 48, 100, 50] 64495
+  16.0 UPLOAD_ACK 0
+  16.0 TEXT Flight plan received
+  24.2 ARMED
+  24.2 TEXT Arming motors
+  24.2 MISSION_START_ACK 0
+  24.2 TEXT Mission: 1 Takeoff
+  24.2 TEXT Mission: 1 Takeoff
+  29.8 TEXT EKF3 IMU1 MAG0 in-flight yaw alignment complete
+  29.9 TEXT EKF3 IMU0 MAG0 in-flight yaw alignment complete
+  33.8 REACHED 1
+  33.8 TEXT Mission: 2 WP
+  47.5 REACHED 2
+  47.6 TEXT Reached command #2
+  47.6 TEXT Mission: 3 WP
+  58.4 REACHED 3
+  58.4 TEXT Reached command #3
+  58.4 TEXT Mission: 4 RTL
+  101.2 TEXT SIM Hit ground at 0.498550 m/s
+  103.3 REACHED 4
+  103.3 TEXT Disarming motors
+  119.1 COUNTS {'GLOBAL_POSITION_INT': 120, 'MISSION_CURRENT': 120, 'HEARTBEAT': 121, 'TIMESYNC': 11, 'COMMAND_ACK': 6, 'AUTOPILOT_VERSION': 1, 'MISSION_REQUEST': 5, 'MISSION_ACK': 1, 'STATUSTEXT': 13, 'PARAM_VALUE': 12, 'GPS_GLOBAL_ORIGIN': 1, 'HOME_POSITION': 1, 'MISSION_ITEM_REACHED': 4}
+  MISSION_CURRENT changes (t, seq, total, state, mode, len):
+  0.0 1 4 3 1 6
+  22.0 1 4 2 0 5
+  25.0 1 4 3 1 6
+  34.0 2 4 3 1 6
+  48.0 3 4 3 1 6
+  59.0 4 4 3 1 6
+  104.0 0 4 5 1 6

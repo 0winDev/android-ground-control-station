@@ -29,6 +29,7 @@ class MavlinkCrcTest {
     }
 
     @Tag("REQ-011")
+    @Tag("REQ-054")
     @ParameterizedTest(name = "{0}")
     @CsvSource(
         "heartbeat/disarmed-stabilize.bin, 50",
@@ -49,6 +50,8 @@ class MavlinkCrcTest {
         "mission/ack-accepted.bin, 153",
         "mission/request-int-seq-0.bin, 196",
         "mission/item-home.bin, 38",
+        "mission/current-active.bin, 28",
+        "mission/reached-takeoff.bin, 11",
     )
     fun `GIVEN a real SITL frame WHEN computing its checksum THEN it matches the checksum bytes`(
         fixture: String,

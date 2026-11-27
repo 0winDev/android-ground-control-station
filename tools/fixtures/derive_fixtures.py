@@ -276,6 +276,8 @@ TABLE_MESSAGES = {
     common.MAVLINK_MSG_ID_MISSION_ACK: "mission_ack",
     common.MAVLINK_MSG_ID_MISSION_REQUEST_INT: "mission_request_int",
     common.MAVLINK_MSG_ID_MISSION_ITEM_INT: "mission_item_int",
+    common.MAVLINK_MSG_ID_MISSION_CURRENT: "mission_current",
+    common.MAVLINK_MSG_ID_MISSION_ITEM_REACHED: "mission_item_reached",
 }
 SET_MESSAGE_INTERVAL = common.MAV_CMD_SET_MESSAGE_INTERVAL
 MAV_COMP_ID_MISSIONPLANNER = 190

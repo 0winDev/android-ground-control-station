@@ -10,7 +10,9 @@ import com.owindev.gcs.core.mavlink.MavlinkMessage.Heartbeat
 import com.owindev.gcs.core.mavlink.MavlinkMessage.HomePosition
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionAck
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionCount
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionCurrent
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionItemInt
+import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionItemReached
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionRequest
 import com.owindev.gcs.core.mavlink.MavlinkMessage.MissionRequestInt
 import com.owindev.gcs.core.mavlink.MavlinkMessage.ParamRequestRead
@@ -690,6 +692,7 @@ class MavlinkDecoderTest {
     @Tag("REQ-032")
     @Tag("REQ-040")
     @Tag("REQ-041")
+    @Tag("REQ-054")
     @Test
     fun `GIVEN the SITL session WHEN parsing and decoding THEN each table message comes out as pymavlink counts`() {
         val parser = MavlinkParser(MavlinkMessages)
@@ -759,6 +762,8 @@ class MavlinkDecoderTest {
             MissionAck::class to "MISSION_ACK",
             MissionRequestInt::class to "MISSION_REQUEST_INT",
             MissionItemInt::class to "MISSION_ITEM_INT",
+            MissionCurrent::class to "MISSION_CURRENT",
+            MissionItemReached::class to "MISSION_ITEM_REACHED",
         )
         const val MAX_CUSTOM_MODE = "derived/heartbeat-max-custom-mode.bin"
         const val EXTRA_BYTE = "derived/heartbeat-extra-byte.bin"
@@ -847,7 +852,9 @@ class MavlinkDecoderTest {
         const val FUZZ_FRAMES = 10_000
         const val MAX_PAYLOAD = 255
         const val MAX_MESSAGE_ID = 0xFF_FFFF
-        val FUZZ_IDS = listOf(0, 1, 20, 22, 24, 30, 33, 36, 40, 43, 44, 47, 51, 73, 74, 76, 77, 125, 242, 245, 253)
+        val FUZZ_IDS = listOf(
+            0, 1, 20, 22, 24, 30, 33, 36, 40, 42, 43, 44, 46, 47, 51, 73, 74, 76, 77, 125, 242, 245, 253,
+        )
         const val SCALED_PRESSURE_ID = 29
         const val QUADROTOR = 2
         const val ARDUPILOTMEGA = 3
@@ -855,7 +862,7 @@ class MavlinkDecoderTest {
         const val MAVLINK_VERSION = 3
         const val DISARMED_STABILIZE_BASE_MODE = 81
         const val MAX_UINT32 = 4_294_967_295L
-        const val SESSION_UNKNOWN = 3_602L
+        const val SESSION_UNKNOWN = 3_277L
         const val SESSION_MAVLINK1_BYTES = 82L
         const val HEADER_LENGTH = 10
         const val LEN_INDEX = 1
@@ -881,6 +888,7 @@ class MavlinkDecoderTest {
             "PARAM_VALUE" to 3,
             "MISSION_REQUEST_INT" to 1,
             "MISSION_ITEM_INT" to 1,
+            "MISSION_CURRENT" to 325,
         )
 
         // telemetry/home-position.bin as pymavlink decodes it: ArduPilot sends q as NaN and the approach as 0; the
