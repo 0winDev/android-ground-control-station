@@ -36,6 +36,24 @@ class MissionUploadPlanTest {
     }
 
     @Test
+    fun `GIVEN only home WHEN planned THEN there is no plan`() {
+        val items = listOf(home())
+
+        val result = MissionUploadPlan.of(items)
+
+        result.shouldBeNull()
+    }
+
+    @Test
+    fun `GIVEN home and one item WHEN planned THEN the count is 2`() {
+        val items = listOf(home(), item(seq = 1))
+
+        val result = MissionUploadPlan.of(items)?.count
+
+        result shouldBeEqualTo 2
+    }
+
+    @Test
     fun `GIVEN a seq that is not its index WHEN planned THEN there is no plan`() {
         val items = listOf(home(), item(seq = 2))
 

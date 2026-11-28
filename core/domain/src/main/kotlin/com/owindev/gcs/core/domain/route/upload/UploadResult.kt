@@ -38,7 +38,8 @@ sealed interface OnBoardMission {
 
     /**
      * The route's first items, as many as one of [routeItems] says, then what is left of the previous mission up to
-     * [count]; `routeItems.last == count` is the whole route.
+     * [count]; `routeItems.last == count` is the whole route. On a vehicle whose mission was never written, item 1 may
+     * be home's placeholder until the route's item 1 replaces it.
      */
     data class Partial(val routeItems: IntRange, val count: Int) : OnBoardMission
 }

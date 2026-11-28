@@ -24,11 +24,17 @@ internal class MissionUploadMachine(private val plan: MissionUploadPlan) {
         /** The [attempt]th MISSION_COUNT was asked for. */
         data class SendingCount(val attempt: Int) : State
 
-        /** [highest] is the highest seq the vehicle asked for, [sent] whether its item was asked to be sent. */
-        data class Transferring(val highest: Int, val sent: Boolean) : State
+        /**
+         * [highest] is the highest seq the vehicle asked for, [sent] whether its item was asked to be sent, and [asked]
+         * the seq of the item this step sends.
+         */
+        data class Transferring(val highest: Int, val sent: Boolean, val asked: Int = highest) : State
 
-        /** The sender stopped for [reason]: nothing more is sent, and the vehicle is outwaited before the result. */
-        data class Stopping(val reason: NotSentReason, val vehicleMayHold: OnBoardMission) : State
+        /**
+         * The upload ended with [result] while the vehicle may still be receiving: nothing more is sent or taken, and
+         * [result] comes once the vehicle has given up.
+         */
+        data class Outwaiting(val result: UploadResult) : State
 
         data class Ended(val result: UploadResult) : State
     }
@@ -44,8 +50,16 @@ internal class MissionUploadMachine(private val plan: MissionUploadPlan) {
     /** `null` for a message that is no part of an upload, such as telemetry: it never restarts a wait. */
     fun on(state: State, message: MavlinkMessage): Step? = when (message) {
         is MissionRequest -> onRequest(state, message.seq, message.missionType)
+
         is MissionRequestInt -> onRequest(state, message.seq, message.missionType)
-        is MissionAck -> onAck(state, message.type, message.missionType)
+
+        is MissionAck -> when {
+            message.missionType != MAV_MISSION_TYPE_MISSION -> null
+            state is State.SendingCount -> onCountAck(state, message.type)
+            state is State.Transferring -> onTransferAck(state, message.type)
+            else -> null
+        }
+
         else -> null
     }
 
@@ -58,9 +72,9 @@ internal class MissionUploadMachine(private val plan: MissionUploadPlan) {
             ended(UploadResult.NoAnswer(stoppedBy = null, OnBoardMission.PreviousCut(plan.count)))
         }
 
-        is State.Transferring -> ended(UploadResult.NoAnswer(stoppedBy = null, partial(state)))
+        is State.Transferring -> ended(UploadResult.NoAnswer(stoppedBy = null, partial(state, plan.count)))
 
-        is State.Stopping -> ended(UploadResult.NoAnswer(state.reason, state.vehicleMayHold))
+        is State.Outwaiting -> ended(state.result)
 
         is State.Ended -> Step(state)
     }
@@ -70,90 +84,96 @@ internal class MissionUploadMachine(private val plan: MissionUploadPlan) {
         is State.SendingCount -> if (state.attempt == 1) {
             ended(UploadResult.NotSent(UploadNotSentReason.Refused(reason)))
         } else {
-            stopping(reason, OnBoardMission.PreviousCut(plan.count))
+            outwait(UploadResult.NoAnswer(reason, OnBoardMission.PreviousCut(plan.count)))
         }
 
-        is State.Transferring -> stopping(reason, partial(state.copy(sent = false)))
+        // A refused repeat of an earlier item leaves the highest one as sent as it was.
+        is State.Transferring -> {
+            val sent = state.sent && state.asked != state.highest
+            outwait(UploadResult.NoAnswer(reason, partial(state.copy(sent = sent), plan.count)))
+        }
 
-        is State.Stopping, is State.Ended -> Step(state)
+        is State.Outwaiting, is State.Ended -> Step(state)
+    }
+
+    /**
+     * The whole upload outlasted [uploadLimit]: requests or `INVALID_SEQUENCE` that kept coming, unsigned until v0.6,
+     * no longer keep it open.
+     */
+    fun onUploadLimit(state: State): Step = when (state) {
+        is State.SendingCount -> outwait(
+            UploadResult.NoAnswer(stoppedBy = null, OnBoardMission.PreviousCut(plan.count)),
+        )
+
+        is State.Transferring -> outwait(UploadResult.NoAnswer(stoppedBy = null, partial(state, plan.count)))
+
+        is State.Outwaiting, is State.Ended -> Step(state)
     }
 
     /** The sender stopped the upload for [reason] between sends. */
     fun onStop(state: State, reason: NotSentReason): Step = when (state) {
-        is State.SendingCount -> stopping(reason, OnBoardMission.PreviousCut(plan.count))
-        is State.Transferring -> stopping(reason, partial(state))
-        is State.Stopping, is State.Ended -> Step(state)
+        is State.SendingCount -> outwait(UploadResult.NoAnswer(reason, OnBoardMission.PreviousCut(plan.count)))
+        is State.Transferring -> outwait(UploadResult.NoAnswer(reason, partial(state, plan.count)))
+        is State.Outwaiting, is State.Ended -> Step(state)
     }
 
     private fun onRequest(state: State, seq: Int, missionType: Int): Step? {
         val stored = when (state) {
             is State.SendingCount -> OnBoardMission.PreviousCut(plan.count)
-            is State.Transferring -> partial(state)
-            is State.Stopping, is State.Ended -> return null
+            is State.Transferring -> partial(state, plan.count)
+            is State.Outwaiting, is State.Ended -> return null
         }
         return when {
+            // The vehicle may still be receiving this upload: it is outwaited before the result.
             missionType != MAV_MISSION_TYPE_MISSION ->
-                ended(UploadResult.Failed(BadRequest.OtherMissionType(missionType), stored))
+                outwait(UploadResult.Failed(BadRequest.OtherMissionType(missionType), stored))
 
-            seq !in plan.items.indices -> ended(UploadResult.Failed(BadRequest.OutOfRange(seq), stored))
+            seq !in plan.items.indices -> outwait(UploadResult.Failed(BadRequest.OutOfRange(seq), stored))
 
             else -> {
                 val highest = if (state is State.Transferring) maxOf(state.highest, seq) else seq
                 val sent = if (state is State.Transferring && seq < state.highest) state.sent else true
-                Step(State.Transferring(highest, sent), plan.items[seq], SILENCE_TIMEOUT)
+                Step(State.Transferring(highest, sent, asked = seq), plan.items[seq], SILENCE_TIMEOUT)
             }
         }
     }
 
-    private fun onAck(state: State, type: Int, missionType: Int): Step? {
-        if (missionType != MAV_MISSION_TYPE_MISSION) return null
-        return when (state) {
-            is State.SendingCount -> when (type) {
-                // A count is never accepted before its items, and it draws no INVALID_SEQUENCE: not this upload's.
-                MAV_MISSION_ACCEPTED, MAV_MISSION_INVALID_SEQUENCE -> null
+    private fun onCountAck(state: State.SendingCount, type: Int): Step? = when (type) {
+        // A count is never accepted before its items, and it draws no INVALID_SEQUENCE: not this upload's.
+        MAV_MISSION_ACCEPTED, MAV_MISSION_INVALID_SEQUENCE -> null
 
-                // The vehicle gave up on a count that reached it, so it cut its mission (`MissionItemProtocol::update`).
-                MAV_MISSION_OPERATION_CANCELLED ->
-                    ended(
-                        UploadResult.Rejected(
-                            MissionResult.OPERATION_CANCELLED,
-                            OnBoardMission.PreviousCut(plan.count),
-                        ),
-                    )
+        // The vehicle gave up on a count that reached it, so it cut its mission (`MissionItemProtocol::update`).
+        MAV_MISSION_OPERATION_CANCELLED ->
+            ended(UploadResult.Rejected(MissionResult.OPERATION_CANCELLED, OnBoardMission.PreviousCut(plan.count)))
 
-                // Refused before `truncate` (`handle_mission_count`).
-                else -> ended(UploadResult.Rejected(missionResultOf(type), OnBoardMission.Previous))
-            }
-
-            is State.Transferring -> when {
-                type == MAV_MISSION_ACCEPTED ->
-                    if (state.highest == plan.count - 1 && state.sent) ended(UploadResult.Accepted) else null
-
-                // ArduPilot answers an item it did not ask for with it and goes on (`MissionItemProtocol.cpp`).
-                type == MAV_MISSION_INVALID_SEQUENCE -> Step(state, wait = SILENCE_TIMEOUT)
-
-                else -> ended(
-                    UploadResult.Rejected(
-                        missionResultOf(type),
-                        OnBoardMission.Partial(state.highest..state.highest, plan.count),
-                    ),
-                )
-            }
-
-            is State.Stopping, is State.Ended -> null
+        // Refused before `truncate` (`handle_mission_count`); a later count may have reached the vehicle after the one
+        // refused, so its refusal can come while the vehicle receives.
+        else -> if (state.attempt == 1) {
+            ended(UploadResult.Rejected(missionResultOf(type), OnBoardMission.Previous))
+        } else {
+            outwait(UploadResult.Rejected(missionResultOf(type), OnBoardMission.PreviousCut(plan.count)))
         }
     }
 
-    /** Asking for seq [State.Transferring.highest] means every item before it is stored; the one sent may be too. */
-    private fun partial(state: State.Transferring): OnBoardMission.Partial {
-        val atMost = if (state.sent) state.highest + 1 else state.highest
-        return OnBoardMission.Partial(state.highest..atMost, plan.count)
+    private fun onTransferAck(state: State.Transferring, type: Int): Step? = when (type) {
+        MAV_MISSION_ACCEPTED ->
+            if (state.highest == plan.count - 1 && state.sent) ended(UploadResult.Accepted) else null
+
+        // ArduPilot answers an item it did not ask for with it and goes on (`MissionItemProtocol.cpp`).
+        MAV_MISSION_INVALID_SEQUENCE -> Step(state, wait = SILENCE_TIMEOUT)
+
+        // The vehicle's own timeout: the item sent before its silence may be stored.
+        MAV_MISSION_OPERATION_CANCELLED ->
+            ended(UploadResult.Rejected(MissionResult.OPERATION_CANCELLED, partial(state, plan.count)))
+
+        // A refused item ends the upload unstored (`handle_mission_item`).
+        else -> ended(
+            UploadResult.Rejected(
+                missionResultOf(type),
+                OnBoardMission.Partial(state.highest..state.highest, plan.count),
+            ),
+        )
     }
-
-    private fun stopping(reason: NotSentReason, vehicleMayHold: OnBoardMission) =
-        Step(State.Stopping(reason, vehicleMayHold), wait = SILENCE_TIMEOUT)
-
-    private fun ended(result: UploadResult) = Step(State.Ended(result))
 
     companion object {
 
@@ -177,6 +197,36 @@ internal class MissionUploadMachine(private val plan: MissionUploadPlan) {
         private const val MAV_MISSION_OPERATION_CANCELLED = 15
     }
 }
+
+/** The longest the count can take: every attempt unanswered (1.5 s, 1.5 s, then 9 s). */
+private val COUNT_PHASE: Duration =
+    MissionUploadMachine.COUNT_TIMEOUT * (MissionUploadMachine.COUNT_ATTEMPTS - 1) +
+        MissionUploadMachine.SILENCE_TIMEOUT
+
+/**
+ * Each item's share of the limit: three of the vehicle's own requests for it, which SITL sent 0.98 to 1.06 s apart
+ * (#151), so two lost exchanges per item on average, or a link 3 s slow per round trip.
+ */
+private val PER_ITEM: Duration = 3.seconds
+
+/**
+ * The longest an upload of [count] items may take before the vehicle is outwaited and it ends as no answer (ADR
+ * 0010): 12 s for the count, then [PER_ITEM] for each item, home included, so 495 s for the 160 items of REQ-055.
+ */
+internal fun uploadLimit(count: Int): Duration = COUNT_PHASE + PER_ITEM * count
+
+/** Asking for seq [State.Transferring.highest] means every item before it is stored; the one sent may be too. */
+private fun partial(state: MissionUploadMachine.State.Transferring, count: Int): OnBoardMission.Partial {
+    val atMost = if (state.sent) state.highest + 1 else state.highest
+    return OnBoardMission.Partial(state.highest..atMost, count)
+}
+
+private fun outwait(result: UploadResult) = MissionUploadMachine.Step(
+    MissionUploadMachine.State.Outwaiting(result),
+    wait = MissionUploadMachine.SILENCE_TIMEOUT,
+)
+
+private fun ended(result: UploadResult) = MissionUploadMachine.Step(MissionUploadMachine.State.Ended(result))
 
 private val MISSION_RESULTS = mapOf(
     1 to MissionResult.ERROR,

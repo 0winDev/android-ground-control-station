@@ -31,8 +31,10 @@ internal sealed interface UploadSend {
 internal class MissionUploadRunner(private val timeSource: TimeSource.WithComparableMarks) {
 
     /**
-     * [inputs] holds only what came from the upload's vehicle and route; once it closes, the running wait is
-     * outwaited in silence.
+     * [inputs] holds only what came from the upload's vehicle and route, addressed to this GCS; the caller sends
+     * [UploadInput.Stop] before closing it, since a closed one leaves the machine sending counts nobody answers. [send]
+     * turns every transport failure into [UploadSend.Refused]: a throw, or a cancellation, ends the upload without a
+     * result.
      */
     suspend fun run(
         plan: MissionUploadPlan,
@@ -40,6 +42,7 @@ internal class MissionUploadRunner(private val timeSource: TimeSource.WithCompar
         inputs: ReceiveChannel<UploadInput>,
     ): UploadResult {
         val machine = MissionUploadMachine(plan)
+        val limit = timeSource.markNow() + uploadLimit(plan.count)
         var step = machine.start()
         var deadline: ComparableTimeMark = timeSource.markNow()
         while (true) {
@@ -51,23 +54,25 @@ internal class MissionUploadRunner(private val timeSource: TimeSource.WithCompar
                 continue
             }
             step.wait?.let { deadline = timeSource.markNow() + it }
-            step = next(machine, state, deadline, inputs)
+            step = next(machine, state, Waits(deadline, limit), inputs)
         }
     }
 
     private suspend fun next(
         machine: MissionUploadMachine,
         state: State,
-        deadline: ComparableTimeMark,
+        waits: Waits,
         inputs: ReceiveChannel<UploadInput>,
     ): Step {
-        val remaining = -deadline.elapsedNow()
-        val received = withTimeoutOrNull(remaining) { inputs.receiveCatching() }
-        if (received == null) return machine.onSilence(state)
+        // The limit bounds the exchange only: an outwaited result keeps its full wait.
+        val limited = state !is State.Outwaiting && waits.limit < waits.deadline
+        val due = if (limited) waits.limit else waits.deadline
+        val passed = { if (limited) machine.onUploadLimit(state) else machine.onSilence(state) }
+        val received = withTimeoutOrNull(-due.elapsedNow()) { inputs.receiveCatching() } ?: return passed()
         return when (val input = received.getOrNull()) {
             null -> {
-                delay(-deadline.elapsedNow())
-                machine.onSilence(state)
+                delay(-due.elapsedNow())
+                passed()
             }
 
             is UploadInput.Stop -> machine.onStop(state, input.reason)
@@ -76,4 +81,7 @@ internal class MissionUploadRunner(private val timeSource: TimeSource.WithCompar
             is UploadInput.Received -> machine.on(state, input.message) ?: Step(state)
         }
     }
+
+    /** The running wait's [deadline] and the whole upload's [limit]. */
+    private class Waits(val deadline: ComparableTimeMark, val limit: ComparableTimeMark)
 }

@@ -95,7 +95,7 @@ class MissionUploadMachineTest {
 
         val result = machine.on(state, request(seq = 0))
 
-        result shouldBeEqualTo Step(State.Transferring(highest = 1, sent = true), items[0], 9.seconds)
+        result shouldBeEqualTo Step(State.Transferring(highest = 1, sent = true, asked = 0), items[0], 9.seconds)
     }
 
     @Test
@@ -108,30 +108,30 @@ class MissionUploadMachineTest {
     }
 
     @Test
-    fun `GIVEN item 1 sent WHEN seq 3 of 3 is asked for THEN failed with a partial mission`() {
+    fun `GIVEN item 1 sent WHEN seq 3 of 3 is asked for THEN failed outwaited with a partial mission`() {
         val state = State.Transferring(highest = 1, sent = true)
 
         val result = machine.on(state, request(seq = 3))
 
-        result shouldBeEqualTo ended(UploadResult.Failed(BadRequest.OutOfRange(3), partial(1..2)))
+        result shouldBeEqualTo outwaiting(UploadResult.Failed(BadRequest.OutOfRange(3), partial(1..2)))
     }
 
     @Test
-    fun `GIVEN a count sent WHEN seq 3 of 3 is asked for THEN failed with the previous mission maybe cut`() {
+    fun `GIVEN a count sent WHEN seq 3 of 3 is asked for THEN failed after the vehicle is outwaited`() {
         val state = State.SendingCount(attempt = 1)
 
         val result = machine.on(state, requestInt(seq = 3))
 
-        result shouldBeEqualTo ended(UploadResult.Failed(BadRequest.OutOfRange(3), OnBoardMission.PreviousCut(3)))
+        result shouldBeEqualTo outwaiting(UploadResult.Failed(BadRequest.OutOfRange(3), OnBoardMission.PreviousCut(3)))
     }
 
     @Test
-    fun `GIVEN item 1 sent WHEN the fence's seq 2 is asked for THEN failed for the other mission type`() {
+    fun `GIVEN item 1 sent WHEN the fence's seq 2 is asked for THEN failed after the vehicle is outwaited`() {
         val state = State.Transferring(highest = 1, sent = true)
 
         val result = machine.on(state, request(seq = 2, missionType = MAV_MISSION_TYPE_FENCE))
 
-        result shouldBeEqualTo ended(
+        result shouldBeEqualTo outwaiting(
             UploadResult.Failed(BadRequest.OtherMissionType(MAV_MISSION_TYPE_FENCE), partial(1..2)),
         )
     }
@@ -182,8 +182,8 @@ class MissionUploadMachineTest {
     }
 
     @Test
-    fun `GIVEN a count sent WHEN NO_SPACE comes THEN rejected with the previous mission untouched`() {
-        val state = State.SendingCount(attempt = 2)
+    fun `GIVEN the first count sent WHEN NO_SPACE comes THEN rejected with the previous mission untouched`() {
+        val state = State.SendingCount(attempt = 1)
 
         val result = machine.on(state, ack(type = MAV_MISSION_NO_SPACE))
 
@@ -261,9 +261,8 @@ class MissionUploadMachineTest {
 
         val result = machine.onSendRefused(state, NotSentReason.RouteChanged)
 
-        result shouldBeEqualTo Step(
-            State.Stopping(NotSentReason.RouteChanged, OnBoardMission.PreviousCut(count = 3)),
-            wait = 9.seconds,
+        result shouldBeEqualTo outwaiting(
+            UploadResult.NoAnswer(NotSentReason.RouteChanged, OnBoardMission.PreviousCut(count = 3)),
         )
     }
 
@@ -273,7 +272,7 @@ class MissionUploadMachineTest {
 
         val result = machine.onSendRefused(state, NotSentReason.KeyChanged)
 
-        result shouldBeEqualTo Step(State.Stopping(NotSentReason.KeyChanged, partial(1..1)), wait = 9.seconds)
+        result shouldBeEqualTo outwaiting(UploadResult.NoAnswer(NotSentReason.KeyChanged, partial(1..1)))
     }
 
     @Test
@@ -282,9 +281,8 @@ class MissionUploadMachineTest {
 
         val result = machine.onStop(state, NotSentReason.Replay)
 
-        result shouldBeEqualTo Step(
-            State.Stopping(NotSentReason.Replay, OnBoardMission.PreviousCut(count = 3)),
-            wait = 9.seconds,
+        result shouldBeEqualTo outwaiting(
+            UploadResult.NoAnswer(NotSentReason.Replay, OnBoardMission.PreviousCut(count = 3)),
         )
     }
 
@@ -294,12 +292,12 @@ class MissionUploadMachineTest {
 
         val result = machine.onStop(state, NotSentReason.LinkLost)
 
-        result shouldBeEqualTo Step(State.Stopping(NotSentReason.LinkLost, partial(1..2)), wait = 9.seconds)
+        result shouldBeEqualTo outwaiting(UploadResult.NoAnswer(NotSentReason.LinkLost, partial(1..2)))
     }
 
     @Test
-    fun `GIVEN a stopped upload WHEN the vehicle asks or answers THEN nothing is sent nor ended`() {
-        val state = State.Stopping(NotSentReason.LinkLost, partial(1..2))
+    fun `GIVEN an outwaited upload WHEN the vehicle asks or answers THEN nothing is sent nor ended`() {
+        val state = State.Outwaiting(UploadResult.NoAnswer(NotSentReason.LinkLost, partial(1..2)))
 
         val result = listOf(request(seq = 2), ack(MAV_MISSION_ACCEPTED)).map { machine.on(state, it) }
 
@@ -307,12 +305,53 @@ class MissionUploadMachineTest {
     }
 
     @Test
-    fun `GIVEN a stopped upload WHEN 9 s pass THEN no answer with why it stopped and what the vehicle may hold`() {
-        val state = State.Stopping(NotSentReason.LinkLost, partial(1..2))
+    fun `GIVEN an outwaited upload WHEN a stop or a refusal comes THEN it keeps its result and wait`() {
+        val state = State.Outwaiting(UploadResult.NoAnswer(NotSentReason.LinkLost, partial(1..2)))
+
+        val result = listOf(
+            machine.onStop(state, NotSentReason.Replay),
+            machine.onSendRefused(state, NotSentReason.Replay),
+        )
+
+        result shouldBeEqualTo listOf(Step(state), Step(state))
+    }
+
+    @Test
+    fun `GIVEN an outwaited upload WHEN 9 s pass THEN its result comes`() {
+        val state = State.Outwaiting(UploadResult.NoAnswer(NotSentReason.LinkLost, partial(1..2)))
 
         val result = machine.onSilence(state)
 
         result shouldBeEqualTo ended(UploadResult.NoAnswer(NotSentReason.LinkLost, partial(1..2)))
+    }
+
+    @Test
+    fun `GIVEN item 1 sent WHEN OPERATION_CANCELLED comes THEN rejected with item 1 maybe stored`() {
+        val state = State.Transferring(highest = 1, sent = true)
+
+        val result = machine.on(state, ack(type = MAV_MISSION_OPERATION_CANCELLED))
+
+        result shouldBeEqualTo ended(UploadResult.Rejected(MissionResult.OPERATION_CANCELLED, partial(1..2)))
+    }
+
+    @Test
+    fun `GIVEN the second count sent WHEN DENIED comes THEN rejected outwaited with the mission maybe cut`() {
+        val state = State.SendingCount(attempt = 2)
+
+        val result = machine.on(state, ack(type = MAV_MISSION_DENIED))
+
+        result shouldBeEqualTo outwaiting(
+            UploadResult.Rejected(MissionResult.DENIED, OnBoardMission.PreviousCut(count = 3)),
+        )
+    }
+
+    @Test
+    fun `GIVEN item 2 sent and a repeat of item 1 WHEN that repeat is refused THEN item 2 stays maybe stored`() {
+        val state = State.Transferring(highest = 2, sent = true, asked = 1)
+
+        val result = machine.onSendRefused(state, NotSentReason.LinkLost)
+
+        result shouldBeEqualTo outwaiting(UploadResult.NoAnswer(NotSentReason.LinkLost, partial(2..3)))
     }
 
     @Test
@@ -328,6 +367,45 @@ class MissionUploadMachineTest {
         )
 
         result shouldBeEqualTo listOf(null, null, Step(state), Step(state), Step(state))
+    }
+
+    @Test
+    fun `GIVEN a count sent WHEN the upload limit passes THEN no answer outwaited with the mission maybe cut`() {
+        val state = State.SendingCount(attempt = 2)
+
+        val result = machine.onUploadLimit(state)
+
+        result shouldBeEqualTo
+            outwaiting(UploadResult.NoAnswer(stoppedBy = null, OnBoardMission.PreviousCut(count = 3)))
+    }
+
+    @Test
+    fun `GIVEN item 1 sent WHEN the upload limit passes THEN no answer outwaited with item 1 maybe stored`() {
+        val state = State.Transferring(highest = 1, sent = true)
+
+        val result = machine.onUploadLimit(state)
+
+        result shouldBeEqualTo outwaiting(UploadResult.NoAnswer(stoppedBy = null, partial(1..2)))
+    }
+
+    @Test
+    fun `GIVEN an outwaited or ended upload WHEN the upload limit passes THEN nothing changes`() {
+        val states = listOf(State.Outwaiting(UploadResult.Accepted), State.Ended(UploadResult.Accepted))
+
+        val result = states.map { machine.onUploadLimit(it) }
+
+        result shouldBeEqualTo states.map { Step(it) }
+    }
+
+    @ParameterizedTest
+    @CsvSource("2, 18", "3, 21", "161, 495")
+    fun `GIVEN a count WHEN its upload limit is read THEN 12 s for the count and 3 s per item`(
+        count: Int,
+        seconds: Int,
+    ) {
+        val result = uploadLimit(count)
+
+        result shouldBeEqualTo seconds.seconds
     }
 
     @ParameterizedTest
@@ -359,6 +437,8 @@ class MissionUploadMachineTest {
 
     private fun ended(result: UploadResult) = Step(State.Ended(result))
 
+    private fun outwaiting(result: UploadResult) = Step(State.Outwaiting(result), wait = 9.seconds)
+
     private companion object {
         const val MAV_MISSION_TYPE_MISSION = 0
         const val MAV_MISSION_TYPE_FENCE = 1
@@ -366,6 +446,7 @@ class MissionUploadMachineTest {
         const val MAV_MISSION_NO_SPACE = 4
         const val MAV_MISSION_INVALID_PARAM1 = 6
         const val MAV_MISSION_INVALID_SEQUENCE = 13
+        const val MAV_MISSION_DENIED = 14
         const val MAV_MISSION_OPERATION_CANCELLED = 15
         const val GCS_SYSTEM = 255
         const val GCS_COMPONENT = 190

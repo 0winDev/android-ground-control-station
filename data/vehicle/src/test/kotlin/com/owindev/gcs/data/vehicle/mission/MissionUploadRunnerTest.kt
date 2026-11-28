@@ -1,5 +1,6 @@
 package com.owindev.gcs.data.vehicle.mission
 
+import com.owindev.gcs.core.domain.route.upload.BadRequest
 import com.owindev.gcs.core.domain.route.upload.OnBoardMission
 import com.owindev.gcs.core.domain.route.upload.UploadNotSentReason
 import com.owindev.gcs.core.domain.route.upload.UploadResult
@@ -158,6 +159,73 @@ class MissionUploadRunnerTest {
         }
 
     @Test
+    fun `GIVEN a request past the count WHEN uploaded THEN failed only 9 s later, the vehicle outwaited`() =
+        scope.runTest {
+            val vehicle =
+                answering { message -> if (message is MissionCount) listOf(request(seq = 3)) else emptyList() }
+
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) { runner.run(plan, vehicle, inputs) }
+            val result = deferred.await()
+
+            result shouldBeEqualTo UploadResult.Failed(BadRequest.OutOfRange(3), OnBoardMission.PreviousCut(count = 3))
+            sent.map { it.second } shouldBeEqualTo listOf(plan.countMessage())
+            currentTime shouldBeEqualTo VEHICLE_DELAY + 9_000L
+        }
+
+    @Test
+    fun `GIVEN item 0 asked for every second without end WHEN uploaded THEN no answer at the 21 s limit plus 9 s`() =
+        scope.runTest {
+            val vehicle = askingForItem0Only()
+            launch {
+                repeat(ENDLESS_REQUESTS) {
+                    delay(1_000)
+                    inputs.send(UploadInput.Received(request(seq = 0)))
+                }
+            }
+
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) { runner.run(plan, vehicle, inputs) }
+            val result = deferred.await()
+
+            result shouldBeEqualTo UploadResult.NoAnswer(stoppedBy = null, partial(0..1))
+            currentTime shouldBeEqualTo 30_000L
+        }
+
+    @Test
+    fun `GIVEN a stop at 20 s WHEN the 21 s limit passes THEN the stop keeps its full 9 s`() = scope.runTest {
+        val vehicle = askingForItem0Only()
+        launch {
+            repeat(ENDLESS_REQUESTS) {
+                delay(1_000)
+                if (it == STOP_AT_SECOND) inputs.send(UploadInput.Stop(NotSentReason.KeyChanged))
+                inputs.send(UploadInput.Received(request(seq = 0)))
+            }
+        }
+
+        val deferred = async(start = CoroutineStart.UNDISPATCHED) { runner.run(plan, vehicle, inputs) }
+        val result = deferred.await()
+
+        result shouldBeEqualTo UploadResult.NoAnswer(NotSentReason.KeyChanged, partial(0..1))
+        currentTime shouldBeEqualTo 29_000L
+    }
+
+    @Test
+    fun `GIVEN a vehicle answering 2,5 s late WHEN uploaded THEN accepted within the limit`() = scope.runTest {
+        val vehicle = answering(delayMillis = SLOW_VEHICLE_DELAY) { message ->
+            when (message) {
+                is MissionCount -> listOf(request(seq = 0))
+                is MissionItemInt -> listOf(if (message.seq < 2) request(message.seq + 1) else ack(ACCEPTED))
+                else -> emptyList()
+            }
+        }
+
+        val deferred = async(start = CoroutineStart.UNDISPATCHED) { runner.run(plan, vehicle, inputs) }
+        val result = deferred.await()
+
+        result shouldBeEqualTo UploadResult.Accepted
+        currentTime shouldBeEqualTo 4 * SLOW_VEHICLE_DELAY
+    }
+
+    @Test
     fun `GIVEN the first count refused WHEN uploaded THEN not sent at once`() = scope.runTest {
         val refusing: suspend (MavlinkMessage) -> UploadSend = { UploadSend.Refused(NotSentReason.LinkLost) }
 
@@ -207,14 +275,15 @@ class MissionUploadRunnerTest {
             currentTime shouldBeEqualTo 12_000L
         }
 
-    /** A vehicle that answers each message it gets, [VEHICLE_DELAY] later, with what [reply] says. */
+    /** A vehicle that answers each message it gets, [delayMillis] later, with what [reply] says. */
     private fun TestScope.answering(
+        delayMillis: Long = VEHICLE_DELAY,
         reply: (MavlinkMessage) -> List<MavlinkMessage>,
     ): suspend (MavlinkMessage) -> UploadSend = { message ->
         sent += testScheduler.currentTime to message
         val answers = reply(message)
         launch {
-            delay(VEHICLE_DELAY)
+            delay(delayMillis)
             answers.forEach { inputs.send(UploadInput.Received(it)) }
         }
         UploadSend.Sent
@@ -228,6 +297,9 @@ class MissionUploadRunnerTest {
     private companion object {
         const val VEHICLE_DELAY = 20L
         const val TELEMETRY_FRAMES = 40
+        const val ENDLESS_REQUESTS = 60
+        const val STOP_AT_SECOND = 19
+        const val SLOW_VEHICLE_DELAY = 2_500L
         const val ACCEPTED = 0
         const val INVALID_SEQUENCE = 13
 

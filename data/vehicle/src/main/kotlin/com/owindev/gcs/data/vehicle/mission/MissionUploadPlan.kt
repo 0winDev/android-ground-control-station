@@ -12,6 +12,12 @@ internal const val MAV_CMD_NAV_WAYPOINT = 16
 /** `MAV_FRAME_GLOBAL` (`common.xml`): altitude above mean sea level. */
 internal const val MAV_FRAME_GLOBAL = 0
 
+/**
+ * Home and one item: a count of 1 on a vehicle whose mission was never written stores home's placeholder as item 1
+ * (`AP_Mission::add_cmd`), and nothing would replace it.
+ */
+private const val MIN_COUNT = 2
+
 /** MISSION_COUNT's `count` and every `seq` are uint16. */
 private const val MAX_COUNT = 65_535
 
@@ -45,7 +51,7 @@ internal class MissionUploadPlan private constructor(val items: List<MissionItem
          */
         fun of(items: List<MissionItemInt>): MissionUploadPlan? {
             val home = items.firstOrNull() ?: return null
-            val valid = items.size <= MAX_COUNT &&
+            val valid = items.size in MIN_COUNT..MAX_COUNT &&
                 home.isHomePlaceholder() &&
                 items.withIndex().all { (index, item) ->
                     item.seq == index &&
