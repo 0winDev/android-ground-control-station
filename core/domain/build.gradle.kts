@@ -29,6 +29,7 @@ kover {
                     "com.owindev.gcs.core.domain.vehicle.command.RouteAcceptance*",
                     "com.owindev.gcs.core.domain.message.VehicleMessage",
                     "com.owindev.gcs.core.domain.message.MessageSeverity",
+                    "com.owindev.gcs.core.domain.route.upload.*",
                 )
             }
         }
