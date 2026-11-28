@@ -237,6 +237,9 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - MISSION_ITEM_REACHED goes once per item and a channel keeps only the last: progress comes from MISSION_CURRENT (#149).
 - A mission area holds (size − 4) / 15 commands, home included, and a larger MISSION_COUNT gets NO_SPACE: SITL holds 650 (#150).
 - ArduPilot 4.8 renamed `RTL_ALT` (cm) to `RTL_ALT_M` (m): a parameter's name and unit come from the vehicle's version (#150).
+- ArduPilot cuts its mission at an accepted MISSION_COUNT: a failed upload leaves new items over old, never the old mission (#151).
+- ArduPilot answers an item it did not ask for with INVALID_SEQUENCE and goes on: an upload never ends on it (#151).
+- ArduPilot ignores a GCS's MISSION_ACK and refuses a download while receiving: outwait its 8 s before a result (#151).
 
 **Test data and references**
 - Edge-case frames, expected LENs and MGRS letters come from pymavlink and reference tools, not by hand (#9, #37, #40).
@@ -332,5 +335,6 @@ the issue number to an existing one. A lesson that repeats becomes a rule above 
 - A night map is the day style recoloured; OpenFreeMap answers 403 to a script without a User-Agent (#73).
 - A screen holding MapLibre content needs `@UiComposable`, or callers get MapLibre's applier (#73).
 - Never `--no-verify` a split commit: the hooks check the files as staged (#73).
+- A mutant whose pattern ktlint rewrapped never applies: a mutation script reports every pattern it did not find (#151).
 - OSM's attribution may fold into a button only after it has shown (5 s or a gesture): never start it folded (#138).
 - `input motionevent` gives each event its own down time, so no gesture is held: use root `sendevent` on the emulator (#103).

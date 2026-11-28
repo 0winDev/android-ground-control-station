@@ -67,5 +67,5 @@ try {
 - Give each real failure its own name in a sealed hierarchy; no `Exception("...")` inline.
 - Safety-relevant failures (link lost, command rejected/timed out, mission upload failed, signature
   rejected) are always surfaced to the operator and logged.
-- A half-done operation must leave a known state: a failed mission upload means "the vehicle keeps
-  its previous mission", and the UI says so.
+- A half-done operation must say what it left, read in the vehicle's code, never assumed: ArduPilot cuts its
+  mission at an accepted MISSION_COUNT, so a failed upload may leave a partial one (ADR 0010), and the UI says so.
