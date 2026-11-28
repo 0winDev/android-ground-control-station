@@ -14,3 +14,4 @@ Decisions someone will ask "why?" about. Format and rules: the `adr` skill
 | [0007](0007-navigation-3.md) | Use Navigation 3, with the back stack owned by `:app` | Accepted |
 | [0008](0008-command-retry-policy.md) | Retry only RTL and land; send arm once | Accepted |
 | [0009](0009-background-link-service.md) | Keep the live link in a `connectedDevice` foreground service holding a wake lock | Proposed |
+| [0010](0010-mission-upload-state-machine.md) | Upload a route as a state machine the vehicle drives | Proposed |
