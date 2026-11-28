@@ -14,7 +14,7 @@ jvmTarget = "17"
 
 # AndroidX
 activityCompose = "1.13.0"
-composeBom = "2026.09.00"
+composeBom = "2026.11.01"
 lifecycle = "2.11.0"
 androidxHilt = "1.4.0"
 # Navigation (ADR 0007)
